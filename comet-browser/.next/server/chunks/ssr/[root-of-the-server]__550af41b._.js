@@ -1,3 +1,0 @@
-module.exports=[64433,a=>{a.v({className:"inter_5972bc34-module__OU16Qa__className"})},19957,a=>{"use strict";var b=a.i(79374),c=a.i(64433);let d={className:c.default.className,style:{fontFamily:"'Inter', 'Inter Fallback'",fontStyle:"normal"}};function e({children:a}){return(0,b.jsx)("html",{lang:"en",className:"dark",children:(0,b.jsx)("body",{className:`${d.className} bg-deep-space-bg`,children:a})})}null!=c.default.variable&&(d.variable=c.default.variable),a.s(["default",()=>e,"metadata",0,{title:"Comet Browser",description:"An AI-integrated browser application",viewport:"width=device-width, initial-scale=1, maximum-scale=1"}],19957)}];
-
-//# sourceMappingURL=%5Broot-of-the-server%5D__550af41b._.js.map
