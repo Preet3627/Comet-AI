@@ -1,8 +1,10 @@
 import { getDatabase, ref, onValue, set } from "firebase/database";
 import { getAuth, User } from "firebase/auth";
 import { app } from "./FirebaseService";
-import { useAppStore } from "@/store/useAppStore";
 import { Security } from "./Security";
+
+// Type-only import to avoid circular dependency
+import type { useAppStore as useAppStoreType } from "@/store/useAppStore";
 
 const db = getDatabase(app);
 const auth = getAuth(app);
@@ -21,6 +23,11 @@ class FirebaseSyncService {
     });
   }
 
+  private async getStore() {
+    const { useAppStore } = await import("@/store/useAppStore");
+    return useAppStore;
+  }
+
   public async syncClipboard() {
     if (!this.userId) return;
 
@@ -28,6 +35,7 @@ class FirebaseSyncService {
     onValue(clipboardRef, async (snapshot) => {
       const data = snapshot.val();
       if (data && Array.isArray(data)) {
+        const useAppStore = await this.getStore();
         const store = useAppStore.getState();
         const decrypted = await Promise.all(
           data.map(item => Security.decrypt(item, store.syncPassphrase || undefined))
@@ -39,6 +47,7 @@ class FirebaseSyncService {
 
   public async setClipboard(clipboard: any[]) {
     if (!this.userId) return;
+    const useAppStore = await this.getStore();
     const store = useAppStore.getState();
     const encrypted = await Promise.all(
       clipboard.map(item => Security.encrypt(String(item), store.syncPassphrase || undefined))
@@ -55,17 +64,18 @@ class FirebaseSyncService {
     onValue(historyRef, async (snapshot) => {
       const data = snapshot.val();
       if (data && Array.isArray(data)) {
+        const useAppStore = await this.getStore();
         const store = useAppStore.getState();
         const decrypted = await Promise.all(
           data.map(item => Security.decrypt(item, store.syncPassphrase || undefined))
         );
-        // We could update store history here if needed
       }
     });
   }
 
   public async setHistory(history: string[]) {
     if (!this.userId) return;
+    const useAppStore = await this.getStore();
     const store = useAppStore.getState();
     const encrypted = await Promise.all(
       history.map(item => Security.encrypt(item, store.syncPassphrase || undefined))
@@ -81,6 +91,7 @@ class FirebaseSyncService {
 
   public async setApiKeys(apiKeys: any) {
     if (!this.userId) return;
+    const useAppStore = await this.getStore();
     const store = useAppStore.getState();
     const encryptedKeys = await Security.encrypt(JSON.stringify(apiKeys), store.syncPassphrase || undefined);
     const apiKeysRef = ref(db, "apiKeys/" + this.userId);
