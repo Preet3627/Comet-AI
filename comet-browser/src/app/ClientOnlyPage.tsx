@@ -31,9 +31,12 @@ import { firebaseSyncService } from "@/lib/FirebaseSyncService";
 import { Briefcase, Image as ImageIcon } from 'lucide-react';
 import { QuickNavOverlay } from '@/components/QuickNavOverlay';
 import TitleBar from '@/components/TitleBar';
+import { useOptimizedTabs } from '@/hooks/useOptimizedTabs';
+import { VirtualizedTabBar } from '@/components/VirtualizedTabBar';
 
 export default function Home() {
   const store = useAppStore();
+  const { shouldRenderTab, isTabSuspended } = useOptimizedTabs();
   const [showClipboard, setShowClipboard] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -102,7 +105,7 @@ export default function Home() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (isTyping && store.currentUrl.length > 2) {
-        const pred = await BrowserAI.predictUrl(store.currentUrl, store.history);
+        const pred = await BrowserAI.predictUrl(store.currentUrl, store.history.map(h => h.url));
         setUrlPrediction(pred);
       } else {
         setUrlPrediction(null);
@@ -140,6 +143,7 @@ export default function Home() {
           case 'prev-tab': store.prevTab(); break;
           case 'toggle-sidebar': store.toggleSidebar(); break;
           case 'open-settings': setShowSettings(true); break;
+          case 'new-incognito-tab': store.addIncognitoTab(); break;
         }
       });
       return cleanup;
@@ -179,7 +183,7 @@ export default function Home() {
     store.setCurrentUrl(url);
     setUrlPrediction(null);
     setIsTyping(false);
-    store.addToHistory(url);
+    store.addToHistory({ url, title: url.split('/')[2] || 'New Tab' });
   };
 
   const handleOfflineSave = async () => {
@@ -210,17 +214,22 @@ export default function Home() {
     const x = store.sidebarSide === 'left' ? sidebarWidth : 0;
     const width = window.innerWidth - sidebarWidth;
 
-    if (store.activeView === 'browser') {
-      window.electronAPI.setBrowserViewBounds({
+    if (store.activeView === 'browser' && !showSettings && !showClipboard && !showCamera && !showCart) {
+      const bounds = {
         x: Math.round(x),
         y: headerHeight,
         width: Math.round(width),
         height: window.innerHeight - headerHeight
-      });
+      };
+      console.log('[ClientOnlyPage] Calculating bounds for browser view:', bounds);
+      window.electronAPI.setBrowserViewBounds(bounds);
     } else {
+      console.log('[ClientOnlyPage] Hiding BrowserView - activeView:', store.activeView, 'overlays:', {
+        showSettings, showClipboard, showCamera, showCart
+      });
       window.electronAPI.setBrowserViewBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
-  }, [store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, store.activeView]);
+  }, [store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, store.activeView, showSettings, showClipboard, showCamera, showCart]);
 
   useEffect(() => {
     calculateAndSetBounds();
@@ -239,7 +248,8 @@ export default function Home() {
     return () => window.removeEventListener('focus', handleCopy);
   }, []);
 
-  if (store.activeView === 'landing') {
+  // Only show landing page if user is not signed in and not in guest mode
+  if ((store.activeView === 'landing' || (!store.user && !store.isGuestMode)) && !store.user && !store.isGuestMode) {
     return (
       <div className="flex flex-col h-screen">
         <TitleBar />
@@ -248,6 +258,11 @@ export default function Home() {
         </div>
       </div>
     );
+  }
+
+  // If user is signed in or in guest mode, ensure browser view is active
+  if ((store.user || store.isGuestMode) && store.activeView === 'landing') {
+    store.setActiveView('browser');
   }
 
 
@@ -259,93 +274,70 @@ export default function Home() {
     <div className={`flex flex-col h-screen w-full bg-deep-space-bg overflow-hidden relative font-sans text-white transition-all duration-700 ${store.isVibrant ? 'bg-vibrant-mesh' : ''}`}>
       <TitleBar />
       <div className="flex flex-1 overflow-hidden relative">
-        {store.cloudSyncConsent === null && <CloudSyncConsent />}
+        {store.cloudSyncConsent === null && !store.isGuestMode && <CloudSyncConsent />}
         <QuickNavOverlay />
         {/* Sidebar - Positionable & Resizable */}
-        <aside
-          style={{
-            width: store.isSidebarCollapsed ? 80 : store.sidebarWidth,
-            order: store.sidebarSide === 'left' ? -1 : 1
-          }}
-          className={`z-50 glass-vibrant border-white/5 transition-all duration-500 ease-in-out flex flex-col ${store.sidebarSide === 'left' ? 'border-r' : 'border-l'}`}
-        >
-          <div className="p-6 flex-1 overflow-hidden">
-            <AIChatSidebar
-              studentMode={store.studentMode} toggleStudentMode={() => store.setStudentMode(!store.studentMode)}
-              isCollapsed={store.isSidebarCollapsed} toggleCollapse={store.toggleSidebar}
-              selectedEngine={store.selectedEngine} setSelectedEngine={store.setSelectedEngine}
-              theme={store.theme} setTheme={store.setTheme}
-              side={store.sidebarSide}
-              // Background and backend are handled by store now if needed, passing dummies for component compatibility
-              backgroundImage="" setBackgroundImage={() => { }}
-              backend="firebase" setBackend={() => { }}
-              mysqlConfig={{}} setMysqlConfig={() => { }}
-            />
-          </div>
-
-          {!store.isSidebarCollapsed && (
-            <div className="p-4 grid grid-cols-2 gap-2 border-t border-white/5 bg-black/10">
-              <button
-                onClick={() => store.setActiveView('webstore')}
-                className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'webstore' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
-              >
-                <ShoppingBag size={18} />
-                <span className="text-xs font-bold uppercase tracking-widest">Store</span>
-              </button>
-              <button
-                onClick={() => store.setActiveView('pdf')}
-                className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'pdf' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
-              >
-                <FileText size={18} />
-                <span className="text-xs font-bold uppercase tracking-widest">Docs</span>
-              </button>
-              <button
-                onClick={() => store.setActiveView('workspace')}
-                className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'workspace' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
-              >
-                <Briefcase size={18} />
-                <span className="text-xs font-bold uppercase tracking-widest">Work</span>
-              </button>
-              <button
-                onClick={() => store.setActiveView('media')}
-                className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'media' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
-              >
-                <ImageIcon size={18} />
-                <span className="text-xs font-bold uppercase tracking-widest">Media</span>
-              </button>
+        {store.sidebarOpen && (
+          <aside
+            style={{
+              width: store.isSidebarCollapsed ? 80 : store.sidebarWidth,
+              order: store.sidebarSide === 'left' ? -1 : 1
+            }}
+            className={`z-50 glass-vibrant border-white/5 transition-all duration-500 ease-in-out flex flex-col ${store.sidebarSide === 'left' ? 'border-r' : 'border-l'}`}
+          >
+            <div className="p-6 flex-1 overflow-hidden">
+              <AIChatSidebar
+                studentMode={store.studentMode} toggleStudentMode={() => store.setStudentMode(!store.studentMode)}
+                isCollapsed={store.isSidebarCollapsed} toggleCollapse={store.toggleSidebar}
+                selectedEngine={store.selectedEngine} setSelectedEngine={store.setSelectedEngine}
+                theme={store.theme} setTheme={store.setTheme}
+                side={store.sidebarSide}
+                // Background and backend are handled by store now if needed, passing dummies for component compatibility
+                backgroundImage="" setBackgroundImage={() => { }}
+                backend="firebase" setBackend={() => { }}
+                mysqlConfig={{}} setMysqlConfig={() => { }}
+              />
             </div>
-          )}
-        </aside>
+
+            {!store.isSidebarCollapsed && (
+              <div className="p-4 grid grid-cols-2 gap-2 border-t border-white/5 bg-black/10">
+                <button
+                  onClick={() => store.setActiveView('webstore')}
+                  className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'webstore' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
+                >
+                  <ShoppingBag size={18} />
+                  <span className="text-xs font-bold uppercase tracking-widest">Store</span>
+                </button>
+                <button
+                  onClick={() => store.setActiveView('pdf')}
+                  className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'pdf' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
+                >
+                  <FileText size={18} />
+                  <span className="text-xs font-bold uppercase tracking-widest">Docs</span>
+                </button>
+                <button
+                  onClick={() => store.setActiveView('workspace')}
+                  className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'workspace' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
+                >
+                  <Briefcase size={18} />
+                  <span className="text-xs font-bold uppercase tracking-widest">Work</span>
+                </button>
+                <button
+                  onClick={() => store.setActiveView('media')}
+                  className={`flex items-center gap-2 p-3 rounded-2xl transition-all ${store.activeView === 'media' ? 'bg-deep-space-accent-neon/10 text-deep-space-accent-neon' : 'hover:bg-white/5 text-white/40'}`}
+                >
+                  <ImageIcon size={18} />
+                  <span className="text-xs font-bold uppercase tracking-widest">Media</span>
+                </button>
+              </div>
+            )}
+          </aside>
+        )}
 
         {/* Main Container */}
         <main className="flex-1 flex flex-col relative overflow-hidden bg-black/5">
-          {/* Tab Bar - Top Tier (Hidden in Coding or specialized views) */}
-          {(!store.isCodingMode && store.activeView === 'browser') && (
-            <div className="h-10 flex items-center px-4 gap-1 bg-black/40 border-b border-white/5 overflow-x-auto custom-scrollbar no-scrollbar">
-              {store.tabs.map((tab) => (
-                <div
-                  key={tab.id}
-                  onClick={() => store.setActiveTab(tab.id)}
-                  className={`group flex items-center h-8 px-4 rounded-t-xl min-w-[140px] max-w-[200px] cursor-pointer transition-all border-t border-x ${store.activeTabId === tab.id ? 'bg-white/10 border-white/10 text-white' : 'bg-transparent border-transparent text-white/30 hover:bg-white/5'}`}
-                >
-                  <Globe size={12} className="mr-2 flex-shrink-0" />
-                  <span className="text-[10px] font-bold truncate flex-1">{tab.title}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); store.removeTab(tab.id); }}
-                    className="ml-2 p-0.5 rounded-full hover:bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Plus size={10} className="rotate-45" />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => store.addTab()}
-                className="p-1.5 rounded-lg text-white/20 hover:bg-white/10 hover:text-white transition-all ml-2"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
-          )}
+          {/* Tab Bar - Top Tier (Hidden in Coding or specialized views) - Virtualized for 50+ tabs */}
+          <TitleBar />
 
           {/* Bookmarks Bar */}
           <div className="h-9 flex items-center px-6 gap-4 bg-black/20 border-b border-white/5 overflow-x-auto no-scrollbar">
@@ -366,7 +358,7 @@ export default function Home() {
             <button
               onClick={() => {
                 const activeTab = store.tabs.find(t => t.id === store.activeTabId);
-                if (activeTab) store.addBookmark(activeTab.url, activeTab.title);
+                if (activeTab) store.addBookmark({ url: activeTab.url, title: activeTab.title });
               }}
               className="ml-auto p-1.5 rounded-lg text-white/20 hover:bg-white/10 hover:text-white transition-all"
             >
@@ -377,6 +369,9 @@ export default function Home() {
           {/* Toolbar */}
           <header className="h-[72px] flex items-center px-6 gap-6 border-b border-white/5 bg-black/20 backdrop-blur-3xl z-40">
             <div className="flex items-center gap-1.5">
+              <button onClick={() => store.toggleSidebar()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all">
+                <Sparkles size={20} />
+              </button>
               <button onClick={() => window.electronAPI?.goBack()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all"><ChevronLeft size={20} /></button>
               <button onClick={() => window.electronAPI?.goForward()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all"><ChevronRight size={20} /></button>
               <button onClick={() => window.electronAPI?.reload()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all"><RotateCw size={18} /></button>
@@ -486,7 +481,22 @@ export default function Home() {
                 <motion.div key="browser" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">
                   <div className={`h-full flex ${store.studentMode ? 'p-4 gap-4' : ''}`}>
                     <div className={`flex-[3] relative ${store.studentMode ? 'rounded-2xl overflow-hidden border border-white/10 shadow-3xl' : ''}`}>
-                      <BrowserViewContainer omnibarUrl={store.tabs.find(t => t.id === store.activeTabId)?.url || 'https://www.google.com'} onUrlChange={(url) => store.updateTab(store.activeTabId, { url })} />
+                      {/* Only render BrowserViewContainer for active tab to save memory */}
+                      {shouldRenderTab(store.activeTabId) && (
+                        <BrowserViewContainer
+                          key={store.activeTabId}
+                          omnibarUrl={store.tabs.find(t => t.id === store.activeTabId)?.url || 'https://www.google.com'}
+                          onUrlChange={(url) => store.updateTab(store.activeTabId, { url })}
+                        />
+                      )}
+                      {!shouldRenderTab(store.activeTabId) && (
+                        <div className="w-full h-full flex items-center justify-center bg-[#050510] text-white/40">
+                          <div className="text-center">
+                            <p className="text-sm mb-2">Tab suspended to save memory</p>
+                            <p className="text-xs">Click the tab to resume</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {store.studentMode && (
                       <div className="flex-1 glass-vibrant shadow-3xl rounded-3xl p-6 flex flex-col border border-white/5 bg-white/[0.02]">

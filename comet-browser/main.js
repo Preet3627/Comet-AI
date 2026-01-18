@@ -6,6 +6,8 @@ const isDev = !app.isPackaged;
 let mainWindow;
 let browserView;
 let isOnline = true;
+const tabViews = new Map(); // Map of tabId -> BrowserView for active tabs only
+const suspendedTabs = new Set(); // Track suspended tabs
 
 const extensionsPath = path.join(app.getPath('userData'), 'extensions');
 const memoryPath = path.join(app.getPath('userData'), 'ai_memory.jsonl');
@@ -16,6 +18,10 @@ if (!fs.existsSync(extensionsPath)) {
 
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const fetch = require('cross-fetch');
+
+// Custom protocol for authentication
+const PROTOCOL = 'comet-browser';
+app.setAsDefaultProtocolClient(PROTOCOL);
 
 // Function to check network status
 const checkNetworkStatus = () => {
@@ -75,7 +81,9 @@ function createWindow() {
     console.log('Ad blocker enabled.');
   });
 
-  // BrowserView setup
+  // BrowserView setup with Chrome User-Agent
+  const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
   browserView = new BrowserView({
     webPreferences: {
       nodeIntegration: false,
@@ -84,9 +92,13 @@ function createWindow() {
     },
   });
 
+  // Set Chrome User-Agent for browser detection
+  browserView.webContents.setUserAgent(chromeUserAgent);
+
   mainWindow.setBrowserView(browserView);
 
   browserView.webContents.on('did-navigate', (event, url) => {
+    console.log('[BrowserView] Navigated to:', url);
     mainWindow.webContents.send('browser-view-url-changed', url);
     if (url.includes('/search?') || url.includes('?q=')) {
       try {
@@ -98,10 +110,24 @@ function createWindow() {
   });
 
   browserView.webContents.on('did-navigate-in-page', (event, url) => {
+    console.log('[BrowserView] In-page navigation:', url);
     mainWindow.webContents.send('browser-view-url-changed', url);
   });
 
+  // Set initial bounds to make BrowserView visible
+  const initialBounds = {
+    x: 280,  // Assuming sidebar width
+    y: 112,  // Header height (titlebar + toolbar)
+    width: mainWindow.getBounds().width - 280,
+    height: mainWindow.getBounds().height - 112
+  };
+
+  browserView.setBounds(initialBounds);
+  console.log('[BrowserView] Initial bounds set:', initialBounds);
+  console.log('[BrowserView] BrowserView created and attached to main window');
+
   browserView.webContents.loadURL('https://www.google.com');
+  console.log('[BrowserView] Loading initial URL: https://www.google.com');
 
   // Handle external links
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -118,6 +144,9 @@ function createWindow() {
     }
     return { action: 'allow' };
   });
+
+  // Set Chrome User-Agent for all sessions (for browser detection)
+  session.defaultSession.setUserAgent(chromeUserAgent);
 
   // Header stripping for embedding
   session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
@@ -162,45 +191,23 @@ ipcMain.on('close-window', () => {
 });
 
 ipcMain.on('open-auth-window', (event, authUrl) => {
-  let authWindow = new BrowserWindow({
-    width: 800,
-    height: 700,
-    show: false, // Don't show until ready
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      // We need to allow window.opener to post messages back to the main window
-      // via the main window's renderer process.
-      // The preload script should expose a way for the auth window to communicate.
-      preload: path.join(__dirname, 'preload.js')
-    },
-    parent: mainWindow, // Make it a child of the main window
-    modal: true,
-    frame: true, // Show frame so user can close it
-    autoHideMenuBar: true
-  });
-
-  authWindow.loadURL(authUrl);
-
-  authWindow.once('ready-to-show', () => {
-    authWindow.show();
-  });
-
-  // Handle successful authentication: when the auth window closes,
-  // it might have already sent a message back to the main window.
-  authWindow.on('closed', () => {
-    authWindow = null; // Dereference the window object
-  });
+  // Instead of opening a new window, open the URL in the user's default browser
+  shell.openExternal(authUrl);
 });
 
 ipcMain.on('set-browser-view-bounds', (event, bounds) => {
+  console.log('[IPC] set-browser-view-bounds received:', bounds);
   if (browserView && mainWindow) {
-    browserView.setBounds({
+    const roundedBounds = {
       x: Math.round(bounds.x),
       y: Math.round(bounds.y),
       width: Math.round(bounds.width),
       height: Math.round(bounds.height),
-    });
+    };
+    browserView.setBounds(roundedBounds);
+    console.log('[BrowserView] Bounds updated to:', roundedBounds);
+  } else {
+    console.error('[BrowserView] Cannot set bounds - browserView or mainWindow is null');
   }
 });
 
@@ -288,6 +295,45 @@ ipcMain.handle('export-chat-txt', async (event, messages) => {
 
 ipcMain.handle('get-extension-path', () => extensionsPath);
 
+// Tab Optimization Handlers
+ipcMain.on('suspend-tab', (event, tabId) => {
+  const view = tabViews.get(tabId);
+  if (view && view !== browserView) {
+    // Hide and pause the view
+    view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    view.webContents.executeJavaScript(`
+      document.body.style.display = 'none';
+      if (window.stop) window.stop();
+    `).catch(() => { });
+    suspendedTabs.add(tabId);
+    console.log(`Tab ${tabId} suspended`);
+  }
+});
+
+ipcMain.on('resume-tab', (event, tabId) => {
+  const view = tabViews.get(tabId);
+  if (view && suspendedTabs.has(tabId)) {
+    // Restore view
+    view.webContents.executeJavaScript(`
+      document.body.style.display = '';
+    `).catch(() => { });
+    suspendedTabs.delete(tabId);
+    console.log(`Tab ${tabId} resumed`);
+  }
+});
+
+ipcMain.handle('get-memory-usage', async () => {
+  const process = require('process');
+  const usage = process.memoryUsage();
+  return {
+    heapUsed: Math.round(usage.heapUsed / 1048576), // MB
+    heapTotal: Math.round(usage.heapTotal / 1048576), // MB
+    rss: Math.round(usage.rss / 1048576), // MB
+    activeTabs: tabViews.size,
+    suspendedTabs: suspendedTabs.size,
+  };
+});
+
 ipcMain.on('update-shortcuts', (event, shortcuts) => {
   globalShortcut.unregisterAll();
   shortcuts.forEach(s => {
@@ -301,6 +347,17 @@ ipcMain.on('update-shortcuts', (event, shortcuts) => {
   });
 });
 
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (mainWindow) {
+    // Bring the main window to the front
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    // Send the URL to the renderer process
+    mainWindow.webContents.send('auth-callback', url);
+  }
+});
+
 app.whenReady().then(() => {
   createWindow();
 
@@ -312,6 +369,7 @@ app.whenReady().then(() => {
     { accelerator: 'CommandOrControl+Shift+Tab', action: 'prev-tab' },
     { accelerator: 'CommandOrControl+B', action: 'toggle-sidebar' },
     { accelerator: 'CommandOrControl+,', action: 'open-settings' },
+    { accelerator: 'CommandOrControl+Shift+N', action: 'new-incognito-tab' },
   ];
 
   shortcuts.forEach(s => {
