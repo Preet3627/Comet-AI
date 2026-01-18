@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Security } from '@/lib/Security';
 import { defaultShortcuts, Shortcut } from '@/lib/constants';
+import firebaseService from '@/lib/FirebaseService';
+import { getAuth } from 'firebase/auth';
 
 interface PasswordEntry {
     id: string;
@@ -13,7 +15,7 @@ interface PasswordEntry {
 
 interface BrowserState {
     currentUrl: string;
-    history: string[];
+    history: any[];
     clipboard: string[];
     activeView: 'browser' | 'webstore' | 'pdf' | 'landing' | 'workspace' | 'media';
     isSidebarCollapsed: boolean;
@@ -25,11 +27,12 @@ interface BrowserState {
 
     // User & Session System
     user: {
+        uid: string;
         email: string | null;
-        name: string | null;
+        displayName: string | null;
         photoURL: string | null;
-        lastLogin: number;
-        activeTime: number; // in milliseconds
+        lastLogin?: number;
+        activeTime?: number; // in milliseconds
     } | null;
     isAdmin: boolean;
     activeStartTime: number | null;
@@ -61,8 +64,6 @@ interface BrowserState {
     excelAutofillData: any[];
     shortcuts: Shortcut[];
 
-    // ...
-
     addAddress: (addr: any) => void;
     removeAddress: (id: string) => void;
     addPaymentMethod: (pm: any) => void;
@@ -70,14 +71,18 @@ interface BrowserState {
 
     // AI Configuration
     cloudSyncConsent: boolean | null;
-
-    // AI Configuration
     aiProvider: 'openai' | 'gemini' | 'claude' | 'local';
     localLLMModel: string;
     isOnline: boolean; // New state for network status
     enableAIAssist: boolean;
     syncPassphrase: string | null;
     setSyncPassphrase: (passphrase: string | null) => void;
+
+    // API Keys
+    openaiApiKey: string | null;
+    geminiApiKey: string | null;
+    setOpenaiApiKey: (key: string | null) => void;
+    setGeminiApiKey: (key: string | null) => void;
 
     // Integrations
     githubToken: string | null;
@@ -98,7 +103,9 @@ interface BrowserState {
     setIsOnline: (online: boolean) => void;
     setEnableAIAssist: (enabled: boolean) => void;
     setCurrentUrl: (url: string) => void;
-    addToHistory: (url: string) => void;
+    addToHistory: (entry: { url: string; title: string }) => void;
+    setHistory: (history: any[]) => void;
+    fetchHistory: () => Promise<void>;
     addClipboardItem: (item: string) => void;
     setActiveView: (view: 'browser' | 'webstore' | 'pdf' | 'landing' | 'workspace' | 'media') => void;
     toggleSidebar: () => void;
@@ -152,7 +159,7 @@ interface BrowserState {
 
 export const useAppStore = create<BrowserState>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             currentUrl: 'https://www.google.com',
             history: [],
             clipboard: [],
@@ -186,6 +193,10 @@ export const useAppStore = create<BrowserState>()(
             isAdmin: false,
             activeStartTime: null,
             shortcuts: defaultShortcuts,
+            openaiApiKey: null,
+            geminiApiKey: null,
+            setOpenaiApiKey: (key) => set({ openaiApiKey: key }),
+            setGeminiApiKey: (key) => set({ geminiApiKey: key }),
 
             addAddress: (addr) => set((state) => ({ addresses: [...state.addresses, { ...addr, id: Date.now().toString() }] })),
             removeAddress: (id) => set((state) => ({ addresses: state.addresses.filter(a => a.id !== id) })),
@@ -223,15 +234,21 @@ export const useAppStore = create<BrowserState>()(
             setSyncPassphrase: (passphrase) => set({ syncPassphrase: passphrase }),
 
             setCurrentUrl: (url) => set({ currentUrl: url }),
-            addToHistory: (url) => set((state) => {
-                const newHistory = [url, ...state.history.slice(0, 49)];
-                if (state.cloudSyncConsent) {
-                    import("@/lib/FirebaseSyncService").then(({ firebaseSyncService }) => {
-                        firebaseSyncService.setHistory(newHistory);
-                    });
+            addToHistory: (entry) => set((state) => {
+                const newHistory = [entry, ...state.history.filter(h => h.url !== entry.url).slice(0, 499)];
+                if (state.user && firebaseService.app) {
+                    firebaseService.addHistoryEntry(state.user.uid, entry.url, entry.title);
                 }
                 return { history: newHistory };
             }),
+            setHistory: (history) => set({ history }),
+            fetchHistory: async () => {
+                const user = get().user;
+                if (user && firebaseService.app) {
+                    const history = await firebaseService.getHistory(user.uid);
+                    set({ history });
+                }
+            },
             addClipboardItem: (item) => set((state) => {
                 if (state.clipboard.includes(item)) return state;
                 const newClipboard = [item, ...state.clipboard.slice(0, 19)];
@@ -251,15 +268,37 @@ export const useAppStore = create<BrowserState>()(
             setAppName: (name) => set({ appName: name }),
             setCodingMode: (mode) => set({ isCodingMode: mode }),
 
-            addTab: (url = 'https://www.google.com') => set((state) => {
-                const id = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-                return {
-                    tabs: [...state.tabs, { id, url, title: 'New Tab' }],
-                    activeTabId: id,
-                    currentUrl: url,
-                    activeView: 'browser'
-                };
-            }),
+            addTab: (url = 'https://www.google.com') => {
+                (async () => {
+                    let finalUrl = url;
+                    const landingPageUrl = process.env.NEXT_PUBLIC_LANDING_PAGE_URL || 'http://localhost:3000';
+                    if (url.startsWith(landingPageUrl)) {
+                        const user = get().user;
+                        if (user && firebaseService.app) {
+                            const firebaseUser = getAuth(firebaseService.app).currentUser;
+                            if (firebaseUser) {
+                                try {
+                                    const idToken = await firebaseUser.getIdToken(true);
+                                    const urlObject = new URL(url);
+                                    urlObject.searchParams.set('idToken', idToken);
+                                    finalUrl = urlObject.toString();
+                                } catch (error) {
+                                    console.error("Error getting idToken: ", error);
+                                }
+                            }
+                        }
+                    }
+                    set((state) => {
+                        const id = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+                        return {
+                            tabs: [...state.tabs, { id, url: finalUrl, title: 'New Tab' }],
+                            activeTabId: id,
+                            currentUrl: finalUrl,
+                            activeView: 'browser'
+                        };
+                    });
+                })();
+            },
             removeTab: (id) => set((state) => {
                 const newTabs = state.tabs.filter(t => t.id !== id);
                 const finalTabs = newTabs.length ? newTabs : [{ id: 'default', url: 'https://www.google.com', title: 'New Tab' }];
@@ -351,15 +390,16 @@ export const useAppStore = create<BrowserState>()(
                 isAdmin: user?.email === 'preetjgfilj2@gmail.com' || user?.email?.endsWith('@admin.com') || false
             }),
             setAdmin: (isAdmin) => set({ isAdmin }),
-            logout: () => set({ user: null, isAdmin: false, activeView: 'landing' }),
+            logout: () => set({ user: null, isAdmin: false, activeView: 'landing', history: [] }),
             startActiveSession: () => set({ activeStartTime: Date.now() }),
             endActiveSession: () => set((state) => {
                 if (!state.activeStartTime || !state.user) return { activeStartTime: null };
                 const sessionDuration = Date.now() - state.activeStartTime;
+                const newActiveTime = (state.user.activeTime || 0) + sessionDuration;
                 return {
                     user: {
                         ...state.user,
-                        activeTime: (state.user.activeTime || 0) + sessionDuration
+                        activeTime: newActiveTime,
                     },
                     activeStartTime: null
                 };
@@ -368,10 +408,11 @@ export const useAppStore = create<BrowserState>()(
                 if (!state.activeStartTime || !state.user) return state;
                 const now = Date.now();
                 const sessionDuration = now - state.activeStartTime;
+                const newActiveTime = (state.user.activeTime || 0) + sessionDuration;
                 return {
                     user: {
                         ...state.user,
-                        activeTime: (state.user.activeTime || 0) + sessionDuration
+                        activeTime: newActiveTime
                     },
                     activeStartTime: now
                 };

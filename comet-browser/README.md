@@ -1,5 +1,7 @@
 # ☄️ Comet AI Browser (Desktop Core)
 
+![Version](https://img.shields.io/badge/version-v0.1.1-blue)
+
 ![Comet Banner](https://via.placeholder.com/1200x400/0a0a0f/00ffff?text=Comet+AI+Browser)
 
 **Comet AI Browser** is a performance-hardened Chromium shell with native AI orchestration, optimized for decentralized workflows. It combines the speed of Chromium with the power of modern AI and cross-device synchronization.

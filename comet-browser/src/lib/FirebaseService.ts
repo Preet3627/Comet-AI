@@ -1,7 +1,7 @@
 // src/lib/FirebaseService.ts
 import { initializeApp, getApp, getApps, FirebaseApp, deleteApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged as firebaseOnAuthStateChanged, User, Auth } from 'firebase/auth';
-import { getFirestore, collection, addDoc, serverTimestamp, Firestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged as firebaseOnAuthStateChanged, User, Auth, signInWithCustomToken as firebaseSignInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, addDoc, serverTimestamp, Firestore, query, orderBy, getDocs } from 'firebase/firestore';
 
 class FirebaseService {
   app: FirebaseApp | null = null;
@@ -40,6 +40,20 @@ class FirebaseService {
       return result.user;
     } catch (error) {
       console.error("Error during Google sign-in:", error);
+      return null;
+    }
+  }
+
+  async signInWithCustomToken(token: string): Promise<User | null> {
+    if (!this.auth) {
+      console.error("Firebase Auth not initialized.");
+      return null;
+    }
+    try {
+      const result = await firebaseSignInWithCustomToken(this.auth, token);
+      return result.user;
+    } catch (error) {
+      console.error("Error signing in with custom token:", error);
       return null;
     }
   }
@@ -85,6 +99,26 @@ class FirebaseService {
       });
     } catch (error) {
       console.error("Error adding history entry:", error);
+    }
+  }
+
+  // Get a user's history
+  async getHistory(userId: string): Promise<any[]> {
+    if (!this.firestore) {
+      console.error("Firebase Firestore not initialized.");
+      return [];
+    }
+    try {
+      if (!userId) {
+        throw new Error("User ID is required to get history.");
+      }
+      const historyCollectionRef = collection(this.firestore, `users/${userId}/history`);
+      const q = query(historyCollectionRef, orderBy("timestamp", "desc"));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) => {
+      console.error("Error getting history:", error);
+      return [];
     }
   }
 }

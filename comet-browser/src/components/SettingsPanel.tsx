@@ -6,7 +6,7 @@ import {
     Settings as SettingsIcon, Monitor, Shield, Palette,
     Layout, Type, Globe, Info, Download, Pin,
     ChevronRight, Check, AlertCircle, Eye, EyeOff, ShieldCheck,
-    Key, Package, FileSpreadsheet, Plus, X, Lock, ExternalLink, Keyboard, Briefcase, ShieldAlert, Database, LogIn, LogOut
+    Key, Package, FileSpreadsheet, Plus, X, Lock, ExternalLink, Keyboard, Briefcase, ShieldAlert, Database, LogIn, LogOut, History as HistoryIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -16,6 +16,8 @@ import UserAgentSettings from './UserAgentSettings';
 import ProxySettings from './ProxySettings';
 import AutofillSettings from './AutofillSettings';
 import AdminDashboard from './AdminDashboard';
+import HistoryPanel from './HistoryPanel';
+import ApiKeysSettings from './ApiKeysSettings';
 import { GoogleAuthProvider } from 'firebase/auth';
 import firebaseService from '@/lib/FirebaseService';
 import { getAuth } from 'firebase/auth';
@@ -23,16 +25,21 @@ import { User } from 'firebase/auth'; // Import User type
 
 const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
     const store = useAppStore();
+    const fetchHistory = useAppStore((state) => state.fetchHistory);
     const [activeSection, setActiveSection] = React.useState('appearance');
     const [showAddPwd, setShowAddPwd] = useState(false);
     const [newPwd, setNewPwd] = useState({ site: '', username: '', password: '' });
     const [currentUser, setCurrentUser] = useState<User | null>(null); // State to hold the current user
+    const [licenseKey, setLicenseKey] = useState("");
 
     useEffect(() => {
         // Listen for auth state changes to update the UI
         const unsubscribe = firebaseService.onAuthStateChanged((user) => {
             setCurrentUser(user);
             store.setUser(user ? { uid: user.uid, email: user.email || '', displayName: user.displayName || '', photoURL: user.photoURL || '' } : null);
+            if (user) {
+                fetchHistory();
+            }
         });
 
         // Listen for messages from the auth window (landing page)
@@ -66,18 +73,45 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
             unsubscribe();
             window.removeEventListener('message', handleAuthMessage);
         };
-    }, [store]);
+    }, [store, fetchHistory]);
 
     const handleGoogleLogin = () => {
         if (window.electronAPI) {
             // Open the landing page's auth callback in a new Electron window
             // The landing page will handle the Google Sign-In and post back the idToken
-            const authUrl = `${window.location.origin}/auth?client_id=desktop-app&redirect_uri=${encodeURIComponent(window.location.origin)}`;
+            const authUrl = `${process.env.NEXT_PUBLIC_LANDING_PAGE_URL}/auth?client_id=desktop-app&redirect_uri=${encodeURIComponent(window.location.origin)}`;
             window.electronAPI.openAuthWindow(authUrl);
         } else {
             console.warn('electronAPI not available. Cannot open auth window.');
             // Fallback for web environment, though this component is client-only for electron
-            window.open(`${window.location.origin}/auth?client_id=desktop-app&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
+            window.open(`${process.env.NEXT_PUBLIC_LANDING_PAGE_URL}/auth?client_id=desktop-app&redirect_uri=${encodeURIComponent(window.location.origin)}`, '_blank');
+        }
+    };
+
+    const handleLicenseLogin = async () => {
+        if (!licenseKey) {
+            alert("Please enter a license key.");
+            return;
+        }
+        if (!firebaseService.app) {
+            alert("Firebase is not initialized. Please set up a custom Firebase config first if you are not using the default.");
+            return;
+        }
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_LANDING_PAGE_URL}/api/verify-license`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ licenseKey }),
+            });
+            const data = await res.json();
+            if (data.customToken) {
+                await firebaseService.signInWithCustomToken(data.customToken);
+            } else {
+                alert(data.error || "Failed to verify license key.");
+            }
+        } catch (error) {
+            console.error("Error verifying license key: ", error);
+            alert("An error occurred while verifying the license key.");
         }
     };
 
@@ -95,6 +129,8 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
         { id: 'search', icon: <Globe size={18} />, label: 'Search Engine' },
         { id: 'privacy', icon: <Shield size={18} />, label: 'Privacy & Security' },
         { id: 'vault', icon: <Key size={18} />, label: 'Vault & Autofill' },
+        { id: 'history', icon: <HistoryIcon size={18} />, label: 'History' },
+        { id: 'api-keys', icon: <Key size={18} />, label: 'API Keys' },
         { id: 'shortcuts', icon: <Keyboard size={18} />, label: 'Keyboard Shortcuts' },
         { id: 'extensions', icon: <Package size={18} />, label: 'Extensions' },
         { id: 'tabs', icon: <Layout size={18} />, label: 'Tab Management' },
@@ -158,7 +194,7 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
                             Install PWA
                         </button>
                         <div className="p-4 bg-deep-space-accent-neon/5 rounded-2xl border border-deep-space-accent-neon/10 text-[10px] font-medium text-deep-space-accent-neon/60 text-center leading-relaxed">
-                            Version 0.5.2-alpha <br /> (Production Build)
+                            Version v0.1.1 Stable <br /> (Production Build)
                         </div>
                     </div>
                 </div>
@@ -168,7 +204,7 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
                     <header className="flex items-center justify-between mb-12">
                         <div>
                             <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">
-                                {activeSection === 'mcp' ? 'MCP Servers' : activeSection === 'admin' ? 'Admin Console' : activeSection.replace('-', ' ')}
+                                {activeSection.replace('-', ' ')}
                             </h2>
                             <p className="text-white/30 text-sm">Configure your hardware-accelerated workspace.</p>
                         </div>
@@ -322,13 +358,38 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <button
-                                                        onClick={handleGoogleLogin}
-                                                        className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/30 text-deep-space-accent-neon rounded-xl text-sm font-black uppercase tracking-widest hover:bg-deep-space-accent-neon hover:text-deep-space-bg transition-all"
-                                                    >
-                                                        <LogIn size={20} />
-                                                        Sign in with Google
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            onClick={handleGoogleLogin}
+                                                            className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/30 text-deep-space-accent-neon rounded-xl text-sm font-black uppercase tracking-widest hover:bg-deep-space-accent-neon hover:text-deep-space-bg transition-all"
+                                                        >
+                                                            <LogIn size={20} />
+                                                            Sign in with Google
+                                                        </button>
+                                                        <div className="relative flex py-2 items-center">
+                                                            <div className="flex-grow border-t border-white/10"></div>
+                                                            <span className="flex-shrink mx-4 text-white/40 text-xs uppercase">Or</span>
+                                                            <div className="flex-grow border-t border-white/10"></div>
+                                                        </div>
+                                                        <div className="space-y-4">
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="password"
+                                                                    value={licenseKey}
+                                                                    onChange={(e) => setLicenseKey(e.target.value)}
+                                                                    placeholder="Enter your License Key"
+                                                                    className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 px-6 text-sm text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all placeholder:text-white/20"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                onClick={handleLicenseLogin}
+                                                                className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white/10 border border-white/20 text-white rounded-xl text-sm font-black uppercase tracking-widest hover:bg-white/20 transition-all"
+                                                            >
+                                                                <Key size={20} />
+                                                                Login with License Key
+                                                            </button>
+                                                        </div>
+                                                    </>
                                                 )}
 
                                                 <div className="flex items-center justify-between">
@@ -387,6 +448,10 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
                         )}
 
                         {activeSection === 'admin' && <AdminDashboard />}
+
+                        {activeSection === 'history' && <HistoryPanel />}
+
+                        {activeSection === 'api-keys' && <ApiKeysSettings />}
 
                         {activeSection === 'about' && (
                             <div className="text-center py-20">
