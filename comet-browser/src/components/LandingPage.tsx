@@ -157,7 +157,7 @@ const LandingPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#020205] text-white overflow-y-auto relative selection:bg-deep-space-accent-neon/30 custom-scrollbar">
+        <div className="h-screen bg-[#020205] text-white overflow-y-auto relative selection:bg-deep-space-accent-neon/30 custom-scrollbar">
             {/* Background Effects */}
             <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-deep-space-accent-neon/10 blur-[120px] rounded-full animate-pulse" />
@@ -169,8 +169,8 @@ const LandingPage = () => {
             <nav className="fixed top-10 left-0 right-0 z-[100] bg-black/50 backdrop-blur-xl border-b border-white/5">
                 <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-cyan-400 rounded-2xl flex items-center justify-center text-black font-black text-xl shadow-[0_0_25px_rgba(34,211,238,0.5)]">
-                            C
+                        <div className="w-10 h-10 bg-[#00ffff] rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(0,255,255,0.5)] p-1.5">
+                            <img src="/icon.ico" alt="Comet" className="w-full h-full object-contain" />
                         </div>
                         <span className="text-2xl font-black uppercase tracking-tighter text-white">COMET</span>
                     </div>

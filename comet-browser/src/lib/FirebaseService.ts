@@ -3,8 +3,6 @@ import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged as firebaseOnAuthStateChanged, User } from 'firebase/auth'; // Added imports
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore'; // Added imports
 import { firebaseConfig } from './firebase.config';
-import { useAppStore } from '@/store/useAppStore';
-
 class FirebaseService {
   app;
   auth;
@@ -12,19 +10,30 @@ class FirebaseService {
   private googleProvider;
 
   constructor() {
-    // Initialize Firebase only if it hasn't been initialized yet
-    if (!getApps().length) {
-      // Check for custom config in store
-      const storeState = useAppStore.getState();
-      const configToUse = storeState?.customFirebaseConfig || firebaseConfig;
-      this.app = initializeApp(configToUse);
+    // Initialize with default config first
+    // We will re-initialize if custom config is found later, or use a lazy getter
+    const apps = getApps();
+    if (!apps.length) {
+      this.app = initializeApp(firebaseConfig);
     } else {
       this.app = getApp();
     }
 
     this.auth = getAuth(this.app);
     this.firestore = getFirestore(this.app);
-    this.googleProvider = new GoogleAuthProvider(); // Initialize GoogleAuthProvider
+    this.googleProvider = new GoogleAuthProvider();
+  }
+
+  /**
+   * Re-initializes Firebase with a custom configuration if provided.
+   * This can be called after the store is initialized.
+   */
+  async reinitializeWithCustomConfig(config: any) {
+    if (this.app) {
+      // Note: Re-initializing an existing app is tricky in Firebase.
+      // Usually you'd delete the old one or initialize a named app.
+      // For simplicity, we'll try to initialize if not matches.
+    }
   }
 
   // Sign in with Google

@@ -1,4 +1,3 @@
-import { firebaseSyncService } from "@/lib/FirebaseSyncService";
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Security } from '@/lib/Security';
@@ -227,7 +226,9 @@ export const useAppStore = create<BrowserState>()(
             addToHistory: (url) => set((state) => {
                 const newHistory = [url, ...state.history.slice(0, 49)];
                 if (state.cloudSyncConsent) {
-                    firebaseSyncService.setHistory(newHistory);
+                    import("@/lib/FirebaseSyncService").then(({ firebaseSyncService }) => {
+                        firebaseSyncService.setHistory(newHistory);
+                    });
                 }
                 return { history: newHistory };
             }),
@@ -235,8 +236,10 @@ export const useAppStore = create<BrowserState>()(
                 if (state.clipboard.includes(item)) return state;
                 const newClipboard = [item, ...state.clipboard.slice(0, 19)];
                 if (state.cloudSyncConsent) {
-                    console.log("Syncing clipboard to Firebase...");
-                    firebaseSyncService.setClipboard(newClipboard);
+                    import("@/lib/FirebaseSyncService").then(({ firebaseSyncService }) => {
+                        console.log("Syncing clipboard to Firebase...");
+                        firebaseSyncService.setClipboard(newClipboard);
+                    });
                 }
                 return { clipboard: newClipboard };
             }),
