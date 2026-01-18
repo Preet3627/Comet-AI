@@ -355,15 +355,6 @@ export default function Home() {
                 <span className="text-[10px] font-medium text-white/40 group-hover:text-white truncate max-w-[120px]">{b.title}</span>
               </button>
             ))}
-            <button
-              onClick={() => {
-                const activeTab = store.tabs.find(t => t.id === store.activeTabId);
-                if (activeTab) store.addBookmark({ url: activeTab.url, title: activeTab.title });
-              }}
-              className="ml-auto p-1.5 rounded-lg text-white/20 hover:bg-white/10 hover:text-white transition-all"
-            >
-              <Plus size={12} />
-            </button>
           </div>
 
           {/* Toolbar */}

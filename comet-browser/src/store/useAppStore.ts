@@ -15,25 +15,25 @@ interface BrowserState {
     setDefaultUrl: (url: string) => void;
 
     // Tabs
-        tabs: Array<{ id: string; url: string; title: string; isIncognito?: boolean; isAudible?: boolean }>;
-        activeTabId: string;
-        addTab: (url?: string) => void;
-        addIncognitoTab: (url?: string) => void;
-        removeTab: (id: string) => void;
-        updateTab: (id: string, updates: Partial<{ url: string; title: string; isAudible?: boolean }>) => void;
-        setCurrentUrl: (url: string) => void;
-        setActiveTabId: (id: string) => void;
-        setActiveTab: (id: string) => void; // Alias for setActiveTabId
-    
-        // Performance Mode
-        performanceMode: 'normal' | 'performance';
-        performanceModeSettings: {
-            maxActiveTabs: number;
-            maxRam: number; // in MB
-            keepAudioTabsActive: boolean;
-        };
-        setPerformanceMode: (mode: 'normal' | 'performance') => void;
-        updatePerformanceModeSettings: (settings: Partial<BrowserState['performanceModeSettings']>) => void;
+    tabs: Array<{ id: string; url: string; title: string; isIncognito?: boolean; isAudible?: boolean }>;
+    activeTabId: string;
+    addTab: (url?: string) => void;
+    addIncognitoTab: (url?: string) => void;
+    removeTab: (id: string) => void;
+    updateTab: (id: string, updates: Partial<{ url: string; title: string; isAudible?: boolean }>) => void;
+    setCurrentUrl: (url: string) => void;
+    setActiveTabId: (id: string) => void;
+    setActiveTab: (id: string) => void; // Alias for setActiveTabId
+
+    // Performance Mode
+    performanceMode: 'normal' | 'performance';
+    performanceModeSettings: {
+        maxActiveTabs: number;
+        maxRam: number; // in MB
+        keepAudioTabsActive: boolean;
+    };
+    setPerformanceMode: (mode: 'normal' | 'performance') => void;
+    updatePerformanceModeSettings: (settings: Partial<BrowserState['performanceModeSettings']>) => void;
 
     // History and clipboard
     history: Array<{ url: string; title: string; timestamp: number }>;
@@ -206,10 +206,10 @@ export const useAppStore = create<BrowserState>()(
             activeStartTime: null,
 
             // Sidebar
-            sidebarOpen: false,
+            sidebarOpen: true,
             sidebarWidth: 280,
             sidebarSide: "left",
-            isSidebarCollapsed: true,
+            isSidebarCollapsed: false,
 
             // Student mode
             studentMode: false,
@@ -256,8 +256,20 @@ export const useAppStore = create<BrowserState>()(
             setCurrentUrl: (url) => set({ currentUrl: url }),
 
             // Tabs
-            setActiveTabId: (id) => set({ activeTabId: id }),
-            setActiveTab: (id) => set({ activeTabId: id }), // Alias for setActiveTabId
+            setActiveTabId: (id) => set((state) => {
+                const newTab = state.tabs.find(t => t.id === id);
+                return {
+                    activeTabId: id,
+                    currentUrl: newTab?.url || state.currentUrl
+                };
+            }),
+            setActiveTab: (id) => set((state) => {
+                const newTab = state.tabs.find(t => t.id === id);
+                return {
+                    activeTabId: id,
+                    currentUrl: newTab?.url || state.currentUrl
+                };
+            }),
             updateTab: (id, updates) => set((state) => ({
                 tabs: state.tabs.map(tab =>
                     tab.id === id ? { ...tab, ...updates } : tab
@@ -361,7 +373,7 @@ export const useAppStore = create<BrowserState>()(
             removeBookmark: (url) => set((state) => ({
                 bookmarks: state.bookmarks.filter(b => b.url !== url)
             })),
-            
+
             // Passwords and autofill
             addAddress: (address) => set((state) => ({
                 addresses: [...state.addresses, { id: `address-${Date.now()}`, ...address }]
@@ -382,9 +394,9 @@ export const useAppStore = create<BrowserState>()(
                     s.action === action ? { ...s, accelerator } : s
                 )
             })),
-            
+
             setHasSeenWelcomePage: (seen) => set({ hasSeenWelcomePage: seen }),
-            
+
             setBackendStrategy: (strategy) => set({ backendStrategy: strategy }),
             setCustomFirebaseConfig: (config) => set({ customFirebaseConfig: config }),
             setCustomMysqlConfig: (config) => set({ customMysqlConfig: config }),
@@ -409,9 +421,9 @@ export const useAppStore = create<BrowserState>()(
                     get().logout();
                 }
             },
-            
+
             setCloudSyncConsent: (consent) => set({ cloudSyncConsent: consent }),
-            
+
             removeFromCart: (itemId) => set((state) => ({
                 unifiedCart: state.unifiedCart.filter((item: any) => item.id !== itemId)
             })),
@@ -453,14 +465,14 @@ export const useAppStore = create<BrowserState>()(
                     currentUrl: nextUrl
                 };
             }),
-            
+
             setSyncPassphrase: (passphrase) => set({ syncPassphrase: passphrase }),
 
-            logout: () => set({ 
-                user: null, 
-                isAdmin: false, 
-                activeView: 'landing', 
-                history: [], 
+            logout: () => set({
+                user: null,
+                isAdmin: false,
+                activeView: 'landing',
+                history: [],
                 bookmarks: [],
                 passwords: [],
                 addresses: [],
@@ -470,7 +482,7 @@ export const useAppStore = create<BrowserState>()(
                 tabs: [{ id: 'default', url: 'about:blank', title: 'New Tab' }],
                 currentUrl: 'about:blank',
             }),
-            
+
             // ...
         }),
         {
