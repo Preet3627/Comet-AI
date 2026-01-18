@@ -11,8 +11,8 @@ const TitleBar = () => {
     return (
         <div className="h-10 bg-[#0D0E1C] border-b border-white/5 flex items-center justify-between px-4 select-none drag-region fixed top-0 left-0 right-0 z-[200]">
             <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-cyan-400 flex items-center justify-center text-[11px] font-black text-black shadow-[0_0_15px_rgba(34,211,238,0.3)]">
-                    C
+                <div className="w-5 h-5 rounded-lg bg-[#00ffff] flex items-center justify-center shadow-[0_0_15px_rgba(0,255,255,0.3)] p-0.5">
+                    <img src="/icon.ico" alt="Comet" className="w-full h-full object-contain" />
                 </div>
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Comet Browser</span>
             </div>

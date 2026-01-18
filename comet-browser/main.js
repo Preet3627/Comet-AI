@@ -142,6 +142,25 @@ function createWindow() {
 // IPC Handlers
 ipcMain.handle('get-is-online', () => isOnline);
 
+// Window Controls
+ipcMain.on('minimize-window', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('maximize-window', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('close-window', () => {
+  if (mainWindow) mainWindow.close();
+});
+
 ipcMain.on('set-browser-view-bounds', (event, bounds) => {
   if (browserView && mainWindow) {
     browserView.setBounds({

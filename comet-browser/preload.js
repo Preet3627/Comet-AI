@@ -47,9 +47,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   uninstallExtension: (id) => ipcRenderer.invoke('uninstall-extension', id),
 
   // Window Controls
-  minimizeWindow: () => ipcRenderer.send('window-minimize'),
-  maximizeWindow: () => ipcRenderer.send('window-maximize'),
-  closeWindow: () => ipcRenderer.send('window-close'),
+  minimizeWindow: () => ipcRenderer.send('minimize-window'),
+  maximizeWindow: () => ipcRenderer.send('maximize-window'),
+  closeWindow: () => ipcRenderer.send('close-window'),
 
   // Chat & File Export
   exportChatAsTxt: (messages) => ipcRenderer.invoke('export-chat-txt', messages),
