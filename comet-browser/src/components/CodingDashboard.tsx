@@ -2,9 +2,12 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Code2, Play, Save, Layout, Terminal, Maximize2, RotateCcw, Image as ImageIcon, Search } from 'lucide-react';
+import { Code2, Play, Save, Layout, Terminal, Maximize2, RotateCcw, Image as ImageIcon, Search, GitBranch, GitFork, UploadCloud, Github, ExternalLink, Loader2 } from 'lucide-react';
+import { useAppStore } from '@/store/useAppStore';
+import { IntegrationService } from '@/lib/IntegrationService';
 
 const CodingDashboard = () => {
+    const store = useAppStore();
     const [code, setCode] = useState(`<!DOCTYPE html>
 <html>
 <head>
@@ -22,6 +25,49 @@ const CodingDashboard = () => {
 </body>
 </html>`);
 
+    const [deployStatus, setDeployStatus] = useState<'idle' | 'deploying' | 'success' | 'error'>('idle');
+    const [deployUrl, setDeployUrl] = useState<string | null>(null);
+    const [isPushing, setIsPushing] = useState(false);
+
+    const handleConnectGithub = () => {
+        const token = prompt("Enter simulated GitHub Token (or OK for demo):", "ghp_mock_token_123");
+        if (token) store.setGithubToken(token);
+    };
+
+    const handleDeploy = async () => {
+        setDeployStatus('deploying');
+        try {
+            const result = await IntegrationService.deployRepo(store.githubToken || "guest", code);
+            if (result.success) {
+                setDeployStatus('success');
+                setDeployUrl(result.url || null);
+            } else {
+                setDeployStatus('error');
+            }
+        } catch (e) {
+            setDeployStatus('error');
+        }
+    };
+
+    const handleFork = async () => {
+        if (!store.githubToken) return handleConnectGithub();
+        if (confirm("Fork this simulated repository 'comet-demo-project' to your account?")) {
+            await IntegrationService.forkRepo(store.githubToken, "comet-org/comet-demo-project");
+            alert("Forked successfully!");
+        }
+    };
+
+    const handlePush = async () => {
+        if (!store.githubToken) return handleConnectGithub();
+        setIsPushing(true);
+        try {
+            await IntegrationService.pushChanges(store.githubToken, code, "Update index.html via Comet Dashboard");
+            alert("Changes pushed to main branch.");
+        } finally {
+            setIsPushing(false);
+        }
+    };
+
     return (
         <div className="flex h-full w-full bg-[#030308] gap-4 p-4">
             {/* Editor Side */}
@@ -32,6 +78,15 @@ const CodingDashboard = () => {
                             <Code2 size={18} />
                         </div>
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">Live Source</span>
+                        {!store.githubToken && (
+                            <button onClick={handleConnectGithub} className="ml-4 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 flex items-center gap-2 transition-all">
+                                <Github size={12} className="text-white" />
+                                <span className="text-[10px] font-bold uppercase text-white/60">Connect GitHub</span>
+                            </button>
+                        )}
+                        {store.githubToken && (
+                            <span className="ml-2 text-[10px] font-bold uppercase text-green-400 flex items-center gap-1"><GitBranch size={10} /> main</span>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         <button className="p-2 hover:bg-white/10 rounded-xl text-white/40 transition-all"><Save size={16} /></button>
@@ -49,14 +104,33 @@ const CodingDashboard = () => {
 
                 <footer className="p-4 bg-black/40 border-t border-white/5 flex items-center justify-between">
                     <div className="flex gap-2">
-                        <button className="px-4 py-2 rounded-xl bg-deep-space-accent-neon text-deep-space-bg font-bold text-[10px] uppercase tracking-widest flex items-center gap-2">
-                            <Play size={12} />
-                            Deploy
+                        <button
+                            onClick={handleDeploy}
+                            disabled={deployStatus === 'deploying'}
+                            className="px-4 py-2 rounded-xl bg-deep-space-accent-neon text-deep-space-bg font-bold text-[10px] uppercase tracking-widest flex items-center gap-2 hover:opacity-90 disabled:opacity-50"
+                        >
+                            {deployStatus === 'deploying' ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
+                            {deployStatus === 'deploying' ? 'Deploying...' : 'Deploy Live'}
                         </button>
-                        <button className="px-4 py-2 rounded-xl bg-white/5 text-white/40 font-bold text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all">
-                            Format
+
+                        <button onClick={handlePush} disabled={isPushing} className="px-4 py-2 rounded-xl bg-white/5 text-white/40 font-bold text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2">
+                            {isPushing ? <Loader2 size={12} className="animate-spin" /> : <GitBranch size={12} />}
+                            Push
+                        </button>
+
+                        <button onClick={handleFork} className="px-4 py-2 rounded-xl bg-white/5 text-white/40 font-bold text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2">
+                            <GitFork size={12} />
+                            Fork
                         </button>
                     </div>
+                    {deployStatus === 'success' && deployUrl && (
+                        <div className="flex items-center gap-2 text-green-400">
+                            <span className="text-[10px] uppercase font-bold tracking-widest">Live at:</span>
+                            <a href={deployUrl} target="_blank" className="text-xs hover:underline flex items-center gap-1">
+                                {deployUrl} <ExternalLink size={10} />
+                            </a>
+                        </div>
+                    )}
                 </footer>
             </div>
 
@@ -88,6 +162,7 @@ const CodingDashboard = () => {
                         <div>{'>'} Initializing render engine...</div>
                         <div>{'>'} Bridge connected to Electron main...</div>
                         <div>{'>'} Live reload enabled.</div>
+                        {deployStatus === 'success' && <div>{'>'} Project deployed successfully to {deployUrl}</div>}
                         <div className="text-white/20 mt-1 cursor-text">_</div>
                     </div>
                 </div>

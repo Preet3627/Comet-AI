@@ -4,6 +4,8 @@ declare global {
     interface Window {
         electronAPI: {
             // BrowserView related APIs
+            getIsOnline: () => Promise<boolean>;
+            onAiQueryDetected: (callback: (query: string) => void) => () => void;
             navigateTo: (url: string) => void;
             goBack: () => void;
             goForward: () => void;
@@ -13,6 +15,10 @@ declare global {
             setBrowserViewBounds: (bounds: { x: number; y: number; width: number; height: number }) => void;
             capturePageHtml: () => Promise<string>;
             saveOfflinePage: (data: { url: string; title: string, html: string }) => Promise<boolean>;
+            setUserAgent: (userAgent: string) => Promise<boolean>;
+            setProxy: (config: any) => Promise<boolean>;
+            capturePage: () => Promise<string>;
+            sendInputEvent: (input: any) => Promise<void>;
             openDevTools: () => void;
 
             // LLM & Memory APIs
@@ -34,6 +40,9 @@ declare global {
 
             // Extensions
             getExtensionPath: () => Promise<string>;
+            getExtensions: () => Promise<any[]>;
+            toggleExtension: (id: string) => Promise<boolean>;
+            uninstallExtension: (id: string) => Promise<boolean>;
 
             // Window Controls
             minimizeWindow: () => void;

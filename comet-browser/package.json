@@ -2,19 +2,23 @@
   "name": "comet-browser",
   "version": "0.1.0",
   "private": true,
-  "main": "electron.js",
+  "description": "Comet AI Browser - A high-performance, intelligence-driven browsing workspace with local LLM support and advanced productivity features.",
+  "author": "Latestinssan",
+  "main": "main.js",
   "homepage": "./",
   "scripts": {
     "dev": "npm run electron-dev",
     "electron-dev": "next dev",
     "electron-start": "electron .",
     "build": "next build",
-    "start": "next start",
+    "start": "npx serve@latest out",
     "lint": "eslint",
     "build-electron": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@ghostery/adblocker-electron": "^2.13.4",
     "@tensorflow/tfjs": "^4.22.0",
+    "cross-fetch": "^4.1.0",
     "electron-context-menu": "^4.1.1",
     "electron-is-dev": "^3.0.1",
     "firebase": "^12.7.0",
@@ -43,12 +47,30 @@
     "typescript": "^5"
   },
   "build": {
-    "appId": "com.example.cometbrowser",
+    "appId": "com.latestinssan.cometbrowser",
+    "productName": "Comet Browser",
+    "copyright": "Copyright © 2026 Latestinssan",
     "files": [
       "out/**/*",
-      "electron.js",
-      "package.json"
+      "!out/web/**/*",
+      "main.js",
+      "preload.js",
+      "package.json",
+      "LICENSE.txt"
     ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "license": "LICENSE.txt",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Comet Browser"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
     "directories": {
       "buildResources": "assets",
       "output": "release"

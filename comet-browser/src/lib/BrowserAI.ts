@@ -79,9 +79,27 @@ export class BrowserAI {
             return { item: ogTitle, price: `${ogCurrency}${ogPrice}`, site: window.location.hostname };
         }
 
-        // Pattern 3: Heuristic Regex (Fallback)
-        const priceRegex = /([$€£¥])\s?(\d+[.,]\d{2})/;
+        // Pattern 3: Common E-commerce Selectors (Amazon, Shopify-like)
+        const dummyDoc = new DOMParser().parseFromString(html, 'text/html');
         const h1Title = html.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]*>/g, '').trim();
+
+        // Amazon
+        const amznTitle = dummyDoc.getElementById('productTitle')?.textContent?.trim();
+        const amznPrice = dummyDoc.querySelector('.a-price .a-offscreen')?.textContent?.trim() ||
+            dummyDoc.querySelector('#price_inside_buybox')?.textContent?.trim();
+        if (amznTitle && amznPrice) return { item: amznTitle, price: amznPrice, site: window.location.hostname };
+
+        // Generic "price" class search
+        const priceElement = Array.from(dummyDoc.querySelectorAll('[class*="price"], [id*="price"]'))
+            .find(el => /[$€£¥]\s?\d+/.test(el.textContent || ''));
+
+        if (priceElement && h1Title) {
+            const price = priceElement.textContent?.match(/([$€£¥]\s?\d+[.,]?\d*)/)?.[0];
+            if (price) return { item: h1Title, price: price, site: window.location.hostname };
+        }
+
+        // Pattern 4: Heuristic Regex (Fallback)
+        const priceRegex = /([$€£¥])\s?(\d+[.,]\d{2})/;
         const priceMatch = html.match(priceRegex);
 
         if (priceMatch && h1Title && h1Title.length < 100) {

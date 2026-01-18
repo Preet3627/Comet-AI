@@ -1,16 +1,25 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import extensionManager, { Extension } from '@/lib/extensions/ExtensionManager';
 import { ShoppingBag, Star, Download, ShieldCheck, Zap } from 'lucide-react';
 
 const WebStore = ({ onClose }: { onClose: () => void }) => {
-    const [extensions, setExtensions] = useState<Extension[]>(extensionManager.getExtensions());
+    const [extensions, setExtensions] = useState<any[]>([]);
 
-    const handleToggle = (id: string) => {
-        extensionManager.toggleExtension(id);
-        setExtensions([...extensionManager.getExtensions()]);
+    useEffect(() => {
+        if (window.electronAPI) {
+            window.electronAPI.getExtensions().then(setExtensions);
+        }
+    }, []);
+
+    const handleToggle = async (id: string) => {
+        if (window.electronAPI) {
+            await window.electronAPI.toggleExtension(id);
+            const updated = await window.electronAPI.getExtensions();
+            setExtensions(updated);
+        }
     };
 
     return (
@@ -71,8 +80,8 @@ const WebStore = ({ onClose }: { onClose: () => void }) => {
                                         <button
                                             onClick={() => handleToggle(ext.id)}
                                             className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${ext.enabled
-                                                    ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20'
-                                                    : 'bg-deep-space-accent-neon text-deep-space-bg shadow-[0_0_15px_rgba(0,255,255,0.3)] hover:scale-105 active:scale-95'
+                                                ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20'
+                                                : 'bg-deep-space-accent-neon text-deep-space-bg shadow-[0_0_15px_rgba(0,255,255,0.3)] hover:scale-105 active:scale-95'
                                                 }`}
                                         >
                                             {ext.enabled ? 'Disable' : 'Install'}

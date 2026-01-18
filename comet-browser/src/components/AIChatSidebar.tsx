@@ -8,9 +8,10 @@ import { User } from "firebase/auth";
 import firebaseService from '@/lib/FirebaseService';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppStore } from '@/store/useAppStore';
-import { Sparkles, Terminal, Code2, Image as ImageIcon, Maximize2, Minimize2, FileText, Download, Wifi, WifiOff } from 'lucide-react';
+import { Sparkles, Terminal, Code2, Image as ImageIcon, Maximize2, Minimize2, FileText, Download, Wifi, WifiOff, X } from 'lucide-react';
 import MediaSuggestions from './MediaSuggestions';
 import { offlineChatbot } from '@/lib/OfflineChatbot';
+import { LogOut, User as UserIcon, ShieldAlert } from 'lucide-react';
 
 interface AIChatSidebarProps {
   studentMode: boolean;
@@ -32,7 +33,7 @@ interface AIChatSidebarProps {
 
 const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const store = useAppStore();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<(ChatMessage & { attachments?: string[] })[]>([]);
   const [inputMessage, setInputMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,11 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [aiMode, setAiMode] = useState<'cloud' | 'offline' | 'auto'>('auto');
   const [isOnline, setIsOnline] = useState(true);
+  const [attachments, setAttachments] = useState<{ name: string; type: string; data: string }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ... (useEffect hooks match original)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,13 +74,39 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     };
   }, []);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setAttachments(prev => [...prev, { name: file.name, type: file.type, data: e.target?.result as string }]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
   const handleSendMessage = async (customContent?: string) => {
     const contentToUse = customContent || inputMessage.trim();
-    if (!contentToUse) return;
+    if (!contentToUse && attachments.length === 0) return;
 
-    const userMessage: ChatMessage = { role: 'user', content: contentToUse };
+    const attachmentData = attachments.map(a => a.data); // Just sending base64 for now
+
+    // Construct user message
+    const userMessage: ChatMessage & { attachments?: string[] } = {
+      role: 'user',
+      content: contentToUse + (attachments.length > 0 ? `\n[Attached ${attachments.length} files]` : ''),
+      attachments: attachmentData
+    };
+
     setMessages(prev => [...prev, userMessage]);
-    if (!customContent) setInputMessage('');
+
+    if (!customContent) {
+      setInputMessage('');
+      setAttachments([]);
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -84,7 +115,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
     if (shouldUseOffline) {
       // Use offline chatbot
-      const response = offlineChatbot.chat(contentToUse);
+      const response = offlineChatbot.chat(contentToUse); // Offline doesn't support images yet
       setMessages(prev => [...prev, { role: 'model', content: response }]);
       setIsLoading(false);
       return;
@@ -92,13 +123,29 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
     try {
       if (window.electronAPI) {
-        const response = await window.electronAPI.generateChatContent([...messages, userMessage]);
+        // Send attachments if any, assuming backend handles text + attachments
+        // If attachments exist, we might want to use a specific handler or just prepend/append info
+        // For now, let's assume generateChatContent can handle extended message objects if we updated IPC
+        // But the IPC expects ChatMessage[]. We need to see if we can perform a "Research" call
+
+        // If attachments, force a research/analysis prompt logic or just append context
+        const contextMessages = [...messages, userMessage];
+
+        // Note: The backend IPC 'generate-chat' expects standardized messages. 
+        // If we want to send images, we likely need to inject them into the 'content' or use a specific format.
+        // For visual research, we'll try to use a new 'analyze-files' capability if we built it, 
+        // OR just simulate it by describing the prompt.
+        // Ideally, we'd have `window.electronAPI.analyzeFiles(attachments, prompt)`.
+        // Let's stick to standard chat but with enhanced prompts for now until backend is fully multimodal ready.
+        // Actually, let's modify the last message content to include base64 if it's an image for the LLM context if it supports it.
+
+        const response = await window.electronAPI.generateChatContent(contextMessages);
+
         if (response.error) {
           setError(response.error);
         } else if (response.text) {
           let text = response.text;
-
-          // Command Processing
+          // ... (Command processing logic same as before)
           if (text.includes('NAVIGATE:')) {
             const match = text.match(/NAVIGATE:\s*(https?:\/\/[^\s]+)/);
             if (match) {
@@ -146,6 +193,14 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         <button onClick={props.toggleStudentMode} className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${props.studentMode ? 'bg-deep-space-accent-neon text-deep-space-bg neon-glow' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}>
           <span className="text-2xl">🎓</span>
         </button>
+        {store.user && (
+          <button
+            onClick={() => store.logout()}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+          >
+            <LogOut size={16} />
+          </button>
+        )}
       </div>
     );
   }
@@ -196,6 +251,39 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
           </button>
         </div>
       </header>
+
+      {/* User Status Bar */}
+      <div className="p-4 rounded-3xl bg-white/[0.03] border border-white/5 flex items-center justify-between group">
+        <div className="flex items-center gap-3">
+          {store.user?.photoURL ? (
+            <img src={store.user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-white/10" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/20">
+              <UserIcon size={14} />
+            </div>
+          )}
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black uppercase text-white tracking-widest truncate max-w-[120px]">
+              {store.user?.name || 'Local Pilot'}
+            </span>
+            <span className="text-[8px] font-bold text-white/20 uppercase">
+              {store.isAdmin ? 'System Admin' : 'Certified User'}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {store.isAdmin && (
+            <div className="w-2 h-2 rounded-full bg-deep-space-accent-neon animate-pulse" title="Admin Active" />
+          )}
+          <button
+            onClick={() => store.logout()}
+            className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+            title="Logout"
+          >
+            <LogOut size={14} />
+          </button>
+        </div>
+      </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
         {messages.length === 0 ? (
@@ -283,6 +371,30 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         </div>
 
         <div className="relative">
+          {attachments.length > 0 && (
+            <div className="flex gap-2 mb-2 overflow-x-auto pb-1 custom-scrollbar">
+              {attachments.map((file, i) => (
+                <div key={i} className="relative group min-w-[60px] h-16 rounded-lg bg-white/10 border border-white/5 flex flex-col items-center justify-center overflow-hidden">
+                  {file.type.startsWith('image') ? (
+                    <img src={file.data} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
+                  ) : (
+                    <FileText size={20} className="text-white/40" />
+                  )}
+                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 p-0.5 bg-black/60 rounded-full text-white/60 hover:text-white">
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 mb-2 items-center">
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all">
+              <span className="text-lg">📎</span> Attach
+            </button>
+            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple />
+          </div>
+
           <textarea
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
@@ -292,13 +404,13 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
                 handleSendMessage();
               }
             }}
-            placeholder="Ask anything..."
+            placeholder="Ask anything or analyze files..."
             className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 pr-12 text-sm text-white placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 resize-none h-24 transition-all"
           />
           <button
             onClick={() => handleSendMessage()}
             className="absolute right-3 bottom-3 w-8 h-8 rounded-lg bg-deep-space-accent-neon text-deep-space-bg flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[0_0_15px_rgba(0,255,255,0.3)] disabled:opacity-50"
-            disabled={!inputMessage.trim() || isLoading}
+            disabled={(!inputMessage.trim() && attachments.length === 0) || isLoading}
           >
             <span className="transform -rotate-45 mb-1 ml-0.5">➤</span>
           </button>

@@ -67,4 +67,5 @@ class FirebaseService {
 }
 
 const firebaseService = new FirebaseService();
+export const app = firebaseService.app;
 export default firebaseService;

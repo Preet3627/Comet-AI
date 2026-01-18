@@ -2,6 +2,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // BrowserView related APIs
+  getIsOnline: () => ipcRenderer.invoke('get-is-online'),
+  onAiQueryDetected: (callback) => {
+    const subscription = (event, query) => callback(query);
+    ipcRenderer.on('ai-query-detected', subscription);
+    return () => ipcRenderer.removeListener('ai-query-detected', subscription);
+  },
   navigateTo: (url) => ipcRenderer.send('navigate-browser-view', url),
   goBack: () => ipcRenderer.send('browser-view-go-back'),
   goForward: () => ipcRenderer.send('browser-view-go-forward'),
@@ -9,6 +15,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCurrentUrl: () => ipcRenderer.invoke('get-browser-view-url'),
   extractPageContent: () => ipcRenderer.invoke('extract-page-content'),
   setBrowserViewBounds: (bounds) => ipcRenderer.send('set-browser-view-bounds', bounds),
+  setUserAgent: (userAgent) => ipcRenderer.invoke('set-user-agent', userAgent),
+  setProxy: (config) => ipcRenderer.invoke('set-proxy', config),
+  capturePage: () => ipcRenderer.invoke('capture-page'),
+  sendInputEvent: (input) => ipcRenderer.invoke('send-input-event', input),
   openDevTools: () => ipcRenderer.send('open-dev-tools'),
 
   // LLM & Memory APIs
@@ -32,6 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Extension & File Utils
   getExtensionPath: () => ipcRenderer.invoke('get-extension-path'),
+  getExtensions: () => ipcRenderer.invoke('get-extensions'),
+  toggleExtension: (id) => ipcRenderer.invoke('toggle-extension', id),
+  uninstallExtension: (id) => ipcRenderer.invoke('uninstall-extension', id),
 
   // Window Controls
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
