@@ -1,7 +1,4 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-import Image from "next/image";
+import { searchEngines } from "./SearchEngineSettings";
 import { useAppStore } from "@/store/useAppStore";
 import { motion } from "framer-motion";
 import {
@@ -167,9 +164,10 @@ const LandingPage = () => {
                                 if (e.key === "Enter") {
                                     const q = (e.target as HTMLInputElement).value;
                                     if (q) {
+                                        const selectedSearchEngine = searchEngines[store.selectedEngine as keyof typeof searchEngines] || searchEngines.google;
                                         store.setGuestMode(true);
                                         store.addTab(
-                                            `https://www.google.com/search?q=${encodeURIComponent(q)}`
+                                            `${selectedSearchEngine.url}${encodeURIComponent(q)}`
                                         );
                                         store.setActiveView("browser");
                                     }

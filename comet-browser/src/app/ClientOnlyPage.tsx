@@ -489,8 +489,8 @@ export default function Home() {
 
   return (
     <div className={`flex flex-col h-screen w-full bg-deep-space-bg overflow-hidden relative font-sans text-white transition-all duration-700 ${store.isVibrant ? 'bg-vibrant-mesh' : ''}`}>
-      <TitleBar />
-      <div className="flex flex-1 overflow-hidden relative pt-10" onContextMenu={handleContextMenu}>
+      {(store.user || store.hasSeenWelcomePage) && <TitleBar />}
+      <div className={`flex flex-1 overflow-hidden relative ${(!store.user && !store.hasSeenWelcomePage) ? 'pt-0' : 'pt-10'}`} onContextMenu={handleContextMenu}>
         {/* Navigation Sidebar (Rail) */}
         <AnimatePresence>
           {railVisible && (
