@@ -26,6 +26,8 @@ if (!fs.existsSync(extensionsPath)) {
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const fetch = require('cross-fetch'); // Make sure cross-fetch is always available globally
 
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 const MCP_SERVER_PORT = process.env.MCP_SERVER_PORT || 3001;
 let mcpServerPort = MCP_SERVER_PORT;
 // Custom protocol for authentication
@@ -73,14 +75,37 @@ const llmGenerateHandler = async (messages, options = {}) => {
     if (providerId.startsWith('gemini')) {
       const gKey = apiKey || process.env.GEMINI_API_KEY;
       if (!gKey) return { error: 'Missing Gemini API Key' };
-      const modelId = providerId === 'gemini-3-pro' ? 'gemini-1.5-pro-latest' : 'gemini-1.5-flash-latest';
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${gKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })) })
+
+      const genAI = new GoogleGenerativeAI(gKey);
+      // Map to official model names. Default to 1.5 Pro if "pro" is in ID, otherwise Flash.
+      // If the user asks for "3.5", we'll default to the latest Pro model available via SDK.
+      const modelName = providerId.includes('pro') ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
+
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      // Transform messages for SDK
+      // The SDK expects history to be separate from the new message
+      const history = messages.slice(0, -1).map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }]
+      }));
+
+      const lastMessage = messages[messages.length - 1];
+      const prompt = lastMessage ? lastMessage.content : "";
+
+      if (!prompt) return { error: "Empty prompt" };
+
+      const chat = model.startChat({
+        history: history,
+        generationConfig: {
+          maxOutputTokens: 4096,
+        },
       });
-      const data = await response.json();
-      return { text: data.candidates?.[0]?.content?.parts?.[0]?.text || `No response from ${modelId}.` };
+
+      const result = await chat.sendMessage(prompt);
+      const response = await result.response;
+      return { text: response.text() };
+
     } else if (providerId === 'gpt-4o') {
       const oaiKey = apiKey || process.env.OPENAI_API_KEY;
       if (!oaiKey) return { error: 'Missing OpenAI API Key' };
@@ -219,6 +244,19 @@ function createWindow() {
   } catch (e) {
     console.error("Error during initial extension loading:", e);
   }
+
+  // Clipboard Monitoring
+  let lastClipboardText = clipboard.readText();
+  setInterval(() => {
+    const currentText = clipboard.readText();
+    if (currentText && currentText !== lastClipboardText) {
+      lastClipboardText = currentText;
+      console.log("[Main] Clipboard changed:", currentText.substring(0, 30));
+      if (mainWindow) {
+        mainWindow.webContents.send('clipboard-changed', currentText);
+      }
+    }
+  }, 1000);
 }
 
 // Helper function for recursive directory scanning
@@ -418,6 +456,19 @@ ipcMain.on('open-dev-tools', () => {
   const view = tabViews.get(activeTabId);
   if (view) view.webContents.openDevTools({ mode: 'detach' });
   else if (mainWindow) mainWindow.webContents.openDevTools();
+});
+
+ipcMain.handle('execute-javascript', async (event, code) => {
+  const view = tabViews.get(activeTabId);
+  if (view) {
+    try {
+      return await view.webContents.executeJavaScript(code);
+    } catch (e) {
+      console.error("Execute JS failed:", e);
+      return null;
+    }
+  }
+  return null;
 });
 
 ipcMain.handle('get-browser-view-url', () => {

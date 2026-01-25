@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth, User, signInWithCustomToken as firebaseSignInWithCustomToken, signOut as firebaseSignOut, onAuthStateChanged as firebaseOnAuthStateChanged, GoogleAuthProvider, signInWithPopup, getRedirectResult } from 'firebase/auth';
+import { getAuth, Auth, User, signInWithCustomToken as firebaseSignInWithCustomToken, signOut as firebaseSignOut, onAuthStateChanged as firebaseOnAuthStateChanged, GoogleAuthProvider, signInWithPopup, getRedirectResult, signInWithCredential as firebaseSignInWithCredential, AuthCredential } from 'firebase/auth';
 import { getFirestore, Firestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { firebaseConfigStorage, FirebaseConfig } from './firebaseConfigStorage';
 
@@ -68,6 +68,7 @@ class FirebaseService {
       this.authReadyCallbacks.push(callback);
     }
   }
+
   async signInWithCustomToken(token: string): Promise<User | null> {
     if (!this.auth) return null;
     try {
@@ -75,6 +76,17 @@ class FirebaseService {
       return result.user;
     } catch (error) {
       console.error("Error signing in with custom token:", error);
+      return null;
+    }
+  }
+
+  async signInWithCredential(credential: AuthCredential): Promise<User | null> {
+    if (!this.auth) return null;
+    try {
+      const result = await firebaseSignInWithCredential(this.auth, credential);
+      return result.user;
+    } catch (error) {
+      console.error("Error signing in with credential:", error);
       return null;
     }
   }
@@ -122,8 +134,6 @@ class FirebaseService {
       this.onAuthReady(() => {
         if (this.auth) {
           const unsubscribe = firebaseOnAuthStateChanged(this.auth, callback);
-          // Note: In this specific case, the returned unsubscribe won't work immediately 
-          // but for the initial page load this is usually fine.
         }
       });
       return () => { }; // return empty cleanup for now

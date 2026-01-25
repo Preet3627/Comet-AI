@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendInputEvent: (input) => ipcRenderer.invoke('send-input-event', input),
   openDevTools: () => ipcRenderer.send('open-dev-tools'),
   changeZoom: (deltaY) => ipcRenderer.send('change-zoom', deltaY),
+  executeJavaScript: (code) => ipcRenderer.invoke('execute-javascript', code),
   onAudioStatusChanged: (callback) => {
     const subscription = (event, isPlaying) => callback(isPlaying);
     ipcRenderer.on('audio-status-changed', subscription);

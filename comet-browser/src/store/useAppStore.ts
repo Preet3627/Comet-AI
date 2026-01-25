@@ -328,9 +328,10 @@ export const useAppStore = create<BrowserState>()(
             addToUnifiedCart: (item) => {
                 console.log('Adding to unified cart:', item);
             },
-            addClipboardItem: (item) => set((state) => ({
-                clipboard: [...state.clipboard, item]
-            })),
+            addClipboardItem: (item) => set((state) => {
+                const newClipboard = [item, ...state.clipboard.filter(i => i !== item)].slice(0, 50);
+                return { clipboard: newClipboard };
+            }),
             clearClipboard: () => set({ clipboard: [] }),
 
             // User and auth

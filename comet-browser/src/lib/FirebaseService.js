@@ -135,9 +135,33 @@ var FirebaseService = /** @class */ (function () {
             });
         });
     };
+    FirebaseService.prototype.signInWithCredential = function (credential) {
+        return __awaiter(this, void 0, void 0, function () {
+            var result, error_2;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!this.auth)
+                            return [2 /*return*/, null];
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 3, , 4]);
+                        return [4 /*yield*/, (0, auth_1.signInWithCredential)(this.auth, credential)];
+                    case 2:
+                        result = _a.sent();
+                        return [2 /*return*/, result.user];
+                    case 3:
+                        error_2 = _a.sent();
+                        console.error("Error signing in with credential:", error_2);
+                        return [2 /*return*/, null];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
+    };
     FirebaseService.prototype.signInWithGoogle = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var provider, result, error_2;
+            var provider, result, error_3;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -152,8 +176,8 @@ var FirebaseService = /** @class */ (function () {
                         result = _a.sent();
                         return [2 /*return*/, result.user];
                     case 3:
-                        error_2 = _a.sent();
-                        console.error("Error signing in with Google:", error_2);
+                        error_3 = _a.sent();
+                        console.error("Error signing in with Google:", error_3);
                         return [2 /*return*/, null];
                     case 4: return [2 /*return*/];
                 }
@@ -162,7 +186,7 @@ var FirebaseService = /** @class */ (function () {
     };
     FirebaseService.prototype.handleRedirectResult = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var result, error_3;
+            var result, error_4;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -176,8 +200,8 @@ var FirebaseService = /** @class */ (function () {
                         result = _a.sent();
                         return [2 /*return*/, result ? result.user : null];
                     case 3:
-                        error_3 = _a.sent();
-                        console.error("Error handling redirect result:", error_3);
+                        error_4 = _a.sent();
+                        console.error("Error handling redirect result:", error_4);
                         return [2 /*return*/, null];
                     case 4: return [2 /*return*/];
                 }
@@ -187,7 +211,7 @@ var FirebaseService = /** @class */ (function () {
     // Sign out
     FirebaseService.prototype.signOut = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var error_4;
+            var error_5;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -203,8 +227,8 @@ var FirebaseService = /** @class */ (function () {
                         _a.sent();
                         return [3 /*break*/, 4];
                     case 3:
-                        error_4 = _a.sent();
-                        console.error("Error during sign-out:", error_4);
+                        error_5 = _a.sent();
+                        console.error("Error during sign-out:", error_5);
                         return [3 /*break*/, 4];
                     case 4: return [2 /*return*/];
                 }
@@ -219,8 +243,6 @@ var FirebaseService = /** @class */ (function () {
             this.onAuthReady(function () {
                 if (_this.auth) {
                     var unsubscribe = (0, auth_1.onAuthStateChanged)(_this.auth, callback);
-                    // Note: In this specific case, the returned unsubscribe won't work immediately 
-                    // but for the initial page load this is usually fine.
                 }
             });
             return function () { }; // return empty cleanup for now
@@ -230,7 +252,7 @@ var FirebaseService = /** @class */ (function () {
     // Add a new history entry for a user
     FirebaseService.prototype.addHistoryEntry = function (userId, url, title) {
         return __awaiter(this, void 0, void 0, function () {
-            var historyCollectionRef, error_5;
+            var historyCollectionRef, error_6;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -254,8 +276,8 @@ var FirebaseService = /** @class */ (function () {
                         _a.sent();
                         return [3 /*break*/, 4];
                     case 3:
-                        error_5 = _a.sent();
-                        console.error("Error adding history entry:", error_5);
+                        error_6 = _a.sent();
+                        console.error("Error adding history entry:", error_6);
                         return [3 /*break*/, 4];
                     case 4: return [2 /*return*/];
                 }
@@ -265,7 +287,7 @@ var FirebaseService = /** @class */ (function () {
     // Get a user's history
     FirebaseService.prototype.getHistory = function (userId) {
         return __awaiter(this, void 0, void 0, function () {
-            var historyCollectionRef, q, querySnapshot, error_6;
+            var historyCollectionRef, q, querySnapshot, error_7;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -286,8 +308,8 @@ var FirebaseService = /** @class */ (function () {
                         querySnapshot = _a.sent();
                         return [2 /*return*/, querySnapshot.docs.map(function (doc) { return (__assign({ id: doc.id }, doc.data())); })];
                     case 3:
-                        error_6 = _a.sent();
-                        console.error("Error getting history:", error_6);
+                        error_7 = _a.sent();
+                        console.error("Error getting history:", error_7);
                         return [2 /*return*/, []];
                     case 4: return [2 /*return*/];
                 }

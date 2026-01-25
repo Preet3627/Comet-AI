@@ -19,6 +19,7 @@ import PDFWorkspace from '@/components/PDFWorkspace';
 import CodingDashboard from '@/components/CodingDashboard';
 import ClipboardManager from '@/components/ClipboardManager';
 import PhoneCamera from '@/components/PhoneCamera';
+import { GoogleAuthProvider } from 'firebase/auth';
 import SettingsPanel from '@/components/SettingsPanel';
 import { searchEngines } from '@/components/SearchEngineSettings';
 import UnifiedCartPanel from '@/components/UnifiedCartPanel';
@@ -108,6 +109,34 @@ export default function Home() {
   const [aiPickColor, setAiPickColor] = useState('rgb'); // 'rgb' or a hex string
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState<'idle' | 'in_progress' | 'completed' | 'failed'>('idle');
+  const [showDownloads, setShowDownloads] = useState(false);
+  const [showExtensionsPopup, setShowExtensionsPopup] = useState(false);
+  const [downloads, setDownloads] = useState<Array<{ name: string, status: string }>>([]);
+
+  useEffect(() => {
+    if (window.electronAPI) {
+      const cleanStart = window.electronAPI.on('download-started', (name: string) => {
+        setDownloads(prev => [{ name, status: 'downloading' }, ...prev].slice(0, 10));
+        setIsDownloading(true);
+        setDownloadStatus('in_progress');
+      });
+      const cleanDone = window.electronAPI.on('download-complete', (name: string) => {
+        setDownloads(prev => prev.map(d => d.name === name ? { ...d, status: 'completed' } : d));
+        setIsDownloading(false);
+        setDownloadStatus('completed');
+      });
+      const cleanFail = window.electronAPI.on('download-failed', (name: string) => {
+        setDownloads(prev => prev.map(d => d.name === name ? { ...d, status: 'failed' } : d));
+        setIsDownloading(false);
+        setDownloadStatus('failed');
+      });
+      return () => {
+        cleanStart();
+        cleanDone();
+        cleanFail();
+      };
+    }
+  }, []);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -283,6 +312,22 @@ export default function Home() {
     }
   }, []);
 
+  const addClipboardItem = useAppStore(state => state.addClipboardItem);
+
+  // Clipboard sync
+  useEffect(() => {
+    if (window.electronAPI) {
+      console.log("[Renderer] Setting up clipboard listener");
+      const clean = window.electronAPI.on('clipboard-changed', (text: string) => {
+        if (text) {
+          console.log("[Renderer] Received clipboard update:", text.substring(0, 20));
+          addClipboardItem(text);
+        }
+      });
+      return clean;
+    }
+  }, [addClipboardItem]);
+
   // Debounced Predictor
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -437,6 +482,7 @@ export default function Home() {
 
   const handleCartScan = async () => {
     if (!window.electronAPI) return;
+    setShowCart(true);
     try {
       const result = await window.electronAPI.executeJavaScript(`
         (function() {
@@ -455,12 +501,11 @@ export default function Home() {
               });
             }
           });
-          return items.slice(0, 1); // Just take the most prominent one for now
+          return items.slice(0, 5); // Just take the most prominent ones
         })()
       `);
       if (result && result.length > 0) {
         result.forEach((item: any) => store.addToUnifiedCart(item));
-        setShowCart(true);
       }
     } catch (e) {
       console.error("Cart scan failed:", e);
@@ -503,6 +548,12 @@ export default function Home() {
 
   useEffect(() => {
     if (window.electronAPI) {
+      // If Settings or other full-screen overlays are open, hide the browser view
+      if (showSettings) {
+        window.electronAPI.hideAllViews();
+        return;
+      }
+
       if (store.activeView === 'browser' && store.activeTabId) {
         const bounds = calculateBounds();
         window.electronAPI.activateView({ tabId: store.activeTabId, bounds });
@@ -510,7 +561,7 @@ export default function Home() {
         window.electronAPI.hideAllViews();
       }
     }
-  }, [store.activeTabId, store.activeView, calculateBounds]);
+  }, [store.activeTabId, store.activeView, calculateBounds, showSettings]);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -549,7 +600,7 @@ export default function Home() {
 
   useEffect(() => {
     if (window.electronAPI) {
-      const cleanup = window.electronAPI.onAuthCallback((event: any, url: string) => {
+      const cleanup = window.electronAPI.onAuthCallback(async (event: any, url: string) => {
         console.log("Auth callback received in ClientOnlyPage:", url);
         try {
           const parsed = new URL(url);
@@ -573,7 +624,17 @@ export default function Home() {
               }
             }
 
-            // Set user data immediately for a seamless UI transition
+            if (token) {
+              const credential = GoogleAuthProvider.credential(token);
+              try {
+                await firebaseService.signInWithCredential(credential);
+                console.log("Firebase signed in successfully via deep link");
+              } catch (e: any) {
+                console.error("Firebase sign-in failed:", e);
+              }
+            }
+
+            // Set user data after ensuring firebase auth is established
             store.setUser({
               uid,
               email,
@@ -583,15 +644,11 @@ export default function Home() {
 
             if (email.endsWith("@ponsrischool.in")) store.setAdmin(true);
 
-            if (token) {
-              store.loginWithGoogleToken(token);
-            }
-
             store.setHasSeenWelcomePage(true);
             store.setActiveView('browser');
             store.startActiveSession();
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error("Error processing auth callback:", e);
         }
       });
@@ -601,9 +658,9 @@ export default function Home() {
 
   if ((!store.user && !store.hasSeenWelcomePage) || store.activeView === 'landing-page') {
     return (
-      <div className={`flex flex-col h-screen w-full bg-deep-space overflow-hidden relative font-sans text-primary-text transition-all duration-700`}>
+      <div className={`flex flex-col min-h-screen w-full bg-deep-space relative font-sans text-primary-text transition-all duration-700`}>
         <TitleBar />
-        <div className="flex-1 pt-10 overflow-auto bg-[#020205]">
+        <div className="flex-1 pt-10 bg-[#020205]">
           <LandingPage />
         </div>
       </div>
@@ -776,14 +833,13 @@ export default function Home() {
 
                 <div className="flex items-center gap-1.5 px-2 bg-primary-bg/5 rounded-xl border border-border-color h-9">
                   <button
-                    onClick={() => {
-                      // Optionally, show a downloads manager or recent downloads here
-                    }}
+                    onClick={() => setShowDownloads(!showDownloads)}
                     className={`p-1.5 rounded-lg transition-all 
                                ${isDownloading ? 'text-accent animate-pulse' : ''}
                                ${downloadStatus === 'completed' ? 'text-green-400' : ''}
                                ${downloadStatus === 'failed' ? 'text-red-400' : ''}
                                ${downloadStatus === 'idle' ? 'text-secondary-text hover:text-primary-text' : ''}
+                               ${showDownloads ? 'bg-primary-bg/10 text-accent' : ''}
                                hover:bg-primary-bg/10`}
                     title="Downloads"
                   >
@@ -792,10 +848,10 @@ export default function Home() {
                   <button onClick={() => setShowClipboard(!showClipboard)} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Clipboard Manager">
                     <CopyIcon size={14} />
                   </button>
-                  <button onClick={handleCartScan} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Scan Shopping Cart">
+                  <button onClick={() => setShowCart(!showCart)} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Scan Shopping Cart">
                     <ShoppingCart size={14} />
                   </button>
-                  <button className="p-1.5 text-secondary-text hover:text-primary-text transition-all" title="Extensions">
+                  <button onClick={() => setShowExtensionsPopup(!showExtensionsPopup)} className={`p-1.5 rounded-lg transition-all ${showExtensionsPopup ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Extensions">
                     <Puzzle size={14} />
                   </button>
                 </div>
@@ -813,9 +869,9 @@ export default function Home() {
 
                 <button onClick={() => setShowSettings(true)} className="p-1 rounded-2xl hover:scale-105 transition-all outline-none">
                   {store.user?.photoURL ? (
-                    <img src={store.user.photoURL} alt="Profile" className="w-8 h-8 rounded-xl border border-border-color" />
+                    <img src={store.user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-border-color" />
                   ) : (
-                    <div className="w-8 h-8 rounded-xl bg-primary-bg/5 border border-border-color flex items-center justify-center text-secondary-text">
+                    <div className="w-8 h-8 rounded-full bg-primary-bg/5 border border-border-color flex items-center justify-center text-secondary-text">
                       <UserIcon size={16} />
                     </div>
                   )}
@@ -903,6 +959,58 @@ export default function Home() {
 
               {showCart && (
                 <UnifiedCartPanel onClose={() => setShowCart(false)} onScan={handleCartScan} />
+              )}
+
+              {showDownloads && (
+                <div className="absolute top-20 right-4 z-[90] w-72 h-96 bg-[#020205]/95 backdrop-blur-3xl border border-white/5 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-white/5 flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Recent Downloads</span>
+                    <button onClick={() => setShowDownloads(false)} className="text-white/20 hover:text-white"><X size={14} /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    {downloads.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center opacity-20">
+                        <DownloadCloud size={32} className="mb-2" />
+                        <p className="text-[10px] uppercase font-bold tracking-tighter">No active downloads</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {downloads.map((d, i) => (
+                          <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">
+                            <DownloadIcon size={14} className={d.status === 'downloading' ? 'animate-bounce text-accent' : 'text-white/40'} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] text-white font-bold truncate">{d.name}</p>
+                              <p className={`text-[8px] uppercase font-black ${d.status === 'completed' ? 'text-green-500' : d.status === 'failed' ? 'text-red-500' : 'text-accent'}`}>
+                                {d.status}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {showExtensionsPopup && (
+                <div className="absolute top-20 right-4 z-[90] w-80 h-[30rem] bg-[#020205]/95 backdrop-blur-3xl border border-white/5 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-white/5 flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Quick Extensions</span>
+                    <button onClick={() => setShowExtensionsPopup(false)} className="text-white/20 hover:text-white"><X size={14} /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center opacity-20">
+                    <Puzzle size={32} className="mb-2" />
+                    <p className="text-[10px] uppercase font-bold tracking-tighter text-center">Manage all extensions in <br /> sidebar dashboard</p>
+                  </div>
+                  <div className="p-3 border-t border-white/5 bg-white/5">
+                    <button
+                      onClick={() => { setShowExtensionsPopup(false); setSettingsSection('extensions'); setShowSettings(true); }}
+                      className="w-full py-2 bg-deep-space-accent-neon text-deep-space-bg rounded-lg text-[10px] font-black uppercase tracking-widest"
+                    >
+                      Manage Extensions
+                    </button>
+                  </div>
+                </div>
               )}
 
               {showClipboard && (

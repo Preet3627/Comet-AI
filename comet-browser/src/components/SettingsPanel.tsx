@@ -132,11 +132,11 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
     ];
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-12 bg-black/60 backdrop-blur-3xl">
+        <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 md:p-12 bg-black/60 backdrop-blur-3xl no-drag-region">
             <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="w-full max-w-6xl h-[85vh] bg-[#020205] border border-white/5 rounded-[2.5rem] overflow-hidden flex shadow-[0_30px_100px_rgba(0,0,0,0.8)]"
+                className="w-full max-w-6xl h-[85vh] bg-[#020205] border border-white/5 rounded-[2.5rem] overflow-hidden flex shadow-[0_30px_100px_rgba(0,0,0,0.8)] no-drag-region"
             >
                 {/* Navigation Sidebar */}
                 <div className="w-72 bg-white/[0.01] border-r border-white/5 p-8 flex flex-col gap-2">
