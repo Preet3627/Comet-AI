@@ -9,7 +9,7 @@ export interface LLMProviderOptions {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'model' | 'system';
+  role: string;
   content: string;
 }
 

@@ -99,6 +99,10 @@ interface BrowserState {
     localLLMModel: string;
     setLocalLLMBaseUrl: (url: string) => void;
     setLocalLLMModel: (model: string) => void;
+    mcpServerPort: number;
+    setMcpServerPort: (port: number) => void;
+    additionalAIInstructions: string;
+    setAdditionalAIInstructions: (instructions: string) => void;
 
     // Theme settings
     theme: "system" | "dark" | "light";
@@ -218,6 +222,8 @@ export const useAppStore = create<BrowserState>()(
             ollamaModel: 'deepseek-r1:1.5b',
             localLLMBaseUrl: '',
             localLLMModel: '',
+            mcpServerPort: 3001,
+            additionalAIInstructions: '',
 
             // Theme settings
             theme: 'system',
@@ -332,7 +338,10 @@ export const useAppStore = create<BrowserState>()(
             setAdmin: (isAdmin) => set({ isAdmin }),
             setGoogleToken: (token) => set({ googleToken: token }),
             setGithubToken: (token) => set({ githubToken: token }),
-            loginWithGoogleToken: (token) => {
+            loginWithGoogleToken: (token: string) => {
+                // Assuming the token received from browser.ponsrischool.in is a Google ID token
+                // If browser.ponsrischool.in uses a different auth method, this logic will need to be updated.
+                set({ googleToken: token });
                 const credential = GoogleAuthProvider.credential(token);
                 if (!auth) return;
                 signInWithCredential(auth, credential).catch((error) => {
@@ -355,6 +364,8 @@ export const useAppStore = create<BrowserState>()(
             setOllamaModel: (model) => set({ ollamaModel: model }),
             setLocalLLMBaseUrl: (url) => set({ localLLMBaseUrl: url }),
             setLocalLLMModel: (model) => set({ localLLMModel: model }),
+            setMcpServerPort: (port) => set({ mcpServerPort: port }),
+            setAdditionalAIInstructions: (instructions) => set({ additionalAIInstructions: instructions }),
 
             // Theme settings
             setTheme: (theme) => set({ theme }),

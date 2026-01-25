@@ -3,7 +3,13 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Tesseract from 'tesseract.js';
-import { FileText, Camera, Edit3, Trash2, Download, Search, Move, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
+import { FileText, Camera, Edit3, Trash2, Download, Search, Move, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
+
+// Configure react-pdf worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
 const PDFWorkspace = () => {
     const [file, setFile] = useState<File | null>(null);
@@ -15,6 +21,16 @@ const PDFWorkspace = () => {
     const [rotation, setRotation] = useState(0);
     const [annotations, setAnnotations] = useState<{ id: string; text: string; x: number; y: number }[]>([]);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    // react-pdf specific state
+    const [numPages, setNumPages] = useState<number | null>(null);
+    const [pageNumber, setPageNumber] = useState(1);
+
+    function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+        setNumPages(numPages);
+        setPageNumber(1);
+    }
+
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const f = e.target.files?.[0];
@@ -108,14 +124,19 @@ const PDFWorkspace = () => {
                     <div className="relative w-full h-full flex items-center justify-center overflow-auto custom-scrollbar">
                         <div className="relative bg-white shadow-2xl rounded-sm group min-w-[600px] min-h-[800px]">
                             {file?.type === 'application/pdf' ? (
-                                <iframe
-                                    src={fileUrl}
-                                    className="w-full h-full min-h-[800px]"
-                                    style={{
-                                        transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                                        transition: 'transform 0.3s ease-out'
-                                    }}
-                                />
+                                <div style={{ transform: `scale(${zoom}) rotate(${rotation}deg)`, transition: 'transform 0.3s ease-out' }}>
+                                    <Document
+                                        file={fileUrl}
+                                        onLoadSuccess={onDocumentLoadSuccess}
+                                        className="shadow-2xl"
+                                    >
+                                        <Page
+                                            pageNumber={pageNumber}
+                                            renderTextLayer={true}
+                                            renderAnnotationLayer={true}
+                                        />
+                                    </Document>
+                                </div>
                             ) : (
                                 <img
                                     src={fileUrl!}
@@ -186,6 +207,30 @@ const PDFWorkspace = () => {
                                 </button>
                             </div>
                             <div className="w-[1px] h-8 bg-white/10" />
+                            {file?.type === 'application/pdf' && (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setPageNumber(prevPage => Math.max(1, prevPage - 1))}
+                                            className="p-2 text-white/40 hover:text-white transition-all rounded-lg hover:bg-white/5"
+                                            disabled={pageNumber <= 1}
+                                        >
+                                            <ChevronLeft size={18} />
+                                        </button>
+                                        <span className="text-[10px] font-black w-16 text-center text-white/60">
+                                            Page {pageNumber} of {numPages || '-'}
+                                        </span>
+                                        <button
+                                            onClick={() => setPageNumber(prevPage => Math.min(numPages || 1, prevPage + 1))}
+                                            className="p-2 text-white/40 hover:text-white transition-all rounded-lg hover:bg-white/5"
+                                            disabled={pageNumber >= (numPages || 1)}
+                                        >
+                                            <ChevronRight size={18} />
+                                        </button>
+                                    </div>
+                                    <div className="w-[1px] h-8 bg-white/10" />
+                                </>
+                            )}
                             <button
                                 onClick={() => setRotation(r => (r + 90) % 360)}
                                 className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-all font-bold"
@@ -199,7 +244,14 @@ const PDFWorkspace = () => {
                                 <span className="text-[10px] uppercase tracking-tighter">Annotate</span>
                             </button>
                             <div className="w-[1px] h-8 bg-white/10" />
-                            <button className="flex flex-col items-center gap-1 text-deep-space-accent-neon hover:scale-110 transition-all font-bold neon-glow">
+                            <button
+                                onClick={() => {
+                                    if (window.electronAPI && fileUrl && file) {
+                                        window.electronAPI.triggerDownload(fileUrl, file.name);
+                                    }
+                                }}
+                                className="flex flex-col items-center gap-1 text-deep-space-accent-neon hover:scale-110 transition-all font-bold neon-glow"
+                            >
                                 <Download size={18} />
                                 <span className="text-[10px] uppercase tracking-tighter">Export</span>
                             </button>

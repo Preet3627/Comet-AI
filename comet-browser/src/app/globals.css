@@ -1,23 +1,30 @@
 @import "tailwindcss";
 
-@theme {
-  --color-deep-space-bg: #0D0E1C;
-  --color-deep-space-primary: #4A00B0;
-  --color-deep-space-secondary: #8A2BE2;
-  --color-deep-space-accent-neon: #00FFFF;
-  --color-deep-space-text: #E0E0E0;
-  --color-deep-space-border: rgba(255, 255, 255, 0.1);
+:root {
+  --foreground-rgb: 255, 255, 255; /* primary-text equivalent */
+  --background-start-rgb: 255, 255, 255; /* primary-bg equivalent */
+  --background-end-rgb: 240, 240, 240; /* A lighter background end for light mode */
+
+  --color-primary-bg: #FFFFFF;
+  --color-primary-text: #1F2937;
+  --color-secondary-text: #4B5563;
+  --color-accent: #1D4ED8;
+  --color-accent-light: #3B82F6;
+  --color-border-color: #E5E7EB;
 }
 
-:root {
-  --foreground-rgb: 224, 224, 224;
-  --background-start-rgb: 13, 14, 28;
-  --background-end-rgb: 5, 5, 15;
+.dark {
+  --color-primary-bg: #000000;
+  --color-primary-text: #E0E0E0;
+  --color-secondary-text: #A0A0A0;
+  --color-accent: #00FFFF;
+  --color-accent-light: #00BFFF;
+  --color-border-color: rgba(255, 255, 255, 0.1);
 }
 
 @layer base {
   body {
-    @apply bg-deep-space-bg text-deep-space-text antialiased;
+    @apply bg-[var(--color-primary-bg)] text-[var(--color-primary-text)] antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 }
@@ -41,7 +48,7 @@
   }
 
   .bg-vibrant-mesh {
-    background-color: #050505;
+    background-color: #000000;
     background-image:
       radial-gradient(at 0% 0%, rgba(0, 255, 255, 0.1) 0px, transparent 50%),
       radial-gradient(at 100% 0%, rgba(255, 0, 128, 0.08) 0px, transparent 50%),
@@ -60,6 +67,27 @@
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-white/10 rounded-full hover:bg-white/20 transition-all;
+  }
+}
+
+/* Made in India Gradient Text */
+.made-in-india-gradient-text {
+  background: linear-gradient(90deg, #FF9933 0%, #FFFFFF 50%, #138808 100%); /* Saffron, White, Green */
+  background-size: 300% 100%; /* Make gradient wider than text */
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent; /* Fallback for browsers that don't support text-fill-color */
+  animation: patriotic-gradient 5s linear infinite; /* Animation */
+  display: inline-block; /* Essential for background-clip to work */
+}
+
+@keyframes patriotic-gradient {
+  0% {
+    background-position: 100% 0%; /* Start from right */
+  }
+  100% {
+    background-position: 0% 0%; /* Move to left */
   }
 }
 

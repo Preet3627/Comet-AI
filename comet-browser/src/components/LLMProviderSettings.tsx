@@ -21,6 +21,9 @@ interface LLMProviderSettingsProps {
   setBackend: (backend: 'firebase' | 'mysql') => void;
   mysqlConfig: any;
   setMysqlConfig: (config: any) => void;
+  ollamaModels: { name: string; modified_at: string; }[]; 
+  setOllamaModels: (models: { name: string; modified_at: string; }[]) => void;
+  setError: (error: string | null) => void; // New prop for setting errors
 }
 
 const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
@@ -147,6 +150,42 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                   {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
 
+                <div className="space-y-4">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-white/40 mb-2">MCP Server Settings</p>
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-white/30 uppercase font-bold">MCP Server Port</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 3001"
+                      className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
+                      value={store.mcpServerPort || ''}
+                      onChange={(e) => {
+                        const newPort = parseInt(e.target.value, 10);
+                        if (!isNaN(newPort)) {
+                          store.setMcpServerPort(newPort);
+                          // Send update to main process to restart server if needed, or just update port variable
+                          if (window.electronAPI) {
+                            window.electronAPI.setMcpServerPort(newPort);
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-white/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={12} className="text-deep-space-accent-neon" />
+                    <label className="block text-[10px] uppercase font-black tracking-widest text-white/40">Additional AI Instructions</label>
+                  </div>
+                  <textarea
+                    placeholder="Enter persistent instructions for the AI (e.g., 'Always respond in markdown and act as a pirate')."
+                    className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none h-24 resize-none"
+                    value={store.additionalAIInstructions}
+                    onChange={(e) => store.setAdditionalAIInstructions(e.target.value)}
+                  />
+                </div>
+
                 <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
                   <div className="space-y-4">
                     {activeProviderId === 'ollama' && (
@@ -176,15 +215,23 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                             value={store.ollamaModel}
                             onChange={(e) => store.setOllamaModel(e.target.value)}
                             onFocus={async () => {
-                              if (window.electronAPI) {
-                                // Refresh list on focus
+                              if (window.electronAPI) { // Always try to refresh on focus
+                                const { models, error } = await window.electronAPI.ollamaListModels();
+                                if (models) {
+                                  props.setOllamaModels(models); // Update state in parent
+                                } else if (error) {
+                                  props.setError(`Ollama error: ${error}`);
+                                }
                               }
                             }}
                           >
-                            <option value="deepseek-r1:1.5b">Deepseek R1 (1.5B) - Recommended</option>
-                            <option value="llama3">Llama 3</option>
-                            <option value="mistral">Mistral</option>
-                            <option value="phi3">Phi-3</option>
+                            {props.ollamaModels.length > 0 ? (
+                              props.ollamaModels.map((model) => (
+                                <option key={model.name} value={model.name}>{model.name} ({model.modified_at})</option>
+                              ))
+                            ) : (
+                              <option value="">No Ollama models found</option>
+                            )}
                             <option value="custom">Custom (Type below)</option>
                           </select>
                         </div>

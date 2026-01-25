@@ -2,6 +2,7 @@ import { ChatMessage } from "@/lib/llm/providers/base";
 
 declare global {
     interface Window {
+        pdfjsLib: any;
         electronAPI: {
             // BrowserView related APIs
             getIsOnline: () => Promise<boolean>;
@@ -30,6 +31,12 @@ declare global {
             changeZoom: (deltaY: number) => void;
             onAudioStatusChanged: (callback: (isPlaying: boolean) => void) => () => void;
 
+            // Download APIs
+            onDownloadStarted: (callback: (filename: string) => void) => () => void;
+            triggerDownload: (url: string, filename: string) => void;
+            on: (channel: string, listener: (...args: any[]) => void) => () => void; // Generic 'on' for ipcRenderer events
+            onAddNewTab: (callback: (url: string) => void) => () => void; // Specific add new tab event
+
             // LLM & Memory APIs
             getAvailableLLMProviders: () => Promise<{ id: string; name: string }[]>;
             setActiveLLMProvider: (providerId: string) => Promise<boolean>;
@@ -37,21 +44,17 @@ declare global {
             generateChatContent: (messages: ChatMessage[], options?: any) => Promise<{ text?: string; error?: string }>;
             getAiMemory: () => Promise<any[]>;
             addAiMemory: (entry: any) => void;
+            getSelectedText: () => Promise<string>; // For context menu integration
+            sendToAIChatInput: (text: string) => void; // For sending selected text to AI chat
+            captureBrowserViewScreenshot: () => Promise<string>; // For vision capabilities
 
             // Dev-MCP & Analytics
             sendMcpCommand: (command: string, data: any) => Promise<any>;
             shareDeviceFolder: () => Promise<{ path?: string; success: boolean }>;
+            setMcpServerPort: (port: number) => void; // For updating the MCP server port
 
-            // Utils
-            setUserId: (userId: string | null) => void;
-            getClipboardText: () => Promise<string>;
-            setClipboardText: (text: string) => void;
-
-            // Extensions
-            getExtensionPath: () => Promise<string>;
-            getExtensions: () => Promise<any[]>;
-            toggleExtension: (id: string) => Promise<boolean>;
-            uninstallExtension: (id: string) => Promise<boolean>;
+            // Ollama specific APIs
+            ollamaListModels: () => Promise<{ models: { name: string; modified_at: string }[]; error?: string }>;
 
             // Window Controls
             minimizeWindow: () => void;
@@ -105,6 +108,19 @@ declare global {
             importOllamaModel: (data: { modelName: string; filePath: string }) => Promise<{ success: boolean; error?: string }>;
             selectLocalFile: () => Promise<string | null>;
             executeJavaScript: (code: string) => Promise<any>;
+            setUserId: (userId: string | null) => void;
+            getExtensions: () => Promise<any[]>;
+            toggleExtension: (id: string) => Promise<boolean>;
+            uninstallExtension: (id: string) => Promise<void>;
+            getExtensionPath: () => Promise<string>;
+            connectToRemoteDevice: (remoteDeviceId: string) => Promise<boolean>;
+            sendP2PSignal: (signal: any, remoteDeviceId: string) => void;
+            onP2PConnected: (callback: () => void) => () => void;
+            onP2PDisconnected: (callback: () => void) => () => void;
+            onP2PFirebaseReady: (callback: (userId: string) => void) => () => void;
+            onP2POfferCreated: (callback: (data: { offer: any; remoteDeviceId: string }) => void) => () => void;
+            onP2PAnswerCreated: (callback: (data: { answer: any; remoteDeviceId: string }) => void) => () => void;
+            onP2PIceCandidate: (callback: (data: { candidate: any; remoteDeviceId: string }) => void) => () => void;
         };
     }
 }

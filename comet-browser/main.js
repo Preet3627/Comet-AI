@@ -1,7 +1,13 @@
 const { app, BrowserWindow, ipcMain, session, shell, clipboard, BrowserView, dialog, globalShortcut } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 const isDev = !app.isPackaged;
+const express = require('express');
+const bodyParser = require('body-parser');
+const { getP2PSync } = require('./src/lib/P2PFileSyncService'); // Import the P2P service
+
+let p2pSyncService = null; // Declare p2pSyncService here
 
 let mainWindow;
 let activeTabId = null;
@@ -18,7 +24,12 @@ if (!fs.existsSync(extensionsPath)) {
 }
 
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
-const fetch = require('cross-fetch');
+const fetch = require('cross-fetch'); // Make sure cross-fetch is always available globally
+
+const MCP_SERVER_PORT = process.env.MCP_SERVER_PORT || 3001;
+let mcpServerPort = MCP_SERVER_PORT;
+ // Make sure cross-fetch is always available globally
+
 
 // Custom protocol for authentication
 const PROTOCOL = 'comet-browser';
@@ -47,6 +58,72 @@ function readMemory() {
     try { return JSON.parse(l); } catch (e) { return null; }
   }).filter(Boolean);
 }
+
+// Global LLM Generation Handler
+const llmGenerateHandler = async (messages, options = {}) => {
+  const providerId = options.provider || activeLlmProvider;
+  const config = llmConfigs[providerId] || {};
+  const apiKey = options.apiKey || config.apiKey;
+
+  try {
+    if (providerId.startsWith('gemini')) {
+      const gKey = apiKey || process.env.GEMINI_API_KEY;
+      if (!gKey) return { error: 'Missing Gemini API Key' };
+      const modelId = providerId === 'gemini-3-pro' ? 'gemini-1.5-pro-latest' : 'gemini-1.5-flash-latest';
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${gKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })) })
+      });
+      const data = await response.json();
+      return { text: data.candidates?.[0]?.content?.parts?.[0]?.text || `No response from ${modelId}.` };
+    } else if (providerId === 'gpt-4o') {
+      const oaiKey = apiKey || process.env.OPENAI_API_KEY;
+      if (!oaiKey) return { error: 'Missing OpenAI API Key' };
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${oaiKey}` },
+        body: JSON.stringify({ model: 'gpt-4o', messages: messages.map(m => ({ role: m.role, content: m.content })) })
+      });
+      const data = await response.json();
+      return { text: data.choices?.[0]?.message?.content || 'No response from GPT-4o.' };
+    } else if (providerId === 'claude-3-5-sonnet') {
+      const anthropicKey = apiKey || process.env.ANTHROPIC_API_KEY;
+      if (!anthropicKey) return { error: 'Missing Anthropic API Key' };
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-3-5-sonnet-20240620', max_tokens: 4096, messages: messages.map(m => ({ role: m.role, content: m.content })) })
+      });
+      const data = await response.json();
+      return { text: data.content?.[0]?.text || 'No response from Claude 3.5 Sonnet.' };
+    } else if (providerId === 'mixtral-8x7b-groq') {
+      const groqKey = apiKey || process.env.GROQ_API_KEY;
+      if (!groqKey) return { error: 'Missing Groq API Key' };
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+        body: JSON.stringify({ model: 'mixtral-8x7b-32768', messages: messages.map(m => ({ role: m.role, content: m.content })) })
+      });
+      const data = await response.json();
+      return { text: data.choices?.[0]?.message?.content || 'No response from Groq.' };
+    } else if (providerId === 'ollama') {
+      const baseUrl = config.baseUrl || 'http://localhost:11434';
+      const model = config.model || 'llama3';
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages: messages.map(m => ({ role: m.role, content: m.content })), stream: false })
+      });
+      const data = await response.json();
+      return { text: data.message?.content || `No response from Ollama model ${model}.` };
+    } else {
+      return { error: `Provider '${providerId}' is not configured.` };
+    }
+  } catch (e) {
+    return { error: e.message };
+  }
+};
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -124,7 +201,9 @@ function createWindow() {
     extensionDirs.forEach(dir => {
       const extPath = path.join(extensionsPath, dir);
       if (fs.lstatSync(extPath).isDirectory()) {
-        session.defaultSession.loadExtension(extPath).catch(e => console.error(e));
+        session.defaultSession.loadExtension(extPath).then(extension => {
+          console.log(`Extension loaded: ${extension.name} (${extension.id}) from ${extPath}`);
+        }).catch(e => console.error(`Failed to load extension from ${extPath}: ${e.message || e}`));
       }
     });
   } catch (e) { }
@@ -132,6 +211,11 @@ function createWindow() {
 
 // IPC Handlers
 ipcMain.handle('get-is-online', () => isOnline);
+ipcMain.on('add-tab-from-main', (event, url) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('add-new-tab', url);
+  }
+});
 
 // Window Controls
 ipcMain.on('minimize-window', () => { if (mainWindow) mainWindow.minimize(); });
@@ -155,6 +239,14 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
   newView.webContents.setUserAgent(chromeUserAgent);
   newView.webContents.loadURL(url);
 
+  // Intercept new window requests and open them as new tabs
+  newView.webContents.setWindowOpenHandler(({ url }) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('add-new-tab', url);
+    }
+    return { action: 'deny' };
+  });
+
   newView.webContents.on('did-navigate', (event, navUrl) => {
     mainWindow.webContents.send('browser-view-url-changed', { tabId, url: navUrl });
     if (navUrl.includes('/search?') || navUrl.includes('?q=')) {
@@ -176,6 +268,19 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
     else audibleTabs.delete(tabId);
     if (mainWindow) {
       mainWindow.webContents.send('audio-status-changed', audibleTabs.size > 0);
+    }
+  });
+
+  // Handle fullscreen requests from the BrowserView
+  newView.webContents.on('enter-html-fullscreen-window', () => {
+    if (mainWindow) {
+      mainWindow.setFullScreen(true);
+    }
+  });
+
+  newView.webContents.on('leave-html-fullscreen-window', () => {
+    if (mainWindow) {
+      mainWindow.setFullScreen(false);
     }
   });
 
@@ -283,6 +388,18 @@ ipcMain.handle('capture-page-html', async () => {
   return await view.webContents.executeJavaScript('document.documentElement.outerHTML');
 });
 
+ipcMain.handle('capture-browser-view-screenshot', async () => {
+  const view = tabViews.get(activeTabId);
+  if (!view) return null;
+  try {
+    const image = await view.webContents.capturePage();
+    return image.toDataURL(); // Returns a Data URL (base64 encoded PNG)
+  } catch (e) {
+    console.error("Failed to capture page screenshot:", e);
+    return null;
+  }
+});
+
 ipcMain.handle('save-offline-page', async (event, { url, title, html }) => {
   console.log(`[Offline] Saved ${title}`);
   return true;
@@ -292,6 +409,14 @@ ipcMain.handle('share-device-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
   if (!result.canceled) return { path: result.filePaths[0], success: true };
   return { success: false };
+});
+
+ipcMain.handle('trigger-download', async (event, url, suggestedFilename) => {
+    if (mainWindow && url) {
+        mainWindow.webContents.downloadURL(url, { filename: suggestedFilename });
+        return { success: true };
+    }
+    return { success: false, error: 'Download failed: invalid URL or mainWindow not available.' };
 });
 
 ipcMain.handle('get-ai-memory', async () => readMemory());
@@ -319,6 +444,12 @@ ipcMain.handle('llm-configure-provider', (event, providerId, options) => {
   return true;
 });
 
+// IPC handler to set MCP server port dynamically
+ipcMain.on('set-mcp-server-port', (event, port) => {
+    mcpServerPort = port;
+    console.log(`MCP Server port updated to: ${mcpServerPort}`);
+});
+
 ipcMain.handle('extract-page-content', async () => {
   const view = tabViews.get(activeTabId);
   if (!view) return { error: 'No active view' };
@@ -330,72 +461,45 @@ ipcMain.handle('extract-page-content', async () => {
   }
 });
 
-ipcMain.handle('llm-generate-chat-content', async (event, messages, options = {}) => {
-  const providerId = options.provider || activeLlmProvider;
-  const config = llmConfigs[providerId] || {};
-  const apiKey = options.apiKey || config.apiKey;
-
+ipcMain.handle('get-selected-text', async () => {
+  const view = tabViews.get(activeTabId);
+  if (!view) return '';
   try {
-    if (providerId.startsWith('gemini')) {
-      const gKey = apiKey || process.env.GEMINI_API_KEY;
-      if (!gKey) return { error: 'Missing Gemini API Key' };
-      const modelId = providerId === 'gemini-3-pro' ? 'gemini-1.5-pro-latest' : 'gemini-1.5-flash-latest';
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${gKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })) })
-      });
-      const data = await response.json();
-      return { text: data.candidates?.[0]?.content?.parts?.[0]?.text || `No response from ${modelId}.` };
-    } else if (providerId === 'gpt-4o') {
-      const oaiKey = apiKey || process.env.OPENAI_API_KEY;
-      if (!oaiKey) return { error: 'Missing OpenAI API Key' };
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${oaiKey}` },
-        body: JSON.stringify({ model: 'gpt-4o', messages: messages.map(m => ({ role: m.role, content: m.content })) })
-      });
-      const data = await response.json();
-      return { text: data.choices?.[0]?.message?.content || 'No response from GPT-4o.' };
-    } else if (providerId === 'claude-3-5-sonnet') {
-      const anthropicKey = apiKey || process.env.ANTHROPIC_API_KEY;
-      if (!anthropicKey) return { error: 'Missing Anthropic API Key' };
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-3-5-sonnet-20240620', max_tokens: 4096, messages: messages.map(m => ({ role: m.role, content: m.content })) })
-      });
-      const data = await response.json();
-      return { text: data.content?.[0]?.text || 'No response from Claude 3.5 Sonnet.' };
-    } else if (providerId === 'mixtral-8x7b-groq') {
-      const groqKey = apiKey || process.env.GROQ_API_KEY;
-      if (!groqKey) return { error: 'Missing Groq API Key' };
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-        body: JSON.stringify({ model: 'mixtral-8x7b-32768', messages: messages.map(m => ({ role: m.role, content: m.content })) })
-      });
-      const data = await response.json();
-      return { text: data.choices?.[0]?.message?.content || 'No response from Groq.' };
-    } else if (providerId === 'ollama') {
-      const baseUrl = config.baseUrl || 'http://localhost:11434';
-      const model = config.model || 'llama3';
-      const response = await fetch(`${baseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: messages.map(m => ({ role: m.role, content: m.content })), stream: false })
-      });
-      const data = await response.json();
-      return { text: data.message?.content || `No response from Ollama model ${model}.` };
-    } else {
-      return { error: `Provider '${providerId}' is not configured.` };
-    }
+    const selectedText = await view.webContents.executeJavaScript(`window.getSelection().toString();`);
+    return selectedText;
   } catch (e) {
-    return { error: e.message };
+    console.error("Failed to get selected text from BrowserView:", e);
+    return '';
   }
 });
 
-// Import GGUF Model Handler
+ipcMain.on('send-to-ai-chat-input', (event, text) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('ai-chat-input-text', text);
+  }
+});
+
+ipcMain.handle('llm-generate-chat-content', async (event, messages, options = {}) => {
+    try {
+        const response = await fetch(`http://localhost:${mcpServerPort}/llm/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages, options })
+        });
+        const data = await response.json();
+        return data;
+    } catch (e) {
+        console.error("Error communicating with MCP Server:", e);
+        return { error: e.message };
+    }
+});
+
+// Ollama Integration:
+// For ollama to work, the Ollama application must be installed on the user's system
+// and its executable (`ollama`) must be available in the system's PATH.
+// This allows `child_process.spawn('ollama', ...)` to find and execute the Ollama CLI.
+// Users should install the latest stable version of Ollama for their respective OS (Windows, macOS, Linux).
+// For Windows, it's expected that the official installer is used which adds ollama to PATH.
 ipcMain.handle('ollama-import-model', async (event, { modelName, filePath }) => {
   try {
     if (!fs.existsSync(filePath)) return { success: false, error: 'File not found' };
@@ -439,7 +543,42 @@ ipcMain.handle('select-local-file', async () => {
   return null;
 });
 
-// ... (rest of the file is the same)
+ipcMain.handle('ollama-list-models', async () => {
+  return new Promise((resolve) => {
+    exec('ollama list', (error, stdout, stderr) => {
+      if (error) {
+        console.error(`exec error: ${error}`);
+        resolve({ error: `Failed to list Ollama models. Is Ollama installed and in your system's PATH? Error: ${error.message}` });
+        return;
+      }
+      if (stderr) {
+        console.error(`stderr: ${stderr}`);
+        resolve({ error: `Ollama command error: ${stderr}` });
+        return;
+      }
+
+      const lines = stdout.trim().split('\n');
+      if (lines.length <= 1) { // Only header or no models
+        resolve({ models: [] });
+        return;
+      }
+
+      const models = lines.slice(1).map(line => {
+        const parts = line.split(/\s+/);
+        // Assuming format: NAME    ID      SIZE    DIGEST  UPDATED
+        return {
+          name: parts[0],
+          id: parts[1],
+          size: parts[2],
+          digest: parts[3],
+          updated: parts[4] + ' ' + parts[5] // Combine date and time
+        };
+      });
+      resolve({ models });
+    });
+  });
+});
+
 // Deep Linking and Singleton Instance Lock
 const handleDeepLink = (url) => {
   if (!mainWindow) return;
@@ -494,7 +633,97 @@ if (!gotTheLock) {
 
 
 app.whenReady().then(() => {
+  // MCP Server Setup
+  const mcpApp = express();
+  mcpApp.use(bodyParser.json());
+
+  mcpApp.post('/llm/generate', async (req, res) => {
+    const { messages, options } = req.body;
+    const result = await llmGenerateHandler(messages, options);
+    res.json(result);
+  });
+
+  mcpApp.listen(MCP_SERVER_PORT, () => {
+    console.log(`MCP Server running on port ${MCP_SERVER_PORT}`);
+  });
+
+  p2pSyncService = getP2PSync('main-process-device'); 
+
+  // Forward P2P service events to the renderer
+  p2pSyncService.on('connected', () => {
+    if (mainWindow) mainWindow.webContents.send('p2p-connected');
+  });
+  p2pSyncService.on('disconnected', () => {
+    if (mainWindow) mainWindow.webContents.send('p2p-disconnected');
+  });
+  p2pSyncService.on('firebase-ready', (userId) => {
+    if (mainWindow) mainWindow.webContents.send('p2p-firebase-ready', userId);
+  });
+  p2pSyncService.on('offer-created', ({ offer, remoteDeviceId }) => {
+    if (mainWindow) mainWindow.webContents.send('p2p-offer-created', { offer, remoteDeviceId });
+  });
+  p2pSyncService.on('answer-created', ({ answer, remoteDeviceId }) => {
+    if (mainWindow) mainWindow.webContents.send('p2p-answer-created', { answer, remoteDeviceId });
+  });
+  p2pSyncService.on('ice-candidate', ({ candidate, remoteDeviceId }) => {
+    if (mainWindow) mainWindow.webContents.send('p2p-ice-candidate', { candidate, remoteDeviceId });
+  });
+
   createWindow();
+
+
+  // Handle file downloads
+  session.defaultSession.on('will-download', (event, item, webContents) => {
+    event.preventDefault();
+
+    const fileName = item.getFilename();
+    const filePath = item.getSavePath(); // Get the suggested path
+
+    dialog.showSaveDialog(mainWindow, {
+      defaultPath: path.join(filePath, fileName),
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    }).then(result => {
+      if (!result.canceled && result.filePath) {
+        if (mainWindow) {
+            mainWindow.webContents.send('download-started', item.getFilename());
+        }
+        item.setSavePath(result.filePath);
+        item.on('updated', (event, state) => {
+          if (state === 'interrupted') {
+            console.log('Download is interrupted but can be resumed');
+            // Optionally, send a message to the renderer about interruption
+          } else if (state === 'progressing') {
+            if (item.isPaused()) {
+              console.log('Download is paused');
+              // Optionally, send a message to the renderer about pause
+            } else {
+              console.log(`Received bytes: ${item.getReceivedBytes()}`);
+              // Optionally, send progress updates to the renderer
+            }
+          }
+        });
+        item.on('done', (event, state) => {
+          if (state === 'completed') {
+            console.log('Download successfully');
+            if (mainWindow) {
+                mainWindow.webContents.send('download-complete', item.getFilename());
+            }
+          } else {
+            console.log(`Download failed: ${state}`);
+            if (mainWindow) {
+                mainWindow.webContents.send('download-failed', item.getFilename());
+            }
+          }
+        });
+        item.resume(); // Ensure download starts
+      } else {
+        item.cancel(); // User canceled the save dialog
+      }
+    }).catch(error => {
+      console.error("Error showing save dialog:", error);
+      item.cancel();
+    });
+  });
 
   // Register Global Shortcuts
   const shortcuts = [
@@ -529,6 +758,60 @@ ipcMain.on('hide-all-views', () => {
       mainWindow.removeBrowserView(view);
     }
   }
+});
+
+ipcMain.on('set-user-id', (event, userId) => {
+  // TODO: Implement what to do with the user ID
+  console.log('User ID set:', userId);
+});
+
+ipcMain.handle('get-extensions', async () => {
+  // TODO: Implement actual extension fetching
+  return [];
+});
+
+ipcMain.handle('toggle-extension', async (event, id) => {
+  // TODO: Implement actual extension toggling
+  console.log(`Toggling extension ${id}`);
+  return true;
+});
+
+ipcMain.handle('uninstall-extension', async (event, id) => {
+  // TODO: Implement actual extension uninstallation
+  console.log(`Uninstalling extension ${id}`);
+});
+
+ipcMain.handle('get-extension-path', async () => {
+  // TODO: Implement actual extension path retrieval
+  return extensionsPath;
+});
+
+ipcMain.handle('connect-to-remote-device', async (event, remoteDeviceId) => {
+  if (!p2pSyncService) {
+    console.error('[Main] P2P Sync Service not initialized.');
+    return false;
+  }
+  return await p2pSyncService.connectToRemoteDevice(remoteDeviceId);
+});
+
+ipcMain.on('send-p2p-signal', (event, { signal, remoteDeviceId }) => {
+  if (!p2pSyncService) {
+    console.error('[Main] P2P Sync Service not initialized.');
+    return;
+  }
+  p2pSyncService.sendSignal(signal, remoteDeviceId);
+});
+
+ipcMain.handle('scan-folder', async (event, folderPath, types) => {
+  // TODO: Implement actual folder scanning using Node.js fs module
+  console.log(`[Main] Scanning folder: ${folderPath} for types: ${types.join(', ')}`);
+  return [];
+});
+
+ipcMain.handle('read-file-buffer', async (event, filePath) => {
+  // TODO: Implement actual file reading using Node.js fs module
+  console.log(`[Main] Reading file buffer: ${filePath}`);
+  return new ArrayBuffer(0);
 });
 
 app.on('will-quit', () => {

@@ -204,17 +204,41 @@ export class BrowserAI {
 
         const cleanInput = input.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
 
-        // 1. History match (Prefix logic)
-        const historyMatch = history.find(url => {
+        // Create a map to track frequency and most recent appearance for each unique URL
+        const historyScores = new Map<string, { lastIndex: number, count: number }>();
+        history.forEach((url, index) => {
             const cleanUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
-            return cleanUrl.startsWith(cleanInput) && cleanUrl !== cleanInput;
+            if (historyScores.has(cleanUrl)) {
+                const entry = historyScores.get(cleanUrl)!;
+                entry.count++;
+                entry.lastIndex = index;
+            } else {
+                historyScores.set(cleanUrl, { lastIndex: index, count: 1 });
+            }
         });
-        if (historyMatch) return historyMatch;
 
-        // 2. High-probability TLD completion
+        // 1. Prioritized History match (Prefix logic with recency and frequency boost)
+        let bestMatch: { url: string, score: number } | null = null;
+        for (const url of history) {
+            const cleanUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
+            if (cleanUrl.startsWith(cleanInput) && cleanUrl !== cleanInput) {
+                const entry = historyScores.get(cleanUrl);
+                let score = 0;
+                if (entry) {
+                    score = entry.count * 100 - entry.lastIndex; // Boost by frequency, penalize by age
+                }
+                if (!bestMatch || score > bestMatch.score) {
+                    bestMatch = { url, score };
+                }
+            }
+        }
+        if (bestMatch) return bestMatch.url;
+
+        // 2. Smart TLD completion
         if (!input.includes('.') && input.length > 2) {
-            const tlds = ['.com', '.org', '.io', '.dev', '.app', '.net'];
-            return `${input}${tlds[0]}`;
+            const commonTlds = ['.com', '.org', '.net', '.io', '.dev', '.app', '.xyz', '.co', '.us', '.ai'];
+            // Prioritize TLDs based on global commonality or even learned user preference (future)
+            return `${input}${commonTlds[0]}`;
         }
 
         return null;

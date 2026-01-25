@@ -1,3 +1,4 @@
+/// <reference path="../types/electron.d.ts" />
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -39,16 +40,16 @@ import { TabSwitcherOverlay } from '@/components/TabSwitcherOverlay';
 const SidebarIcon = ({ icon, label, active, onClick, collapsed }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, collapsed: boolean }) => (
   <button
     onClick={onClick}
-    className={`group relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ${active ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+    className={`group relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ${active ? 'bg-accent text-primary-bg shadow-[0_0_20px_rgba(var(--color-accent),0.2)]' : 'text-secondary-text hover:bg-primary-bg/10 hover:text-primary-text'}`}
   >
     {icon}
     {collapsed && (
-      <div className="absolute left-full ml-4 px-3 py-1.5 bg-black/90 border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest text-white opacity-0 group-hover:opacity-100 transition-all pointer-events-none whitespace-nowrap z-[100] shadow-2xl">
+      <div className="absolute left-full ml-4 px-3 py-1.5 bg-primary-bg border border-border-color rounded-lg text-[10px] font-black uppercase tracking-widest text-primary-text opacity-0 group-hover:opacity-100 transition-all pointer-events-none whitespace-nowrap z-[100] shadow-2xl">
         {label}
       </div>
     )}
     {!collapsed && (
-      <span className="absolute left-full ml-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+      <span className="absolute left-full ml-4 text-[10px] font-bold uppercase tracking-[0.2em] text-secondary-text opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
         {label}
       </span>
     )}
@@ -77,7 +78,7 @@ const MusicVisualizer = ({ color = 'rgb', isPlaying = false }: { color?: string,
             backgroundColor: { duration: 3, repeat: Infinity, ease: "linear" }
           }}
           className="w-[2px] bg-white/40 rounded-full"
-          style={{ boxShadow: color === 'rgb' ? '0 0 8px rgba(255, 255, 255, 0.2)' : `0 0 8px ${color}80` }}
+          style={{ boxShadow: color === 'rgb' ? '0 0 8px rgba(var(--color-primary-text), 0.2)' : `0 0 8px ${color}80` }}
         />
       ))}
     </div>
@@ -102,6 +103,8 @@ export default function Home() {
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [aiPickColor, setAiPickColor] = useState('rgb'); // 'rgb' or a hex string
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState<'idle' | 'in_progress' | 'completed' | 'failed'>('idle');
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -311,6 +314,37 @@ export default function Home() {
     }
   }, []);
 
+  // Download Status Listener
+  useEffect(() => {
+    if (window.electronAPI) {
+      const cleanupStarted = window.electronAPI.onDownloadStarted((filename: string) => {
+        console.log(`Download started: ${filename}`);
+        setDownloadStatus('in_progress');
+        setIsDownloading(true);
+      });
+
+      const cleanupComplete = window.electronAPI.on('download-complete', (filename: string) => {
+        console.log(`Download completed: ${filename}`);
+        setDownloadStatus('completed');
+        setIsDownloading(false);
+        setTimeout(() => setDownloadStatus('idle'), 3000); // Reset status after 3 seconds
+      });
+
+      const cleanupFailed = window.electronAPI.on('download-failed', (filename: string) => {
+        console.error(`Download failed: ${filename}`);
+        setDownloadStatus('failed');
+        setIsDownloading(false);
+        setTimeout(() => setDownloadStatus('idle'), 3000); // Reset status after 3 seconds
+      });
+
+      return () => {
+        cleanupStarted();
+        cleanupComplete();
+        cleanupFailed();
+      };
+    }
+  }, []);
+
   // Handle Global Shortcuts from Main Process
   useEffect(() => {
     if (window.electronAPI) {
@@ -333,16 +367,16 @@ export default function Home() {
     let url = store.currentUrl.trim();
     if (!url) return;
 
-    const isGoogleAuthUrl = (testUrl: string) => {
+    const isAuthUrl = (testUrl: string) => {
       try {
         const hostname = new URL(testUrl).hostname;
-        return hostname.includes('accounts.google.com') || hostname.includes('accounts.youtube.com');
+        return hostname.includes('accounts.google.com') || hostname.includes('accounts.youtube.com') || hostname.includes('browser.ponsrischool.in');
       } catch {
         return false;
       }
     };
 
-    if (isGoogleAuthUrl(url) && window.electronAPI) {
+    if (isAuthUrl(url) && window.electronAPI) {
       window.electronAPI.openAuthWindow(url);
       return;
     }
@@ -489,6 +523,15 @@ export default function Home() {
 
   useEffect(() => {
     if (window.electronAPI) {
+      const cleanup = window.electronAPI.onAddNewTab((url: string) => {
+        store.addTab(url);
+      });
+      return cleanup;
+    }
+  }, [store]);
+
+  useEffect(() => {
+    if (window.electronAPI) {
       const cleanup = window.electronAPI.onAuthTokenReceived((token: string) => {
         console.log("Auth token received from deep link:", token);
         store.loginWithGoogleToken(token);
@@ -502,7 +545,7 @@ export default function Home() {
   }
 
   return (
-    <div className={`flex flex-col h-screen w-full bg-deep-space-bg overflow-hidden relative font-sans text-white transition-all duration-700 ${store.isVibrant ? 'bg-vibrant-mesh' : ''}`}>
+    <div className={`flex flex-col h-screen w-full bg-primary-bg overflow-hidden relative font-sans text-primary-text transition-all duration-700 ${store.isVibrant ? 'bg-vibrant-mesh' : ''}`}>
       {(store.user || store.hasSeenWelcomePage) && <TitleBar />}
       <div className={`flex flex-1 overflow-hidden relative ${(!store.user && !store.hasSeenWelcomePage) ? 'pt-0' : 'pt-10'}`} onContextMenu={handleContextMenu}>
         {/* Navigation Sidebar (Rail) */}
@@ -512,7 +555,7 @@ export default function Home() {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 70, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              className="flex flex-col items-center py-6 gap-6 z-30 border-r border-white/5 bg-black/20 backdrop-blur-xl"
+              className="flex flex-col items-center py-6 gap-6 z-30 border-r border-border-color bg-primary-bg/20 backdrop-blur-xl"
             >
               <SidebarIcon
                 icon={<Globe size={20} />}
@@ -573,7 +616,7 @@ export default function Home() {
               animate={{ width: store.isSidebarCollapsed ? 70 : store.sidebarWidth, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.5, ease: 'easeInOut' }}
-              className={`h-full border-r border-white/5 cursor-grab active:cursor-grabbing ${store.sidebarSide === 'left' ? 'order-first' : 'order-last'}`}
+              className={`h-full border-r border-border-color cursor-grab active:cursor-grabbing ${store.sidebarSide === 'left' ? 'order-first' : 'order-last'}`}
             >
               <AIChatSidebar
                 studentMode={store.studentMode}
@@ -597,23 +640,31 @@ export default function Home() {
         </AnimatePresence>
         <main className="flex-1 flex flex-col relative overflow-hidden bg-black/5">
           {store.activeView === 'browser' && (
-            <header className="h-[56px] flex items-center px-4 gap-4 border-b border-white/5 bg-black/20 backdrop-blur-3xl z-40">
+            <header className="h-[56px] flex items-center px-4 gap-4 border-b border-border-color bg-primary-bg/20 backdrop-blur-3xl z-40">
               <div className="flex items-center gap-1">
-                <button onClick={() => setRailVisible(!railVisible)} className={`p-2 rounded-xl transition-all ${railVisible ? 'text-white/40' : 'bg-white text-black'}`} title="Toggle Tools Rail">
+                <button onClick={() => setRailVisible(!railVisible)} className={`p-2 rounded-xl transition-all ${railVisible ? 'text-secondary-text' : 'bg-accent text-primary-bg'}`} title="Toggle Tools Rail">
                   <Layout size={18} />
                 </button>
-                <button onClick={() => store.toggleSidebar()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="AI Analyst">
+                <button onClick={async () => {
+                  if (window.electronAPI) {
+                    const selectedText = await window.electronAPI.getSelectedText();
+                    if (selectedText) {
+                      window.electronAPI.sendToAIChatInput(selectedText);
+                    }
+                  }
+                  store.toggleSidebar();
+                }} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="AI Analyst">
                   <Sparkles size={18} />
                 </button>
-                <div className="w-[1px] h-4 bg-white/10 mx-1" />
-                <button onClick={() => window.electronAPI?.goBack()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Go Back"><ChevronLeft size={18} /></button>
-                <button onClick={() => window.electronAPI?.goForward()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Go Forward"><ChevronRight size={18} /></button>
-                <button onClick={() => window.electronAPI?.reload()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Reload Page"><RotateCw size={18} /></button>
+                <div className="w-[1px] h-4 bg-border-color mx-1" />
+                <button onClick={() => window.electronAPI?.goBack()} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Go Back"><ChevronLeft size={18} /></button>
+                <button onClick={() => window.electronAPI?.goForward()} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Go Forward"><ChevronRight size={18} /></button>
+                <button onClick={() => window.electronAPI?.reload()} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Reload Page"><RotateCw size={18} /></button>
               </div>
               <div className="flex-1 max-w-4xl relative group flex items-center gap-3">
                 <div className="flex-1 relative">
                   <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                    <Search size={14} className="text-white/20 group-focus-within:text-white/60 transition-colors" />
+                    <Search size={14} className="text-secondary-text group-focus-within:text-primary-text transition-colors" />
                   </div>
                   <input
                     type="text"
@@ -623,50 +674,64 @@ export default function Home() {
                     onBlur={() => setIsTyping(false)}
                     onKeyDown={(e) => e.key === 'Enter' && handleGo()}
                     placeholder="Search with Comet or enter URL..."
-                    className="w-full bg-white/5 border border-white/5 rounded-2xl py-2 pl-11 pr-4 text-xs text-white/80 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-white/10 focus:bg-white/10 transition-all font-medium"
+                    className="w-full bg-primary-bg/5 border border-border-color rounded-2xl py-2 pl-11 pr-4 text-xs text-primary-text placeholder:text-secondary-text focus:outline-none focus:ring-1 focus:ring-accent/50 focus:bg-primary-bg/10 transition-all font-medium"
                   />
                   <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden pointer-events-none rounded-t-2xl">
-                    <motion.div animate={{ x: ['-100%', '100%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="w-1/2 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                    <motion.div animate={{ x: ['-100%', '100%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="w-1/2 h-full bg-gradient-to-r from-transparent via-primary-text/10 to-transparent" />
                   </div>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     <MusicVisualizer color={aiPickColor} isPlaying={isAudioPlaying} />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 px-2 bg-white/5 rounded-xl border border-white/5 h-9">
-                  <button onClick={() => setShowClipboard(!showClipboard)} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-deep-space-accent-neon bg-white/10' : 'text-white/30 hover:text-white'}`} title="Clipboard Manager">
+                <div className="flex items-center gap-1.5 px-2 bg-primary-bg/5 rounded-xl border border-border-color h-9">
+                  <button
+                    onClick={() => {
+                      // Optionally, show a downloads manager or recent downloads here
+                    }}
+                    className={`p-1.5 rounded-lg transition-all 
+                               ${isDownloading ? 'text-accent animate-pulse' : ''}
+                               ${downloadStatus === 'completed' ? 'text-green-400' : ''}
+                               ${downloadStatus === 'failed' ? 'text-red-400' : ''}
+                               ${downloadStatus === 'idle' ? 'text-secondary-text hover:text-primary-text' : ''}
+                               hover:bg-primary-bg/10`}
+                    title="Downloads"
+                  >
+                    <DownloadCloud size={14} />
+                  </button>
+                  <button onClick={() => setShowClipboard(!showClipboard)} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Clipboard Manager">
                     <CopyIcon size={14} />
                   </button>
-                  <button onClick={handleCartScan} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-deep-space-accent-neon bg-white/10' : 'text-white/30 hover:text-white'}`} title="Scan Shopping Cart">
+                  <button onClick={handleCartScan} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Scan Shopping Cart">
                     <ShoppingCart size={14} />
                   </button>
-                  <button className="p-1.5 text-white/30 hover:text-white transition-all" title="Extensions">
+                  <button className="p-1.5 text-secondary-text hover:text-primary-text transition-all" title="Extensions">
                     <Puzzle size={14} />
                   </button>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <button onClick={toggleFullscreen} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Toggle Fullscreen">
+                <button onClick={toggleFullscreen} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Toggle Fullscreen">
                   {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                 </button>
-                <button onClick={handleOfflineSave} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Download Page">
+                <button onClick={handleOfflineSave} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Download Page">
                   <DownloadIcon size={18} />
                 </button>
 
-                <div className="w-[1px] h-6 bg-white/10 mx-1" />
+                <div className="w-[1px] h-6 bg-border-color mx-1" />
 
                 <button onClick={() => setShowSettings(true)} className="p-1 rounded-2xl hover:scale-105 transition-all outline-none">
                   {store.user?.photoURL ? (
-                    <img src={store.user.photoURL} alt="Profile" className="w-8 h-8 rounded-xl border border-white/10" />
+                    <img src={store.user.photoURL} alt="Profile" className="w-8 h-8 rounded-xl border border-border-color" />
                   ) : (
-                    <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40">
+                    <div className="w-8 h-8 rounded-xl bg-primary-bg/5 border border-border-color flex items-center justify-center text-secondary-text">
                       <UserIcon size={16} />
                     </div>
                   )}
                 </button>
 
-                <button onClick={(e) => handleContextMenu(e as any)} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="More">
+                <button onClick={(e) => handleContextMenu(e as any)} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="More">
                   <MoreVertical size={18} />
                 </button>
               </div>
@@ -676,7 +741,7 @@ export default function Home() {
           <div className="flex-1 relative">
             <AnimatePresence mode="wait">
               {store.activeView === 'workspace' && (
-                <motion.div key="workspace" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="absolute inset-0 z-10 bg-deep-space-bg">
+                <motion.div key="workspace" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="absolute inset-0 z-10 bg-primary-bg">
                   <WorkspaceDashboard />
                 </motion.div>
               )}
@@ -684,17 +749,17 @@ export default function Home() {
               {store.activeView === 'browser' && (
                 <motion.div key="browser" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">
                   <div className={`h-full flex ${store.studentMode ? 'p-4 gap-4' : ''}`}>
-                    <div className={`flex-[3] relative ${store.studentMode ? 'rounded-2xl overflow-hidden border border-white/10 shadow-3xl' : ''}`}>
+                    <div className={`flex-[3] relative ${store.studentMode ? 'rounded-2xl overflow-hidden border border-border-color shadow-3xl' : ''}`}>
                       {/* This area is now intentionally blank. The BrowserView is managed by the main process. */}
                     </div>
                     {store.studentMode && (
-                      <div className="flex-1 glass-vibrant shadow-3xl rounded-3xl p-6 flex flex-col border border-white/5 bg-white/[0.02]">
+                      <div className="flex-1 glass-vibrant shadow-3xl rounded-3xl p-6 flex flex-col border border-border-color bg-primary-bg/5">
                         <div className="flex items-center gap-3 mb-6">
-                          <Sparkles size={20} className="text-deep-space-accent-neon" />
-                          <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-white/70">Context Intelligence</h3>
+                          <Sparkles size={20} className="text-accent" />
+                          <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-secondary-text">Context Intelligence</h3>
                         </div>
                         <textarea
-                          className="flex-1 bg-transparent text-white/80 text-sm leading-relaxed resize-none focus:outline-none placeholder:text-white/5 custom-scrollbar font-medium"
+                          className="flex-1 bg-transparent text-primary-text text-sm leading-relaxed resize-none focus:outline-none placeholder:text-secondary-text custom-scrollbar font-medium"
                           placeholder="Insights reflect current tab content..."
                         />
                       </div>
@@ -703,25 +768,25 @@ export default function Home() {
                 </motion.div>
               )}
               {store.activeView === 'webstore' && (
-                <motion.div key="webstore" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-deep-space-bg">
+                <motion.div key="webstore" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
                   <WebStore onClose={() => store.setActiveView('browser')} />
                 </motion.div>
               )}
 
               {store.activeView === 'pdf' && (
-                <motion.div key="pdf" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-deep-space-bg">
+                <motion.div key="pdf" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
                   <PDFWorkspace />
                 </motion.div>
               )}
 
               {store.activeView === 'coding' && (
-                <motion.div key="coding" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-deep-space-bg">
+                <motion.div key="coding" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
                   <CodingDashboard />
                 </motion.div>
               )}
 
               {store.activeView === 'media' && (
-                <motion.div key="media" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-deep-space-bg">
+                <motion.div key="media" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
                   <MediaStudio />
                 </motion.div>
               )}
@@ -760,23 +825,23 @@ export default function Home() {
             {/* Neural Context Overlay */}
             <AnimatePresence>
               {aiOverview && (
-                <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="absolute bottom-6 right-6 w-[450px] max-h-[600px] bg-[#0A0B14]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] z-[60] flex flex-col overflow-hidden">
-                  <div className="p-4 border-b border-white/5 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-deep-space-accent-neon"><Sparkles size={16} /><span className="text-xs font-black uppercase tracking-widest">Neural Analysis</span></div>
-                    <button onClick={() => setAiOverview(null)} className="text-white/40 hover:text-white" title="Close Neural Analysis"><X size={14} /></button>
+                <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="absolute bottom-6 right-6 w-[450px] max-h-[600px] bg-primary-bg/95 backdrop-blur-2xl border border-border-color rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] z-[60] flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-border-color flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-accent"><Sparkles size={16} /><span className="text-xs font-black uppercase tracking-widest">Neural Analysis</span></div>
+                    <button onClick={() => setAiOverview(null)} className="text-secondary-text hover:text-primary-text" title="Close Neural Analysis"><X size={14} /></button>
                   </div>
                   <div className="flex-1 p-5 overflow-y-auto custom-scrollbar">
-                    <h3 className="text-sm font-bold text-white mb-2">{aiOverview.query}</h3>
+                    <h3 className="text-sm font-bold text-primary-text mb-2">{aiOverview.query}</h3>
                     {aiOverview.isLoading ? (
-                      <div className="flex items-center gap-2 text-white/50 text-xs animate-pulse"><RotateCw size={12} className="animate-spin" />Synthesizing intelligence...</div>
+                      <div className="flex items-center gap-2 text-secondary-text text-xs animate-pulse"><RotateCw size={12} className="animate-spin" />Synthesizing intelligence...</div>
                     ) : (
-                      <div className="text-xs text-white/70 leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: aiOverview.result || '' }} />
+                      <div className="text-xs text-secondary-text leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: aiOverview.result || '' }} />
                     )}
                     {aiOverview.sources && (
-                      <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
-                        <p className="text-[10px] text-white/30 uppercase font-black">Sources</p>
+                      <div className="mt-4 pt-4 border-t border-border-color space-y-2">
+                        <p className="text-[10px] text-secondary-text uppercase font-black">Sources</p>
                         {aiOverview.sources.map((s, i) => (
-                          <div key={i} className="text-[10px] text-white/40 truncate pl-2 border-l border-deep-space-accent-neon/30">{s.text.substring(0, 80)}...</div>
+                          <div key={i} className="text-[10px] text-secondary-text truncate pl-2 border-l border-accent/30">{s.text.substring(0, 80)}...</div>
                         ))}
                       </div>
                     )}
@@ -797,31 +862,49 @@ export default function Home() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed z-[1001] w-48 bg-[#0A0B14]/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5"
+              className="fixed z-[1001] w-48 bg-primary-bg/95 backdrop-blur-2xl border border-border-color rounded-xl shadow-2xl overflow-hidden py-1.5"
               style={{ left: showContextMenu.x, top: showContextMenu.y }}
             >
-              <button onClick={() => { window.electronAPI?.reload(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-deep-space-accent-neon/10 text-white/70 hover:text-deep-space-accent-neon transition-all">
+              <button onClick={() => { window.electronAPI?.reload(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
                 <RefreshCcw size={14} />
                 <span className="text-xs font-bold uppercase tracking-widest">Reload</span>
               </button>
-              <button onClick={() => { window.electronAPI?.goBack(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-deep-space-accent-neon/10 text-white/70 hover:text-deep-space-accent-neon transition-all">
+              <button onClick={() => { window.electronAPI?.goBack(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
                 <ChevronLeft size={14} />
                 <span className="text-xs font-bold uppercase tracking-widest">Back</span>
               </button>
-              <button onClick={() => { window.electronAPI?.goForward(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-deep-space-accent-neon/10 text-white/70 hover:text-deep-space-accent-neon transition-all">
+              <button onClick={() => { window.electronAPI?.goForward(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
                 <ChevronRight size={14} />
                 <span className="text-xs font-bold uppercase tracking-widest">Forward</span>
               </button>
-              <div className="h-[1px] bg-white/5 my-1" />
-              <button onClick={() => { handleOfflineSave(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-deep-space-accent-neon/10 text-white/70 hover:text-deep-space-accent-neon transition-all">
+              <div className="h-[1px] bg-border-color my-1" />
+              <button onClick={() => { handleOfflineSave(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
                 <DownloadIcon size={14} />
                 <span className="text-xs font-bold uppercase tracking-widest">Save Page</span>
               </button>
-              <button onClick={() => { toggleFullscreen(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-deep-space-accent-neon/10 text-white/70 hover:text-deep-space-accent-neon transition-all">
+              <button onClick={() => { toggleFullscreen(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
                 <Maximize2 size={14} />
                 <span className="text-xs font-bold uppercase tracking-widest">Fullscreen</span>
               </button>
-              <button onClick={() => { setShowSettings(true); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-deep-space-accent-neon/10 text-white/70 hover:text-deep-space-accent-neon transition-all">
+              <button onClick={() => { window.electronAPI?.openDevTools(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
+                <Code2 size={14} />
+                <span className="text-xs font-bold uppercase tracking-widest">Inspect</span>
+              </button>
+              <button onClick={async () => {
+                setShowContextMenu(null);
+                if (window.electronAPI) {
+                  const selectedText = await window.electronAPI.getSelectedText();
+                  if (selectedText) {
+                    triggerAIAnalysis(selectedText);
+                  } else {
+                    triggerAIAnalysis(store.currentUrl);
+                  }
+                }
+              }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
+                <Sparkles size={14} />
+                <span className="text-xs font-bold uppercase tracking-widest">Search with AI</span>
+              </button>
+              <button onClick={() => { setShowSettings(true); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
                 <GhostSettings size={14} />
                 <span className="text-xs font-bold uppercase tracking-widest">Settings</span>
               </button>

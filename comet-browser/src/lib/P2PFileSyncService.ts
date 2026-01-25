@@ -5,6 +5,8 @@
  */
 
 import { EventEmitter } from 'events';
+import firebaseService from './FirebaseService';
+import { getDatabase, ref, set, onValue, off, Database, DataSnapshot } from 'firebase/database';
 
 export interface SyncFolder {
     id: string;
@@ -32,10 +34,75 @@ export class P2PFileSyncService extends EventEmitter {
     private syncFolders: Map<string, SyncFolder> = new Map();
     private deviceId: string;
     private isConnected: boolean = false;
+    private db: Database | null = null;
+    private userId: string | null = null;
+    private remoteDeviceId: string | null = null; // Track the device we are trying to connect to
 
     constructor(deviceId: string) {
         super();
         this.deviceId = deviceId;
+        this.initializeFirebase();
+    }
+
+    private initializeFirebase() {
+        firebaseService.onAuthReady(() => {
+            if (firebaseService.app && firebaseService.auth?.currentUser) {
+                this.db = getDatabase(firebaseService.app);
+                this.userId = firebaseService.auth.currentUser.uid;
+                console.log('[P2P] Firebase initialized for user:', this.userId);
+                this.emit('firebase-ready', this.userId);
+            } else {
+                console.warn('[P2P] Firebase not ready or no user logged in.');
+            }
+        });
+    }
+
+    // Call this from the renderer process when a connection is desired
+    public async connectToRemoteDevice(remoteDeviceId: string): Promise<boolean> {
+        this.remoteDeviceId = remoteDeviceId;
+        if (!this.userId) {
+            console.error('[P2P] User not authenticated for Firebase signaling.');
+            return false;
+        }
+
+        // Setup signaling listeners
+        const signalRef = ref(this.db!, `p2p_signals/${this.userId}/${this.remoteDeviceId}`);
+        onValue(signalRef, (snapshot) => this._handleFirebaseSignal(snapshot));
+
+        return this.initializeP2PConnection(remoteDeviceId);
+    }
+
+    // Method to send signaling data via Firebase
+    public async sendSignal(signal: any, remoteDeviceId: string) {
+        if (!this.db || !this.userId || !remoteDeviceId) {
+            console.error('[P2P] Cannot send signal: Firebase not ready, no user, or no remote device.');
+            return;
+        }
+        const signalPath = `p2p_signals/${this.userId}/${remoteDeviceId}`;
+        // Push the signal to Firebase. Use a timestamp or unique ID to order messages.
+        await set(ref(this.db, signalPath), { signal, sender: this.deviceId, timestamp: Date.now() });
+        console.log(`[P2P] Sent signal to ${remoteDeviceId} via Firebase:`, signal);
+    }
+
+    // Handle incoming signaling data from Firebase
+    private _handleFirebaseSignal(snapshot: DataSnapshot) {
+        const data = snapshot.val();
+        if (data && data.sender !== this.deviceId) { // Ignore signals sent by self
+            console.log('[P2P] Received signal from Firebase:', data.signal);
+            const signal = data.signal;
+
+            if (this.peerConnection) {
+                if (signal.sdp) {
+                    this.peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp))
+                        .catch(e => console.error('[P2P] Error setting remote description:', e));
+                } else if (signal.candidate) {
+                    this.peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate))
+                        .catch(e => console.error('[P2P] Error adding ICE candidate:', e));
+                }
+            }
+            // Clear the signal after processing to avoid re-processing
+            set(snapshot.ref, null);
+        }
     }
 
     /**
@@ -51,25 +118,27 @@ export class P2PFileSyncService extends EventEmitter {
                 ]
             });
 
-            // Create data channel for file transfer
-            this.dataChannel = this.peerConnection.createDataChannel('fileSync', {
-                ordered: true,
-                maxRetransmits: 3
-            });
+            this.peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.sendSignal({ candidate: event.candidate }, remoteDeviceId);
+                }
+            };
 
-            this.setupDataChannel();
+            this.peerConnection.onnegotiationneeded = async () => {
+                try {
+                    const offer = await this.peerConnection!.createOffer();
+                    await this.peerConnection!.setLocalDescription(offer);
+                    this.sendSignal({ sdp: this.peerConnection!.localDescription }, remoteDeviceId);
+                } catch (err) {
+                    console.error('[P2P] Error creating or sending offer:', err);
+                }
+            };
 
-            // Create offer
-            const offer = await this.peerConnection.createOffer();
-            await this.peerConnection.setLocalDescription(offer);
+            this.peerConnection.ondatachannel = (event) => {
+                this.dataChannel = event.channel;
+                this.setupDataChannel();
+            };
 
-            this.emit('offer-created', { offer, remoteDeviceId });
-            return true;
-        } catch (error) {
-            console.error('[P2P] Connection failed:', error);
-            return false;
-        }
-    }
 
     private setupDataChannel() {
         if (!this.dataChannel) return;

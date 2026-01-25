@@ -1,4 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const pdfjs = require('pdfjs-dist'); // Import pdfjs-dist
+
+// Configure react-pdf worker, if needed, though direct import might handle this
+// pdfjs.GlobalWorkerOptions.workerSrc = require('react-pdf/dist/esm/pdf.worker.entry');
+
+contextBridge.exposeInMainWorld('pdfjsLib', pdfjs); // Expose pdfjs-dist globally
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // BrowserView related APIs
@@ -28,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reload: () => ipcRenderer.send('browser-view-reload'),
   getCurrentUrl: () => ipcRenderer.invoke('get-browser-view-url'),
   extractPageContent: () => ipcRenderer.invoke('extract-page-content'),
+  getSelectedText: () => ipcRenderer.invoke('get-selected-text'),
   setBrowserViewBounds: (bounds) => ipcRenderer.send('set-browser-view-bounds', bounds),
   setUserAgent: (userAgent) => ipcRenderer.invoke('set-user-agent', userAgent),
   setProxy: (config) => ipcRenderer.invoke('set-proxy', config),
@@ -39,6 +46,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (event, isPlaying) => callback(isPlaying);
     ipcRenderer.on('audio-status-changed', subscription);
     return () => ipcRenderer.removeListener('audio-status-changed', subscription);
+  },
+
+  // Download Started Listener
+  onDownloadStarted: (callback) => {
+    const subscription = (event, filename) => callback(filename);
+    ipcRenderer.on('download-started', subscription);
+    return () => ipcRenderer.removeListener('download-started', subscription);
   },
 
   // LLM & Memory APIs
@@ -125,4 +139,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   importOllamaModel: (data) => ipcRenderer.invoke('ollama-import-model', data),
   selectLocalFile: () => ipcRenderer.invoke('select-local-file'),
+  triggerDownload: (url, filename) => ipcRenderer.invoke('trigger-download', url, filename),
+  setMcpServerPort: (port) => ipcRenderer.send('set-mcp-server-port', port),
+  sendToAIChatInput: (text) => ipcRenderer.send('send-to-ai-chat-input', text),
+  ollamaListModels: () => ipcRenderer.invoke('ollama-list-models'),
+  connectToRemoteDevice: (remoteDeviceId) => ipcRenderer.invoke('connect-to-remote-device', remoteDeviceId),
+  sendP2PSignal: (signal, remoteDeviceId) => ipcRenderer.send('send-p2p-signal', { signal, remoteDeviceId }),
+
+  onP2PConnected: (callback) => {
+    const subscription = () => callback();
+    ipcRenderer.on('p2p-connected', subscription);
+    return () => ipcRenderer.removeListener('p2p-connected', subscription);
+  },
+  onP2PDisconnected: (callback) => {
+    const subscription = () => callback();
+    ipcRenderer.on('p2p-disconnected', subscription);
+    return () => ipcRenderer.removeListener('p2p-disconnected', subscription);
+  },
+  onP2PFirebaseReady: (callback) => {
+    const subscription = (event, userId) => callback(userId);
+    ipcRenderer.on('p2p-firebase-ready', subscription);
+    return () => ipcRenderer.removeListener('p2p-firebase-ready', subscription);
+  },
+  onP2POfferCreated: (callback) => {
+    const subscription = (event, { offer, remoteDeviceId }) => callback({ offer, remoteDeviceId });
+    ipcRenderer.on('p2p-offer-created', subscription);
+    return () => ipcRenderer.removeListener('p2p-offer-created', subscription);
+  },
+  onP2PAnswerCreated: (callback) => {
+    const subscription = (event, { answer, remoteDeviceId }) => callback({ answer, remoteDeviceId });
+    ipcRenderer.on('p2p-answer-created', subscription);
+    return () => ipcRenderer.removeListener('p2p-answer-created', subscription);
+  },
+  onP2PIceCandidate: (callback) => {
+    const subscription = (event, { candidate, remoteDeviceId }) => callback({ candidate, remoteDeviceId });
+    ipcRenderer.on('p2p-ice-candidate', subscription);
+    return () => ipcRenderer.removeListener('p2p-ice-candidate', subscription);
+  },
 });

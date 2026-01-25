@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 const config = {
-  darkMode: 'class',
+  darkMode: 'class', // This remains 'class'
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,12 +9,12 @@ const config = {
   theme: {
     extend: {
       colors: {
-        'deep-space-bg': '#0D0E1C',
-        'deep-space-primary': '#4A00B0', // A deep purple
-        'deep-space-secondary': '#8A2BE2', // A slightly lighter purple
-        'deep-space-accent-neon': '#00FFFF', // Neon cyan for accents
-        'deep-space-text': '#E0E0E0',
-        'deep-space-border': 'rgba(255, 255, 255, 0.1)', // Subtle white for borders
+        'primary-bg': 'var(--color-primary-bg)',
+        'primary-text': 'var(--color-primary-text)',
+        'secondary-text': 'var(--color-secondary-text)',
+        'accent': 'var(--color-accent)',
+        'accent-light': 'var(--color-accent-light)',
+        'border-color': 'var(--color-border-color)',
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",

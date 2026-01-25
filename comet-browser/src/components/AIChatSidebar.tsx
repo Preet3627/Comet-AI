@@ -13,6 +13,13 @@ import MediaSuggestions from './MediaSuggestions';
 import { offlineChatbot } from '@/lib/OfflineChatbot';
 import { Security } from '@/lib/Security';
 import { BrowserAI } from '@/lib/BrowserAI';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import dracula from 'react-syntax-highlighter/dist/cjs/styles/prism/dracula'; // A dark theme for code blocks
+import Tesseract from 'tesseract.js'; // Import Tesseract.js
 
 const SYSTEM_INSTRUCTIONS = `
 You are the Comet AI Agent, the core intelligence of the Comet Browser.
@@ -26,6 +33,7 @@ ACTION COMMANDS:
 - [RELOAD] : Reloads the active tab.
 - [GO_BACK] : Navigates back.
 - [GO_FORWARD] : Navigates forward.
+- [SCREENSHOT_AND_ANALYZE] : Takes a screenshot of the current browser view, performs OCR, and analyzes the content.
 
 CONTEXT:
 - You have access to local RAG knowledge and current page content.
@@ -67,11 +75,32 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [showRagPanel, setShowRagPanel] = useState(false);
   const [showSettings, setShowSettings] = useState(false); // Local toggle for settings
   const [groqSpeed, setGroqSpeed] = useState<string | null>(null);
+  const tesseractWorkerRef = useRef<Tesseract.Worker | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false); // State for drag-over visual feedback
+  const [ollamaModels, setOllamaModels] = useState<{ name: string; modified_at: string; }[]>([]);
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    // Initialize Tesseract worker
+    const initializeTesseract = async () => {
+      tesseractWorkerRef.current = await Tesseract.createWorker('eng');
+      console.log("Tesseract worker initialized.");
+    };
+
+    initializeTesseract();
+
+    return () => {
+      // Terminate Tesseract worker on component unmount
+      tesseractWorkerRef.current?.terminate();
+      console.log("Tesseract worker terminated.");
+    };
+  }, []);
+
+  // AI Chat Input Listener
   useEffect(() => {
     const unsubscribe = firebaseService.onAuthStateChanged((user) => {
       setUser(user);
@@ -80,6 +109,18 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
       }
     });
     return () => unsubscribe();
+  }, []);
+
+  // AI Chat Input Listener
+  useEffect(() => {
+    if (window.electronAPI) {
+      const cleanup = window.electronAPI.on('ai-chat-input-text', (text: string) => {
+        setInputMessage(text);
+        // Optionally, focus the input field
+        // inputRef.current?.focus();
+      });
+      return cleanup;
+    }
   }, []);
 
   useEffect(() => {
@@ -100,11 +141,27 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         await window.electronAPI.setActiveLLMProvider(store.aiProvider);
         let config: LLMProviderOptions = {};
 
+        // Ollama Integration Note:
+        // For ollama to work, the Ollama application must be installed on the user's system
+        // and its executable (`ollama`) must be available in the system's PATH.
+        // This allows the main process to find and execute the Ollama CLI.
+        // Users should install the latest stable version of Ollama for their respective OS (Windows, macOS, Linux).
+        // For Windows, it's expected that the official installer is used which adds ollama to PATH.
         if (store.aiProvider === 'local-tfjs') {
           // TF.js is self-initializing in the renderer, but we prime the main process
           config = { type: 'local-tfjs' };
         } else if (store.aiProvider === 'ollama') {
           config = { baseUrl: store.ollamaBaseUrl, model: store.ollamaModel };
+          // Fetch Ollama models
+          if (window.electronAPI) {
+            const { models, error } = await window.electronAPI.ollamaListModels();
+            if (models) {
+              setOllamaModels(models);
+            } else if (error) {
+              console.error("Failed to list Ollama models:", error);
+              setError(`Ollama error: ${error}`);
+            }
+          }
         } else if (store.aiProvider === 'openai-compatible') {
           config = { apiKey: store.openaiApiKey, baseUrl: store.localLLMBaseUrl, model: store.localLLMModel };
         } else if (store.aiProvider === 'gemini') {
@@ -122,6 +179,22 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     initAI();
   }, [store.aiProvider, store.ollamaBaseUrl, store.ollamaModel, store.openaiApiKey, store.localLLMBaseUrl, store.localLLMModel, store.geminiApiKey, store.anthropicApiKey, store.groqApiKey]);
 
+  // Function to extract text from PDF file (using react-pdf's worker)
+  const extractPdfText = async (file: File): Promise<string> => {
+    return new Promise(async (resolve, reject) => {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n';
+      }
+      resolve(fullText);
+    });
+  };
+
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
@@ -132,6 +205,41 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         };
         reader.readAsDataURL(file);
       });
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      for (const file of Array.from(e.dataTransfer.files)) {
+        if (file.type.startsWith('image/')) {
+          try {
+            if (tesseractWorkerRef.current) {
+              const { data: { text: ocrText } } = await tesseractWorkerRef.current.recognize(file);
+              handleSendMessage(`Analyze image: ${ocrText}`);
+            } else {
+              setError("Tesseract worker not initialized for image analysis.");
+            }
+          } catch (err) {
+            console.error("OCR failed for dropped image:", err);
+            setError("Failed to analyze dropped image.");
+          }
+        } else if (file.type === 'application/pdf') {
+          try {
+            const pdfText = await extractPdfText(file);
+            handleSendMessage(`Analyze PDF: ${pdfText}`);
+          } catch (err) {
+            console.error("PDF text extraction failed for dropped PDF:", err);
+            setError("Failed to extract text from dropped PDF.");
+          }
+        } else {
+          setError("Unsupported file type dropped.");
+        }
+      }
+      e.dataTransfer.clearData();
     }
   };
 
@@ -188,6 +296,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         // Inject System Instructions and Context
         const messageHistory: ChatMessage[] = [
           { role: 'system', content: SYSTEM_INSTRUCTIONS },
+          ...(store.additionalAIInstructions ? [{ role: 'system', content: store.additionalAIInstructions }] : []), // Add additional instructions
           ...messages.map(m => ({ role: m.role, content: m.content })),
           {
             role: 'user',
@@ -269,6 +378,26 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
             text = text.replace(/\[GO_FORWARD\]/i, '▶️ **Going forward...**');
           }
 
+          if (text.includes('[SCREENSHOT_AND_ANALYZE]')) {
+            if (window.electronAPI && tesseractWorkerRef.current) {
+              text = text.replace(/\[SCREENSHOT_AND_ANALYZE\]/i, '📸 **Taking screenshot and analyzing...**');
+              setMessages(prev => [...prev, { role: 'model', content: text }]); // Display immediate feedback
+
+              const screenshotDataUrl = await window.electronAPI.captureBrowserViewScreenshot();
+              if (screenshotDataUrl) {
+                const { data: { text: ocrText } } = await tesseractWorkerRef.current.recognize(screenshotDataUrl);
+                const screenshotContext = `\n\n[SCREENSHOT_ANALYSIS]: ${ocrText}`;
+                // Re-send the user's original message with screenshot context for AI to analyze
+                await handleSendMessage(userMessage.content + screenshotContext);
+                return; // Prevent further processing of the current AI response
+              } else {
+                text = '⚠️ **Failed to capture screenshot.**';
+              }
+            } else {
+              text = '⚠️ **Screenshot analysis not available.**';
+            }
+          }
+
           setMessages(prev => [...prev, { role: 'model', content: text }]);
         }
       } else {
@@ -303,40 +432,46 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     );
   }
 
-  return (
-    <div className={`flex flex-col h-full gap-4 p-4 bg-black/30 backdrop-blur-xl border-r border-white/10 transition-all duration-500 z-50 ${isFullScreen ? 'fixed inset-0 z-[999] bg-[#070812]/90 shadow-2xl overflow-hidden' : ''}`}>
-      <style>{`
-        .modern-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .modern-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .modern-scrollbar::-webkit-scrollbar-thumb {
-          background-color: rgba(255, 255, 255, 0.1);
-          border-radius: 6px;
-          border: 3px solid transparent;
-        }
-        .modern-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(255, 255, 255, 0.2);
-        }
-      `}</style>
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src="/icon.ico" alt="Comet" className="w-8 h-8 object-contain" />
-          <h2 className="text-sm font-black uppercase tracking-widest text-white">Comet AI</h2>
-          {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2 text-white/40 hover:text-white transition-colors">
-            {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-          <button onClick={props.toggleCollapse} className="p-2 text-white/40 hover:text-white transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-      </header>
-
+      return (
+      <div
+        className={`flex flex-col h-full gap-4 p-4 bg-primary-bg/30 backdrop-blur-xl border-r border-border-color transition-all duration-500 z-50 ${isFullScreen ? 'fixed inset-0 z-[999] bg-primary-bg/90 shadow-2xl overflow-hidden' : ''}
+          ${isDragOver ? 'border-accent bg-accent/10' : ''}
+        `}
+        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={handleDrop}
+      >
+        <style>{`
+          .modern-scrollbar::-webkit-scrollbar {
+            width: 6px;
+          }
+          .modern-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .modern-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(var(--color-primary-text), 0.1);
+            border-radius: 6px;
+            border: 3px solid transparent;
+          }
+          .modern-scrollbar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(var(--color-primary-text), 0.2);
+          }
+        `}</style>
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/icon.ico" alt="Comet" className="w-8 h-8 object-contain" />
+            <h2 className="text-sm font-black uppercase tracking-widest text-primary-text">Comet AI</h2>
+            {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
+              {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button onClick={props.toggleCollapse} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        </header>
       <div className="flex-1 overflow-y-auto modern-scrollbar space-y-4 relative pr-2">
         {/* Antigravity RAG Panel */}
         <AnimatePresence>
@@ -371,7 +506,32 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         {messages.map((msg, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
             <div className={`max-w-[85%] p-4 rounded-3xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-deep-space-accent-neon/20 text-white border border-white/5 shadow-[0_0_15px_rgba(0,255,255,0.1)]' : 'bg-white/[0.03] text-white/80 border border-white/5'}`}>
-              {msg.role === 'user' ? msg.content : <div dangerouslySetInnerHTML={{ __html: msg.content }} />}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  code({ node, className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    return node && !node.properties.inline && match ? (
+                      <SyntaxHighlighter
+                        style={dracula as any}
+                        language={match[1]}
+                        PreTag="div"
+                      >
+                        {String(children).replace(/\n$/, '')}
+                      </SyntaxHighlighter>
+                    ) : (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                  // Add custom rendering for math if needed, e.g., using <MathJax> or <KaTeX> components
+                  // This example uses rehype-katex to process math within markdown directly
+                }}
+              >
+                {msg.content}
+              </ReactMarkdown>
             </div>
             {msg.role === 'model' && i === messages.length - 1 && groqSpeed && (
               <div className="mt-1 ml-2 flex items-center gap-1 text-[9px] font-bold text-deep-space-accent-neon opacity-60">
@@ -407,7 +567,12 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
             Launch ➤
           </button>
         </div>
-        <LLMProviderSettings {...props} />
+        <LLMProviderSettings
+          {...props}
+          ollamaModels={ollamaModels}
+          setOllamaModels={setOllamaModels}
+          setError={setError}
+        />
       </footer>
     </div>
   );

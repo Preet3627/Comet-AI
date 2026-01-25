@@ -9,10 +9,11 @@ const ThinkingIndicator = () => {
         {[0, 1, 2].map((i) => (
           <motion.div
             key={i}
-            className="w-1.5 h-1.5 bg-deep-space-accent-neon rounded-full"
+            className="w-2 h-2 bg-deep-space-accent-neon rounded-full"
             animate={{
               scale: [1, 1.5, 1],
-              opacity: [0.3, 1, 0.3],
+              opacity: [0.5, 1, 0.5],
+              boxShadow: ["0 0 0px #00FFFF", "0 0 8px #00FFFF", "0 0 0px #00FFFF"], // Glowing effect
             }}
             transition={{
               duration: 1,
@@ -23,7 +24,7 @@ const ThinkingIndicator = () => {
           />
         ))}
       </div>
-      <span className="text-[10px] font-bold uppercase tracking-widest text-deep-space-accent-neon/60">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-deep-space-accent-neon/80 filter drop-shadow-[0_0_4px_#00FFFF]">
         Assistant is thinking
       </span>
     </div>
