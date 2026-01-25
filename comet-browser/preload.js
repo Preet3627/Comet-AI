@@ -1,14 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const pdfjs = require('pdfjs-dist'); // Import pdfjs-dist
-
-// Configure react-pdf worker, if needed, though direct import might handle this
-// pdfjs.GlobalWorkerOptions.workerSrc = require('react-pdf/dist/esm/pdf.worker.entry');
-
-contextBridge.exposeInMainWorld('pdfjsLib', pdfjs); // Expose pdfjs-dist globally
+const path = require('path');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // BrowserView related APIs
   getIsOnline: () => ipcRenderer.invoke('get-is-online'),
+  onAddNewTab: (callback) => {
+    const subscription = (event, url) => callback(url);
+    ipcRenderer.on('add-new-tab', subscription);
+    return () => ipcRenderer.removeListener('add-new-tab', subscription);
+  },
   onAiQueryDetected: (callback) => {
     const subscription = (event, query) => callback(query);
     ipcRenderer.on('ai-query-detected', subscription);
@@ -62,6 +62,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateChatContent: (messages, options) => ipcRenderer.invoke('llm-generate-chat-content', messages, options),
   getAiMemory: () => ipcRenderer.invoke('get-ai-memory'),
   addAiMemory: (entry) => ipcRenderer.send('add-ai-memory', entry),
+  saveVectorStore: (data) => ipcRenderer.invoke('save-vector-store', data),
+  loadVectorStore: () => ipcRenderer.invoke('load-vector-store'),
 
   // Auth
   openAuthWindow: (url) => ipcRenderer.send('open-auth-window', url),
@@ -92,11 +94,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getExtensions: () => ipcRenderer.invoke('get-extensions'),
   toggleExtension: (id) => ipcRenderer.invoke('toggle-extension', id),
   uninstallExtension: (id) => ipcRenderer.invoke('uninstall-extension', id),
+  openExtensionDir: () => ipcRenderer.send('open-extension-dir'),
 
   // Window Controls
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   maximizeWindow: () => ipcRenderer.send('maximize-window'),
   closeWindow: () => ipcRenderer.send('close-window'),
+  toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
 
   // Chat & File Export
   exportChatAsTxt: (messages) => ipcRenderer.invoke('export-chat-txt', messages),
@@ -175,5 +179,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (event, { candidate, remoteDeviceId }) => callback({ candidate, remoteDeviceId });
     ipcRenderer.on('p2p-ice-candidate', subscription);
     return () => ipcRenderer.removeListener('p2p-ice-candidate', subscription);
+  },
+  on: (channel, callback) => {
+    const subscription = (event, ...args) => callback(...args);
+    ipcRenderer.on(channel, subscription);
+    return () => ipcRenderer.removeListener(channel, subscription);
   },
 });

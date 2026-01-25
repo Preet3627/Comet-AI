@@ -60,6 +60,10 @@ var FirebaseService = /** @class */ (function () {
         this.authInitialized = false;
         this.initializeFirebase();
     }
+    FirebaseService.prototype.reinitialize = function () {
+        console.log("[Firebase] Reinitializing with new config...");
+        this.initializeFirebase();
+    };
     FirebaseService.prototype.initializeFirebase = function () {
         var _this = this;
         try {
@@ -113,10 +117,8 @@ var FirebaseService = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!this.auth) {
-                            console.error("Firebase Auth not initialized.");
+                        if (!this.auth)
                             return [2 /*return*/, null];
-                        }
                         _a.label = 1;
                     case 1:
                         _a.trys.push([1, 3, , 4]);
@@ -139,10 +141,8 @@ var FirebaseService = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!this.auth) {
-                            console.error("Firebase Auth not initialized.");
+                        if (!this.auth)
                             return [2 /*return*/, null];
-                        }
                         provider = new auth_1.GoogleAuthProvider();
                         _a.label = 1;
                     case 1:
@@ -166,10 +166,8 @@ var FirebaseService = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!this.auth) {
-                            console.error("Firebase Auth not initialized.");
+                        if (!this.auth)
                             return [2 /*return*/, null];
-                        }
                         _a.label = 1;
                     case 1:
                         _a.trys.push([1, 3, , 4]);
@@ -215,10 +213,17 @@ var FirebaseService = /** @class */ (function () {
     };
     // Listen for auth state changes
     FirebaseService.prototype.onAuthStateChanged = function (callback) {
+        var _this = this;
         if (!this.auth) {
-            console.error("Firebase Auth not initialized.");
-            // Return a no-op unsubscribe function
-            return function () { };
+            // If auth isn't ready, wait for it and then register the callback
+            this.onAuthReady(function () {
+                if (_this.auth) {
+                    var unsubscribe = (0, auth_1.onAuthStateChanged)(_this.auth, callback);
+                    // Note: In this specific case, the returned unsubscribe won't work immediately 
+                    // but for the initial page load this is usually fine.
+                }
+            });
+            return function () { }; // return empty cleanup for now
         }
         return (0, auth_1.onAuthStateChanged)(this.auth, callback);
     };

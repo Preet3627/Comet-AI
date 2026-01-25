@@ -10,7 +10,7 @@ import {
   RotateCw, AlertTriangle, ShieldCheck, DownloadCloud, ShoppingCart, Copy as CopyIcon,
   Terminal, Settings as GhostSettings, FolderOpen, Sparkles, ScanLine, Search, X,
   Puzzle, Code2, Briefcase, Image as ImageIcon, User as UserIcon, Maximize2, Minimize2, RefreshCcw, Download as DownloadIcon,
-  Layout, MoreVertical, CreditCard
+  Layout, MoreVertical, CreditCard, ArrowRight, Languages
 } from 'lucide-react';
 import AIChatSidebar from '@/components/AIChatSidebar';
 import LandingPage from '@/components/LandingPage';
@@ -24,6 +24,7 @@ import { searchEngines } from '@/components/SearchEngineSettings';
 import UnifiedCartPanel from '@/components/UnifiedCartPanel';
 import WorkspaceDashboard from '@/components/WorkspaceDashboard';
 import MediaStudio from '@/components/MediaStudio';
+import Documentation from '@/components/Documentation';
 
 import CloudSyncConsent from "@/components/CloudSyncConsent";
 import NoNetworkGame from "@/components/NoNetworkGame";
@@ -31,6 +32,7 @@ import AIAssistOverlay from "@/components/AIAssistOverlay";
 
 import { firebaseSyncService } from "@/lib/FirebaseSyncService";
 import firebaseService from '@/lib/FirebaseService';
+import { firebaseConfigStorage } from '@/lib/firebaseConfigStorage';
 import { QuickNavOverlay } from '@/components/QuickNavOverlay';
 import TitleBar from '@/components/TitleBar';
 import { useOptimizedTabs } from '@/hooks/useOptimizedTabs';
@@ -40,7 +42,7 @@ import { TabSwitcherOverlay } from '@/components/TabSwitcherOverlay';
 const SidebarIcon = ({ icon, label, active, onClick, collapsed }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, collapsed: boolean }) => (
   <button
     onClick={onClick}
-    className={`group relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ${active ? 'bg-accent text-primary-bg shadow-[0_0_20px_rgba(var(--color-accent),0.2)]' : 'text-secondary-text hover:bg-primary-bg/10 hover:text-primary-text'}`}
+    className={`group relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ${active ? 'bg-accent text-white shadow-[0_0_25px_rgba(56,189,248,0.4)]' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
   >
     {icon}
     {collapsed && (
@@ -147,6 +149,19 @@ export default function Home() {
     setShowContextMenu({ x, y });
   };
 
+  const handleTranslate = async () => {
+    setShowContextMenu(null);
+    if (window.electronAPI) {
+      const selectedText = await window.electronAPI.getSelectedText();
+      const textToTranslate = selectedText || store.currentUrl;
+
+      setAiOverview({ query: `Translating: ${textToTranslate.substring(0, 30)}...`, result: null, sources: null, isLoading: true });
+
+      const translated = await BrowserAI.translateText(textToTranslate, 'English');
+      setAiOverview({ query: "Neural Translation (to English)", result: translated, sources: null, isLoading: false });
+    }
+  };
+
   const isBookmarked = store.bookmarks.some(b => b.url === store.currentUrl);
 
   const handleBookmark = () => {
@@ -244,6 +259,7 @@ export default function Home() {
   // Init Browser Intelligence
   useEffect(() => {
     BrowserAI.initURLPredictor();
+    BrowserAI.loadVectorMemory();
   }, []);
 
   // AI Query Interception
@@ -452,7 +468,7 @@ export default function Home() {
 
   const calculateBounds = useCallback(() => {
     const sidebarWidth = !store.sidebarOpen ? 0 : (store.isSidebarCollapsed ? 70 : (store.sidebarWidth + 70));
-    const headerHeight = 40 + 56 + 40; // TitleBar (40) + Toolbar (56) + TabBar (40) - the original tab bar height was 10px, but I'm guessing that padding and other elements were also present and I'll make a more generous assumption for the tab bar height and use 40px
+    const headerHeight = 40 + 56; // TitleBar (40) + Toolbar (56). TabBar is integrated in TitleBar.
     const x = store.sidebarSide === 'left' ? sidebarWidth : 0;
     const width = window.innerWidth - sidebarWidth;
     const safeWidth = Math.max(0, Math.round(width));
@@ -532,22 +548,71 @@ export default function Home() {
 
   useEffect(() => {
     if (window.electronAPI) {
-      const cleanup = window.electronAPI.onAuthTokenReceived((token: string) => {
-        console.log("Auth token received from deep link:", token);
-        store.loginWithGoogleToken(token);
+      const cleanup = window.electronAPI.onAuthCallback((event: any, url: string) => {
+        console.log("Auth callback received in ClientOnlyPage:", url);
+        try {
+          const parsed = new URL(url);
+          const status = parsed.searchParams.get("auth_status");
+          const token = parsed.searchParams.get("id_token") || parsed.searchParams.get("token");
+          const uid = parsed.searchParams.get("uid");
+          const email = parsed.searchParams.get("email");
+          const name = parsed.searchParams.get("name");
+          const photo = parsed.searchParams.get("photo");
+          const configParam = parsed.searchParams.get("firebase_config");
+
+          if (status === "success" && uid && email) {
+            if (configParam) {
+              try {
+                const config = JSON.parse(atob(configParam));
+                firebaseConfigStorage.save(config);
+                store.setCustomFirebaseConfig(config);
+                firebaseService.reinitialize();
+              } catch (e) {
+                console.error("Failed to parse returned firebase config:", e);
+              }
+            }
+
+            // Set user data immediately for a seamless UI transition
+            store.setUser({
+              uid,
+              email,
+              displayName: name || email.split('@')[0],
+              photoURL: photo || "",
+            });
+
+            if (email.endsWith("@ponsrischool.in")) store.setAdmin(true);
+
+            if (token) {
+              store.loginWithGoogleToken(token);
+            }
+
+            store.setHasSeenWelcomePage(true);
+            store.setActiveView('browser');
+            store.startActiveSession();
+          }
+        } catch (e) {
+          console.error("Error processing auth callback:", e);
+        }
       });
       return cleanup;
     }
   }, [store]);
 
-  if (!store.user && !store.hasSeenWelcomePage) {
-    return <LandingPage />;
+  if ((!store.user && !store.hasSeenWelcomePage) || store.activeView === 'landing-page') {
+    return (
+      <div className={`flex flex-col h-screen w-full bg-deep-space overflow-hidden relative font-sans text-primary-text transition-all duration-700`}>
+        <TitleBar />
+        <div className="flex-1 pt-10 overflow-auto bg-[#020205]">
+          <LandingPage />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className={`flex flex-col h-screen w-full bg-primary-bg overflow-hidden relative font-sans text-primary-text transition-all duration-700 ${store.isVibrant ? 'bg-vibrant-mesh' : ''}`}>
-      {(store.user || store.hasSeenWelcomePage) && <TitleBar />}
-      <div className={`flex flex-1 overflow-hidden relative ${(!store.user && !store.hasSeenWelcomePage) ? 'pt-0' : 'pt-10'}`} onContextMenu={handleContextMenu}>
+    <div className={`flex flex-col h-screen w-full bg-deep-space overflow-hidden relative font-sans text-primary-text transition-all duration-700`}>
+      <TitleBar />
+      <div className={`flex flex-1 overflow-hidden relative pt-10 bg-[#020205]`} onContextMenu={handleContextMenu}>
         {/* Navigation Sidebar (Rail) */}
         <AnimatePresence>
           {railVisible && (
@@ -555,13 +620,20 @@ export default function Home() {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 70, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              className="flex flex-col items-center py-6 gap-6 z-30 border-r border-border-color bg-primary-bg/20 backdrop-blur-xl"
+              className="flex flex-col items-center py-6 gap-6 z-40 bg-black/40 backdrop-blur-2xl shadow-[10px_0_30px_rgba(0,0,0,0.5)]"
             >
               <SidebarIcon
                 icon={<Globe size={20} />}
                 label="Browser"
                 active={store.activeView === 'browser'}
                 onClick={() => store.setActiveView('browser')}
+                collapsed={true}
+              />
+              <SidebarIcon
+                icon={<ArrowRight size={20} />}
+                label="Home"
+                active={store.activeView === 'landing-page'}
+                onClick={() => store.setActiveView('landing-page')}
                 collapsed={true}
               />
               <SidebarIcon
@@ -597,6 +669,22 @@ export default function Home() {
                 label="Dev Mode"
                 active={store.activeView === 'coding'}
                 onClick={() => store.setActiveView('coding')}
+                collapsed={true}
+              />
+              <SidebarIcon
+                icon={<Bookmark size={20} />}
+                label="Docs"
+                active={store.activeView === 'documentation'}
+                onClick={() => store.setActiveView('documentation')}
+                collapsed={true}
+              />
+              <SidebarIcon
+                icon={<Puzzle size={20} />}
+                label="Extensions"
+                active={false}
+                onClick={() => {
+                  setShowSettings(true);
+                }}
                 collapsed={true}
               />
             </motion.div>
@@ -640,7 +728,7 @@ export default function Home() {
         </AnimatePresence>
         <main className="flex-1 flex flex-col relative overflow-hidden bg-black/5">
           {store.activeView === 'browser' && (
-            <header className="h-[56px] flex items-center px-4 gap-4 border-b border-border-color bg-primary-bg/20 backdrop-blur-3xl z-40">
+            <header className="h-[56px] flex items-center px-4 gap-4 border-b border-white/5 bg-black/40 backdrop-blur-3xl z-40">
               <div className="flex items-center gap-1">
                 <button onClick={() => setRailVisible(!railVisible)} className={`p-2 rounded-xl transition-all ${railVisible ? 'text-secondary-text' : 'bg-accent text-primary-bg'}`} title="Toggle Tools Rail">
                   <Layout size={18} />
@@ -674,7 +762,7 @@ export default function Home() {
                     onBlur={() => setIsTyping(false)}
                     onKeyDown={(e) => e.key === 'Enter' && handleGo()}
                     placeholder="Search with Comet or enter URL..."
-                    className="w-full bg-primary-bg/5 border border-border-color rounded-2xl py-2 pl-11 pr-4 text-xs text-primary-text placeholder:text-secondary-text focus:outline-none focus:ring-1 focus:ring-accent/50 focus:bg-primary-bg/10 transition-all font-medium"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-2 pl-11 pr-4 text-xs text-primary-text placeholder:text-secondary-text focus:outline-none focus:ring-1 focus:ring-accent/50 focus:bg-white/[0.07] transition-all font-medium backdrop-blur-md"
                   />
                   <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden pointer-events-none rounded-t-2xl">
                     <motion.div animate={{ x: ['-100%', '100%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="w-1/2 h-full bg-gradient-to-r from-transparent via-primary-text/10 to-transparent" />
@@ -741,16 +829,17 @@ export default function Home() {
           <div className="flex-1 relative">
             <AnimatePresence mode="wait">
               {store.activeView === 'workspace' && (
-                <motion.div key="workspace" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="absolute inset-0 z-10 bg-primary-bg">
+                <motion.div key="workspace" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="absolute inset-0 z-[60] bg-[#020205]">
                   <WorkspaceDashboard />
                 </motion.div>
               )}
 
               {store.activeView === 'browser' && (
                 <motion.div key="browser" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">
-                  <div className={`h-full flex ${store.studentMode ? 'p-4 gap-4' : ''}`}>
-                    <div className={`flex-[3] relative ${store.studentMode ? 'rounded-2xl overflow-hidden border border-border-color shadow-3xl' : ''}`}>
+                  <div className={`h-full flex ${store.studentMode ? 'p-4 gap-4' : 'p-2'}`}>
+                    <div className={`flex-[3] relative bg-[#020205] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${store.studentMode ? 'rounded-3xl' : 'rounded-2xl'} overflow-hidden border border-white/5`}>
                       {/* This area is now intentionally blank. The BrowserView is managed by the main process. */}
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-sky-500/20 to-transparent pointer-events-none" />
                     </div>
                     {store.studentMode && (
                       <div className="flex-1 glass-vibrant shadow-3xl rounded-3xl p-6 flex flex-col border border-border-color bg-primary-bg/5">
@@ -768,26 +857,32 @@ export default function Home() {
                 </motion.div>
               )}
               {store.activeView === 'webstore' && (
-                <motion.div key="webstore" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
+                <motion.div key="webstore" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[60] bg-[#020205]">
                   <WebStore onClose={() => store.setActiveView('browser')} />
                 </motion.div>
               )}
 
               {store.activeView === 'pdf' && (
-                <motion.div key="pdf" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
+                <motion.div key="pdf" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[60] bg-[#020205]">
                   <PDFWorkspace />
                 </motion.div>
               )}
 
               {store.activeView === 'coding' && (
-                <motion.div key="coding" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
+                <motion.div key="coding" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[60] bg-[#020205]">
                   <CodingDashboard />
                 </motion.div>
               )}
 
               {store.activeView === 'media' && (
-                <motion.div key="media" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-primary-bg">
+                <motion.div key="media" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[60] bg-[#020205]">
                   <MediaStudio />
+                </motion.div>
+              )}
+
+              {store.activeView === 'documentation' && (
+                <motion.div key="documentation" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="absolute inset-0 z-[100] bg-[#020205] overflow-auto custom-scrollbar">
+                  <Documentation />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -876,6 +971,10 @@ export default function Home() {
               <button onClick={() => { window.electronAPI?.goForward(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
                 <ChevronRight size={14} />
                 <span className="text-xs font-bold uppercase tracking-widest">Forward</span>
+              </button>
+              <button onClick={handleTranslate} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">
+                <Languages size={14} />
+                <span className="text-xs font-bold uppercase tracking-widest">Translate to English</span>
               </button>
               <div className="h-[1px] bg-border-color my-1" />
               <button onClick={() => { handleOfflineSave(); setShowContextMenu(null); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-accent/10 text-secondary-text hover:text-accent transition-all">

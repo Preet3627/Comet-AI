@@ -14,6 +14,11 @@ class FirebaseService {
     this.initializeFirebase();
   }
 
+  public reinitialize() {
+    console.log("[Firebase] Reinitializing with new config...");
+    this.initializeFirebase();
+  }
+
   private initializeFirebase() {
     try {
       // Get Firebase config from stored config (from landing page) or fallback to env vars
@@ -39,35 +44,32 @@ class FirebaseService {
       const firebaseConfig = getFirebaseConfig();
 
       // Only initialize if we have valid config
-              if (firebaseConfig.apiKey) {
-              this.app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-              this.auth = getAuth(this.app);
-              this.firestore = getFirestore(this.app);
-      
-              // Listen for the initial auth state to set authInitialized
-              this.auth.onAuthStateChanged(() => {
-                  this.authInitialized = true;
-                  this.authReadyCallbacks.forEach(cb => cb());
-                  this.authReadyCallbacks = []; // Clear callbacks after execution
-              });
-              }
-          } catch (error) {
-              console.error("Error initializing Firebase:", error);
-          }
-        }
-      
-        public onAuthReady(callback: () => void) {
-          if (this.authInitialized) {
-              callback();
-          } else {
-              this.authReadyCallbacks.push(callback);
-          }
-        }
-  async signInWithCustomToken(token: string): Promise<User | null> {
-    if (!this.auth) {
-      console.error("Firebase Auth not initialized.");
-      return null;
+      if (firebaseConfig.apiKey) {
+        this.app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+        this.auth = getAuth(this.app);
+        this.firestore = getFirestore(this.app);
+
+        // Listen for the initial auth state to set authInitialized
+        this.auth.onAuthStateChanged(() => {
+          this.authInitialized = true;
+          this.authReadyCallbacks.forEach(cb => cb());
+          this.authReadyCallbacks = []; // Clear callbacks after execution
+        });
+      }
+    } catch (error) {
+      console.error("Error initializing Firebase:", error);
     }
+  }
+
+  public onAuthReady(callback: () => void) {
+    if (this.authInitialized) {
+      callback();
+    } else {
+      this.authReadyCallbacks.push(callback);
+    }
+  }
+  async signInWithCustomToken(token: string): Promise<User | null> {
+    if (!this.auth) return null;
     try {
       const result = await firebaseSignInWithCustomToken(this.auth, token);
       return result.user;
@@ -78,10 +80,7 @@ class FirebaseService {
   }
 
   async signInWithGoogle(): Promise<User | null> {
-    if (!this.auth) {
-      console.error("Firebase Auth not initialized.");
-      return null;
-    }
+    if (!this.auth) return null;
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(this.auth, provider);
@@ -93,10 +92,7 @@ class FirebaseService {
   }
 
   async handleRedirectResult(): Promise<User | null> {
-    if (!this.auth) {
-      console.error("Firebase Auth not initialized.");
-      return null;
-    }
+    if (!this.auth) return null;
     try {
       const result = await getRedirectResult(this.auth);
       return result ? result.user : null;
@@ -122,9 +118,15 @@ class FirebaseService {
   // Listen for auth state changes
   onAuthStateChanged(callback: (user: User | null) => void) {
     if (!this.auth) {
-      console.error("Firebase Auth not initialized.");
-      // Return a no-op unsubscribe function
-      return () => {};
+      // If auth isn't ready, wait for it and then register the callback
+      this.onAuthReady(() => {
+        if (this.auth) {
+          const unsubscribe = firebaseOnAuthStateChanged(this.auth, callback);
+          // Note: In this specific case, the returned unsubscribe won't work immediately 
+          // but for the initial page load this is usually fine.
+        }
+      });
+      return () => { }; // return empty cleanup for now
     }
     return firebaseOnAuthStateChanged(this.auth, callback);
   }

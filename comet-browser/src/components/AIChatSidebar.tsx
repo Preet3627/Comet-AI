@@ -34,6 +34,7 @@ ACTION COMMANDS:
 - [GO_BACK] : Navigates back.
 - [GO_FORWARD] : Navigates forward.
 - [SCREENSHOT_AND_ANALYZE] : Takes a screenshot of the current browser view, performs OCR, and analyzes the content.
+- [WEB_SEARCH: query] : Performs a real-time web search for information you don't already have in your knowledge base.
 
 CONTEXT:
 - You have access to local RAG knowledge and current page content.
@@ -113,7 +114,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
   // AI Chat Input Listener
   useEffect(() => {
-    if (window.electronAPI) {
+    if (window.electronAPI && typeof window.electronAPI.on === 'function') {
       const cleanup = window.electronAPI.on('ai-chat-input-text', (text: string) => {
         setInputMessage(text);
         // Optionally, focus the input field
@@ -164,8 +165,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
           }
         } else if (store.aiProvider === 'openai-compatible') {
           config = { apiKey: store.openaiApiKey, baseUrl: store.localLLMBaseUrl, model: store.localLLMModel };
-        } else if (store.aiProvider === 'gemini') {
-          config = { apiKey: store.geminiApiKey, model: store.localLLMModel || 'gemini-1.5-flash' };
+        } else if (store.aiProvider.startsWith('gemini')) {
+          config = { apiKey: store.geminiApiKey, model: store.localLLMModel || (store.aiProvider === 'gemini-3-pro' ? 'gemini-1.5-pro' : 'gemini-1.5-flash') };
         } else if (store.aiProvider === 'claude' || store.aiProvider === 'anthropic') {
           config = { apiKey: store.anthropicApiKey, model: store.localLLMModel || 'claude-3-5-sonnet-20240620' };
         } else if (store.aiProvider === 'groq') {
@@ -398,6 +399,22 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
             }
           }
 
+          if (text.includes('[WEB_SEARCH:')) {
+            const match = text.match(/\[WEB_SEARCH:\s*(.*?)\]/i);
+            if (match) {
+              const query = match[1];
+              text = text.replace(/\[WEB_SEARCH:.*?\]/i, `🌐 **Performing Web Search for:** ${query}...`);
+              setMessages(prev => [...prev, { role: 'model', content: text }]);
+
+              const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+              // Instead of just navigating, we could try to scrape, but navigation is safer for visual feedback
+              store.setCurrentUrl(searchUrl);
+              store.setActiveView('browser');
+              if (window.electronAPI) window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url: searchUrl });
+              return;
+            }
+          }
+
           setMessages(prev => [...prev, { role: 'model', content: text }]);
         }
       } else {
@@ -432,16 +449,16 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     );
   }
 
-      return (
-      <div
-        className={`flex flex-col h-full gap-4 p-4 bg-primary-bg/30 backdrop-blur-xl border-r border-border-color transition-all duration-500 z-50 ${isFullScreen ? 'fixed inset-0 z-[999] bg-primary-bg/90 shadow-2xl overflow-hidden' : ''}
-          ${isDragOver ? 'border-accent bg-accent/10' : ''}
+  return (
+    <div
+      className={`flex flex-col h-full gap-4 p-4 bg-black/40 backdrop-blur-[50px] border-r border-transparent transition-all duration-500 z-50 ${isFullScreen ? 'fixed inset-0 z-[999] bg-[#020205] shadow-2xl overflow-hidden' : ''}
+          ${isDragOver ? 'border-accent/50 bg-accent/5' : ''}
         `}
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={handleDrop}
-      >
-        <style>{`
+      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handleDrop}
+    >
+      <style>{`
           .modern-scrollbar::-webkit-scrollbar {
             width: 6px;
           }
@@ -457,21 +474,21 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
             background-color: rgba(var(--color-primary-text), 0.2);
           }
         `}</style>
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/icon.ico" alt="Comet" className="w-8 h-8 object-contain" />
-            <h2 className="text-sm font-black uppercase tracking-widest text-primary-text">Comet AI</h2>
-            {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
-              {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
-            <button onClick={props.toggleCollapse} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
-              <X size={16} />
-            </button>
-          </div>
-        </header>
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img src="/icon.ico" alt="Comet" className="w-8 h-8 object-contain" />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white text-neon">Comet AI</h2>
+          {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
+            {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+          <button onClick={props.toggleCollapse} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+      </header>
       <div className="flex-1 overflow-y-auto modern-scrollbar space-y-4 relative pr-2">
         {/* Antigravity RAG Panel */}
         <AnimatePresence>
@@ -480,7 +497,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="mx-2 mb-2 rounded-xl bg-deep-space-accent-neon/5 border border-deep-space-accent-neon/20 overflow-hidden"
+              className="mx-2 mb-2 rounded-xl bg-deep-space-accent-neon/5 overflow-hidden"
             >
               <div
                 className="px-3 py-2 flex items-center justify-between cursor-pointer bg-deep-space-accent-neon/10"
@@ -505,7 +522,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
         {messages.map((msg, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <div className={`max-w-[85%] p-4 rounded-3xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-deep-space-accent-neon/20 text-white border border-white/5 shadow-[0_0_15px_rgba(0,255,255,0.1)]' : 'bg-white/[0.03] text-white/80 border border-white/5'}`}>
+            <div className={`max-w-[85%] p-4 rounded-3xl text-sm leading-[1.6] ${msg.role === 'user' ? 'bg-sky-500/10 text-white border border-sky-500/20 shadow-[0_0_20px_rgba(56,189,248,0.1)]' : 'bg-white/[0.03] text-slate-200 border border-white/5'}`}>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
@@ -551,7 +568,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
           onChange={(e) => setInputMessage(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
           placeholder="Neural prompt..."
-          className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 h-24"
+          className="w-full neural-prompt rounded-2xl p-4 text-xs text-white focus:outline-none h-24"
         />
         <div className="flex items-center justify-between">
           <button onClick={() => fileInputRef.current?.click()} className="p-2 rounded-lg bg-white/5 text-white/40 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-all">

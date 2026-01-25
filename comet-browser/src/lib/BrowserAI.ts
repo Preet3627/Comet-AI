@@ -303,4 +303,25 @@ export class BrowserAI {
         return null;
     }
 
+    /**
+     * Neural Translation Service
+     * Uses the active AI provider to translate text
+     */
+    static async translateText(text: string, targetLanguage: string = 'English'): Promise<string> {
+        if (!text) return "";
+        if (window.electronAPI) {
+            try {
+                const response = await window.electronAPI.generateChatContent([
+                    { role: 'system', content: `You are a high-performance translation engine. Translate the following text into ${targetLanguage}. Return ONLY the translated text, no explanation.` },
+                    { role: 'user', content: text }
+                ]);
+                return response.text || text;
+            } catch (e) {
+                console.error("Translation Error:", e);
+                return text;
+            }
+        }
+        return text;
+    }
+
 }

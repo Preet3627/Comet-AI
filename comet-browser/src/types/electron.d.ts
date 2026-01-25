@@ -60,6 +60,7 @@ declare global {
             minimizeWindow: () => void;
             maximizeWindow: () => void;
             closeWindow: () => void;
+            toggleFullscreen: () => void;
 
             // Auth
             openAuthWindow: (url: string) => void;
@@ -111,7 +112,8 @@ declare global {
             setUserId: (userId: string | null) => void;
             getExtensions: () => Promise<any[]>;
             toggleExtension: (id: string) => Promise<boolean>;
-            uninstallExtension: (id: string) => Promise<void>;
+            uninstallExtension: (id: string) => Promise<boolean>;
+            openExtensionDir: () => void;
             getExtensionPath: () => Promise<string>;
             connectToRemoteDevice: (remoteDeviceId: string) => Promise<boolean>;
             sendP2PSignal: (signal: any, remoteDeviceId: string) => void;

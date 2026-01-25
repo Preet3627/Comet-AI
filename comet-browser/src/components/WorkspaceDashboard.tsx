@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/store/useAppStore';
 import { IntegrationService, MailItem, DriveFile } from '@/lib/IntegrationService';
+import { firebaseConfigStorage } from '@/lib/firebaseConfigStorage';
 import { Mail, FileText, RefreshCw, Folder, Search, Filter, Sparkles, LogIn, ExternalLink } from 'lucide-react';
 
 const WorkspaceDashboard = () => {
@@ -39,9 +40,13 @@ const WorkspaceDashboard = () => {
     };
 
     const handleConnect = () => {
-        // Simulate OAuth
-        const token = prompt("Enter simulated Google Token (or just click OK for demo):", "mock-google-token-123");
-        if (token) store.setGoogleToken(token);
+        if (window.electronAPI) {
+            const authUrl = `https://browser.ponsrischool.in/auth?client_id=desktop-app&redirect_uri=comet-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfigStorage.load() || {}))}`;
+            window.electronAPI.openAuthWindow(authUrl);
+        } else {
+            const url = `https://browser.ponsrischool.in/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
+            window.open(url, "_blank");
+        }
     };
 
     const filteredMails = mails.filter(m => m.subject.toLowerCase().includes(searchQuery.toLowerCase()) || m.snippet.toLowerCase().includes(searchQuery.toLowerCase()));

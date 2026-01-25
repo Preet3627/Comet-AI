@@ -204,7 +204,7 @@ export const useAppStore = create<BrowserState>()(
             githubToken: null,
 
             // View and UI
-            activeView: 'landing',
+            activeView: 'landing-page',
 
             // Guest mode and sync
             isGuestMode: false,
@@ -583,7 +583,7 @@ export const useAppStore = create<BrowserState>()(
             logout: () => set({
                 user: null,
                 isAdmin: false,
-                activeView: 'landing',
+                activeView: 'landing-page',
                 history: [],
                 bookmarks: [],
                 passwords: [],

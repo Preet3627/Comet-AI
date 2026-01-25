@@ -13,15 +13,18 @@
     "build": "next build",
     "start": "npx serve@latest out",
     "lint": "eslint",
-    "predev": "tsc src/lib/P2PFileSyncService.ts src/types/electron.d.ts --outDir src/lib --module CommonJS",
+    "predev": "npx tsc src/lib/P2PFileSyncService.ts src/types/electron.d.ts --outDir src/lib --module CommonJS --skipLibCheck --esModuleInterop",
     "build-electron": "npm run build && electron-builder"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.13.4",
+    "@google/generative-ai": "^0.24.1",
     "@tensorflow/tfjs": "^4.22.0",
+    "autoprefixer": "^10.4.23",
     "body-parser": "^2.2.2",
     "cross-fetch": "^4.1.0",
     "electron-context-menu": "^4.1.1",
+    "es-errors": "^1.3.0",
     "express": "^5.2.1",
     "firebase": "^12.7.0",
     "framer-motion": "^12.23.26",
@@ -29,8 +32,10 @@
     "lucide-react": "^0.562.0",
     "mysql2": "^3.11.5",
     "next": "^16.1.3",
+    "object-inspect": "^1.13.3",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
+    "qs": "^6.13.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
@@ -40,6 +45,7 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "side-channel": "^1.1.0",
     "tesseract.js": "^7.0.0",
     "wait-on": "^9.0.3",
     "zustand": "^5.0.9"
@@ -64,14 +70,18 @@
     "appId": "com.latestinssan.cometbrowser",
     "productName": "Comet Browser",
     "copyright": "Copyright © 2026 Latestinssan",
+    "asar": true,
     "files": [
       "out/**/*",
       "!out/web/**/*",
       "main.js",
       "preload.js",
+      "view_preload.js",
+      "src/lib/P2PFileSyncService.js",
       "package.json",
       "LICENSE.txt",
-      "icon.ico"
+      "icon.ico",
+      "node_modules/**/*"
     ],
     "nsis": {
       "oneClick": false,

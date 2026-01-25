@@ -64,44 +64,34 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
             scrollContainerRef.current.scrollLeft += e.deltaY;
           }
         }}
-        className="h-10 flex items-center px-4 gap-1 bg-primary-bg/40 overflow-x-auto custom-scrollbar no-drag-region"
+        className="h-10 flex items-center px-4 gap-1 bg-black/20 overflow-x-auto custom-scrollbar no-drag-region"
       >
         {tabs.map((tab) => (
           <div
             key={tab.id}
             onClick={() => onTabClick(tab.id)}
             className={`group flex items-center h-8 px-4 rounded-t-xl min-w-[140px] max-w-[200px] cursor-pointer transition-all border-t border-x ${activeTabId === tab.id
-                ? 'bg-primary-bg/10 border-border-color text-primary-text'
-                : 'bg-transparent border-transparent text-secondary-text hover:bg-primary-bg/5'
+              ? 'bg-white/5 border-white/10 text-white shadow-[0_-2px_10px_rgba(56,189,248,0.1)]'
+              : 'bg-transparent border-transparent text-slate-400 hover:bg-white/[0.02]'
               }`}
           >
-            {tab.isAudible && <Volume2 size={12} className="mr-2 flex-shrink-0 text-accent" />}
-            {!tab.isAudible && <Globe size={12} className="mr-2 flex-shrink-0" />}
+            {tab.isAudible && <Volume2 size={12} className="mr-2 flex-shrink-0 text-sky-400 animate-pulse" />}
+            {!tab.isAudible && <Globe size={12} className="mr-2 flex-shrink-0 text-slate-500" />}
             <span
-              className={`text-[10px] font-bold truncate flex-1 ${isTabSuspended?.(tab.id) ? 'opacity-50' : ''
+              className={`text-[10px] font-bold truncate flex-1 ${isTabSuspended?.(tab.id) ? 'opacity-30' : ''
                 }`}
             >
               {tab.title}
               {isTabSuspended?.(tab.id) && (
-                <span className="ml-1 text-[8px] text-secondary-text">(z)</span>
+                <span className="ml-1 text-[8px] text-slate-600">(z)</span>
               )}
             </span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                store.updateTab(tab.id, { isAudible: !tab.isAudible });
-              }}
-              className="ml-2 p-0.5 rounded-full hover:bg-primary-bg/20 opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Toggle Mute"
-            >
-              <Volume2 size={10} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
                 onTabClose(tab.id);
               }}
-              className="ml-2 p-0.5 rounded-full hover:bg-primary-bg/20 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="ml-2 p-1 rounded-md hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
               title="Close Tab"
             >
               <Plus size={10} className="rotate-45" />
@@ -110,7 +100,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
         ))}
         <button
           onClick={onAddTab}
-          className="p-1.5 rounded-lg text-secondary-text hover:bg-primary-bg/10 hover:text-primary-text transition-all ml-2"
+          className="p-1.5 rounded-lg text-slate-500 hover:bg-white/5 hover:text-white transition-all ml-2"
           title="Add New Tab"
         >
           <Plus size={14} />

@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Minus, Square, X } from 'lucide-react';
+import { Minus, Square, X, Maximize2, Minimize2 } from 'lucide-react';
 import { VirtualizedTabBar } from './VirtualizedTabBar';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -9,6 +9,7 @@ const TitleBar = () => {
     const handleMinimize = () => window.electronAPI?.minimizeWindow();
     const handleMaximize = () => window.electronAPI?.maximizeWindow();
     const handleClose = () => window.electronAPI?.closeWindow();
+    const handleToggleFullscreen = () => window.electronAPI?.toggleFullscreen();
     const store = useAppStore();
 
     const isTabSuspended = (tabId: string) => {
@@ -19,13 +20,13 @@ const TitleBar = () => {
     const showTabBar = store.activeView === 'browser';
 
     return (
-        <div className={`h-10 bg-primary-bg flex items-center justify-between px-4 select-none drag-region fixed top-0 left-0 right-0 z-[200] ${showTabBar ? 'border-b border-border-color' : ''}`}>
+        <div className={`h-10 bg-black/60 backdrop-blur-xl flex items-center justify-between px-4 select-none drag-region fixed top-0 left-0 right-0 z-[200] ${showTabBar ? 'border-b border-white/5' : ''}`}>
             <div className="flex items-center gap-3">
                 {store.user?.photoURL ? (
                     <img
                         src={store.user.photoURL}
                         alt="Profile"
-                        className="w-6 h-6 rounded-full border border-border-color"
+                        className="w-6 h-6 rounded-full border border-white/5"
                     />
                 ) : (
                     <div className="w-5 h-5 flex items-center justify-center">
@@ -56,6 +57,12 @@ const TitleBar = () => {
                     <Minus size={14} />
                 </button>
                 <button
+                    onClick={handleToggleFullscreen}
+                    className="h-full px-4 hover:bg-primary-bg/5 text-secondary-text hover:text-primary-text transition-colors"
+                >
+                    <Maximize2 size={12} />
+                </button>
+                <button
                     onClick={handleMaximize}
                     className="h-full px-4 hover:bg-primary-bg/5 text-secondary-text hover:text-primary-text transition-colors"
                 >
@@ -68,15 +75,6 @@ const TitleBar = () => {
                     <X size={14} />
                 </button>
             </div>
-
-            <style jsx>{`
-                .drag-region {
-                    -webkit-app-region: drag;
-                }
-                .no-drag-region {
-                    -webkit-app-region: no-drag;
-                }
-            `}</style>
         </div>
     );
 };

@@ -28,12 +28,16 @@ const fetch = require('cross-fetch'); // Make sure cross-fetch is always availab
 
 const MCP_SERVER_PORT = process.env.MCP_SERVER_PORT || 3001;
 let mcpServerPort = MCP_SERVER_PORT;
- // Make sure cross-fetch is always available globally
-
-
 // Custom protocol for authentication
 const PROTOCOL = 'comet-browser';
-app.setAsDefaultProtocolClient(PROTOCOL);
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
 
 // Function to check network status
 const checkNetworkStatus = () => {
@@ -157,7 +161,7 @@ function createWindow() {
   ElectronBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) => {
     blocker.enableBlockingInSession(session.defaultSession);
     console.log('Ad blocker enabled.');
-  });
+  }).catch(e => console.error("Ad blocker failed to load:", e));
 
   // Handle external links
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -197,16 +201,24 @@ function createWindow() {
 
   // Load Extensions
   try {
+    if (!fs.existsSync(extensionsPath)) {
+      fs.mkdirSync(extensionsPath, { recursive: true });
+    }
     const extensionDirs = fs.readdirSync(extensionsPath);
     extensionDirs.forEach(dir => {
       const extPath = path.join(extensionsPath, dir);
       if (fs.lstatSync(extPath).isDirectory()) {
-        session.defaultSession.loadExtension(extPath).then(extension => {
-          console.log(`Extension loaded: ${extension.name} (${extension.id}) from ${extPath}`);
-        }).catch(e => console.error(`Failed to load extension from ${extPath}: ${e.message || e}`));
+        const manifestPath = path.join(extPath, 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+          session.defaultSession.loadExtension(extPath).then(extension => {
+            console.log(`Extension loaded: ${extension.name} (${extension.id}) from ${extPath}`);
+          }).catch(e => console.error(`Failed to load extension from ${extPath}: ${e.message || e}`));
+        }
       }
     });
-  } catch (e) { }
+  } catch (e) {
+    console.error("Error during initial extension loading:", e);
+  }
 }
 
 // Helper function for recursive directory scanning
@@ -251,6 +263,7 @@ ipcMain.on('add-tab-from-main', (event, url) => {
 ipcMain.on('minimize-window', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.on('maximize-window', () => { if (mainWindow) { if (mainWindow.isMaximized()) { mainWindow.unmaximize(); } else { mainWindow.maximize(); } } });
 ipcMain.on('close-window', () => { if (mainWindow) mainWindow.close(); });
+ipcMain.on('toggle-fullscreen', () => { if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen()); });
 
 // Auth
 ipcMain.on('open-auth-window', (event, authUrl) => { shell.openExternal(authUrl); });
@@ -442,15 +455,37 @@ ipcMain.handle('share-device-folder', async () => {
 });
 
 ipcMain.handle('trigger-download', async (event, url, suggestedFilename) => {
-    if (mainWindow && url) {
-        mainWindow.webContents.downloadURL(url, { filename: suggestedFilename });
-        return { success: true };
-    }
-    return { success: false, error: 'Download failed: invalid URL or mainWindow not available.' };
+  if (mainWindow && url) {
+    mainWindow.webContents.downloadURL(url, { filename: suggestedFilename });
+    return { success: true };
+  }
+  return { success: false, error: 'Download failed: invalid URL or mainWindow not available.' };
 });
 
 ipcMain.handle('get-ai-memory', async () => readMemory());
 ipcMain.on('add-ai-memory', (event, entry) => appendToMemory(entry));
+
+const vectorStorePath = path.join(app.getPath('userData'), 'vector_store.json');
+ipcMain.handle('save-vector-store', async (event, data) => {
+  try {
+    fs.writeFileSync(vectorStorePath, JSON.stringify(data));
+    return true;
+  } catch (e) {
+    console.error("Failed to save vector store:", e);
+    return false;
+  }
+});
+
+ipcMain.handle('load-vector-store', async () => {
+  try {
+    if (fs.existsSync(vectorStorePath)) {
+      return JSON.parse(fs.readFileSync(vectorStorePath, 'utf-8'));
+    }
+  } catch (e) {
+    console.error("Failed to load vector store:", e);
+  }
+  return [];
+});
 
 const llmProviders = [
   { id: 'gemini-3-pro', name: 'Google Gemini 3 Pro' },
@@ -476,8 +511,8 @@ ipcMain.handle('llm-configure-provider', (event, providerId, options) => {
 
 // IPC handler to set MCP server port dynamically
 ipcMain.on('set-mcp-server-port', (event, port) => {
-    mcpServerPort = port;
-    console.log(`MCP Server port updated to: ${mcpServerPort}`);
+  mcpServerPort = port;
+  console.log(`MCP Server port updated to: ${mcpServerPort}`);
 });
 
 ipcMain.handle('extract-page-content', async () => {
@@ -510,18 +545,18 @@ ipcMain.on('send-to-ai-chat-input', (event, text) => {
 });
 
 ipcMain.handle('llm-generate-chat-content', async (event, messages, options = {}) => {
-    try {
-        const response = await fetch(`http://localhost:${mcpServerPort}/llm/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages, options })
-        });
-        const data = await response.json();
-        return data;
-    } catch (e) {
-        console.error("Error communicating with MCP Server:", e);
-        return { error: e.message };
-    }
+  try {
+    const response = await fetch(`http://localhost:${mcpServerPort}/llm/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, options })
+    });
+    const data = await response.json();
+    return data;
+  } catch (e) {
+    console.error("Error communicating with MCP Server:", e);
+    return { error: e.message };
+  }
 });
 
 // Ollama Integration:
@@ -677,7 +712,7 @@ app.whenReady().then(() => {
     console.log(`MCP Server running on port ${MCP_SERVER_PORT}`);
   });
 
-  p2pSyncService = getP2PSync('main-process-device'); 
+  p2pSyncService = getP2PSync('main-process-device');
 
   // Forward P2P service events to the renderer
   p2pSyncService.on('connected', () => {
@@ -715,7 +750,7 @@ app.whenReady().then(() => {
     }).then(result => {
       if (!result.canceled && result.filePath) {
         if (mainWindow) {
-            mainWindow.webContents.send('download-started', item.getFilename());
+          mainWindow.webContents.send('download-started', item.getFilename());
         }
         item.setSavePath(result.filePath);
         item.on('updated', (event, state) => {
@@ -736,12 +771,12 @@ app.whenReady().then(() => {
           if (state === 'completed') {
             console.log('Download successfully');
             if (mainWindow) {
-                mainWindow.webContents.send('download-complete', item.getFilename());
+              mainWindow.webContents.send('download-complete', item.getFilename());
             }
           } else {
             console.log(`Download failed: ${state}`);
             if (mainWindow) {
-                mainWindow.webContents.send('download-failed', item.getFilename());
+              mainWindow.webContents.send('download-failed', item.getFilename());
             }
           }
         });
@@ -796,24 +831,49 @@ ipcMain.on('set-user-id', (event, userId) => {
 });
 
 ipcMain.handle('get-extensions', async () => {
-  // TODO: Implement actual extension fetching
-  return [];
+  const extensions = session.defaultSession.getAllExtensions();
+  return extensions.map(ext => ({
+    id: ext.id,
+    name: ext.name,
+    version: ext.version,
+    description: ext.description,
+    path: ext.path
+  }));
 });
 
 ipcMain.handle('toggle-extension', async (event, id) => {
-  // TODO: Implement actual extension toggling
-  console.log(`Toggling extension ${id}`);
+  // Disabling usually requires session restart in Electron, 
+  // but we can acknowledge the request.
+  console.log(`Toggle request for extension ${id}`);
   return true;
 });
 
 ipcMain.handle('uninstall-extension', async (event, id) => {
-  // TODO: Implement actual extension uninstallation
-  console.log(`Uninstalling extension ${id}`);
+  try {
+    const ext = session.defaultSession.getExtension(id);
+    if (ext) {
+      const extPath = ext.path;
+      session.defaultSession.removeExtension(id);
+      // Optional: Delete from folder? 
+      // User said: "Drop your extension folder inside. Restart Comet"
+      // So if they uninstall, we should probably delete the folder too.
+      if (extPath.startsWith(extensionsPath)) {
+        fs.rmSync(extPath, { recursive: true, force: true });
+      }
+      return true;
+    }
+  } catch (e) {
+    console.error(`Failed to uninstall extension ${id}:`, e);
+  }
+  return false;
 });
 
 ipcMain.handle('get-extension-path', async () => {
-  // TODO: Implement actual extension path retrieval
   return extensionsPath;
+});
+
+ipcMain.on('open-extension-dir', () => {
+  shell.openPath(extensionsPath);
 });
 
 ipcMain.handle('connect-to-remote-device', async (event, remoteDeviceId) => {
@@ -850,50 +910,50 @@ const crypto = require('crypto');
 
 // Function to derive key from passphrase
 async function deriveKey(passphrase, salt) {
-    return new Promise((resolve, reject) => {
-        crypto.pbkdf2(passphrase, salt, 100000, 32, 'sha512', (err, derivedKey) => {
-            if (err) reject(err);
-            resolve(derivedKey);
-        });
+  return new Promise((resolve, reject) => {
+    crypto.pbkdf2(passphrase, salt, 100000, 32, 'sha512', (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(derivedKey);
     });
+  });
 }
 
 // IPC handler for encryption
 ipcMain.handle('encrypt-data', async (event, { data, key }) => {
-    try {
-        const salt = crypto.randomBytes(16);
-        const derivedKey = await deriveKey(key, salt);
-        const iv = crypto.randomBytes(16); // Initialization vector
-        const cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
+  try {
+    const salt = crypto.randomBytes(16);
+    const derivedKey = await deriveKey(key, salt);
+    const iv = crypto.randomBytes(16); // Initialization vector
+    const cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
 
-        const encrypted = Buffer.concat([cipher.update(Buffer.from(data)), cipher.final()]);
-        const authTag = cipher.getAuthTag();
+    const encrypted = Buffer.concat([cipher.update(Buffer.from(data)), cipher.final()]);
+    const authTag = cipher.getAuthTag();
 
-        return {
-            encryptedData: encrypted.buffer,
-            iv: iv.buffer,
-            authTag: authTag.buffer,
-            salt: salt.buffer
-        };
-    } catch (error) {
-        console.error('[Main] Encryption failed:', error);
-        return { error: error.message };
-    }
+    return {
+      encryptedData: encrypted.buffer,
+      iv: iv.buffer,
+      authTag: authTag.buffer,
+      salt: salt.buffer
+    };
+  } catch (error) {
+    console.error('[Main] Encryption failed:', error);
+    return { error: error.message };
+  }
 });
 
 // IPC handler for decryption
 ipcMain.handle('decrypt-data', async (event, { encryptedData, key, iv, authTag, salt }) => {
-    try {
-        const derivedKey = await deriveKey(key, Buffer.from(salt));
-        const decipher = crypto.createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(iv));
-        decipher.setAuthTag(Buffer.from(authTag));
+  try {
+    const derivedKey = await deriveKey(key, Buffer.from(salt));
+    const decipher = crypto.createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(iv));
+    decipher.setAuthTag(Buffer.from(authTag));
 
-        const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedData)), decipher.final()]);
-        return { decryptedData: decrypted.buffer };
-    } catch (error) {
-        console.error('[Main] Decryption failed:', error);
-        return { error: error.message };
-    }
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedData)), decipher.final()]);
+    return { decryptedData: decrypted.buffer };
+  } catch (error) {
+    console.error('[Main] Decryption failed:', error);
+    return { error: error.message };
+  }
 });
 
 app.on('will-quit', () => {

@@ -20,12 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const store = useAppStore();
-  const isLandingPage = store.activeView === 'landing';
+  const isLandingPage = store.activeView === 'landing-page';
 
   return (
     <html lang="en" className="dark">
-      <body className={`font-sans antialiased bg-deep-space-bg pt-10 h-screen ${isLandingPage ? 'overflow-auto' : 'overflow-hidden'}`}>
-        <TitleBar />
+      <body className={`font-sans antialiased bg-deep-space-bg ${isLandingPage ? 'overflow-auto' : 'overflow-hidden'} h-screen`}>
         {children}
       </body>
     </html>

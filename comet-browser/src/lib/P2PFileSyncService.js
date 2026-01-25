@@ -66,11 +66,14 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.P2PFileSyncService = void 0;
 exports.getP2PSync = getP2PSync;
 var events_1 = require("events");
-var FirebaseService_1 = require("./FirebaseService");
+var FirebaseService_1 = __importDefault(require("./FirebaseService"));
 var database_1 = require("firebase/database");
 var storage_1 = require("firebase/storage");
 // Type guard function

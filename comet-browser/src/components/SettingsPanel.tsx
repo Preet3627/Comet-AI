@@ -21,11 +21,14 @@ import LoginPrompt from './LoginPrompt';
 import firebaseService from '@/lib/FirebaseService';
 import { User } from 'firebase/auth';
 import SyncSettings from './SyncSettings'; // Import the new SyncSettings component
+import { firebaseConfigStorage } from '@/lib/firebaseConfigStorage';
+import ExtensionSettings from './ExtensionSettings';
 
-const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
+const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () => void, defaultSection?: string }) => {
     const store = useAppStore();
+    const setUser = useAppStore((state) => state.setUser);
     const fetchHistory = useAppStore((state) => state.fetchHistory);
-    const [activeSection, setActiveSection] = React.useState('appearance');
+    const [activeSection, setActiveSection] = React.useState(defaultSection);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [licenseKey, setLicenseKey] = useState("");
     const { isGuestMode, setGuestMode } = useAppStore();
@@ -34,46 +37,36 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
         // Listen for auth state changes to update the UI
         const unsubscribe = firebaseService.onAuthStateChanged((user) => {
             setCurrentUser(user);
-            store.setUser(user ? { uid: user.uid, email: user.email || '', displayName: user.displayName || '', photoURL: user.photoURL || '' } : null);
+            setUser(user ? { uid: user.uid, email: user.email || '', displayName: user.displayName || '', photoURL: user.photoURL || '' } : null);
             if (user) {
                 fetchHistory();
             }
         });
 
         // Handle the redirect result when the component mounts
-        firebaseService.handleRedirectResult().then(user => {
-            if (user) {
-                setCurrentUser(user);
-                store.setUser({ uid: user.uid, email: user.email || '', displayName: user.displayName || '', photoURL: user.photoURL || '' });
-                fetchHistory();
-            }
-        });
-
-        const handleAuthCallback = (event: any, url: string) => {
-            console.log('auth-callback received in renderer:', url);
-            firebaseService.handleRedirectResult().then(user => {
+        firebaseService.handleRedirectResult()
+            .then(user => {
                 if (user) {
                     setCurrentUser(user);
-                    store.setUser({ uid: user.uid, email: user.email || '', displayName: user.displayName || '', photoURL: user.photoURL || '' });
+                    setUser({ uid: user.uid, email: user.email || '', displayName: user.displayName || '', photoURL: user.photoURL || '' });
                     fetchHistory();
-                    // close settings panel after successful login
-                    onClose();
                 }
-            });
-        };
-
-        // Listen for the auth-callback from the main process
-        // if (window.electronAPI) {
-        //     window.electronAPI.onAuthCallback(handleAuthCallback);
-        // }
+            })
+            .catch(err => console.error("Firebase redirect result error:", err));
 
         return () => {
             unsubscribe();
         };
-    }, [store, fetchHistory, onClose]);
+    }, [setUser, fetchHistory]);
 
     const handleGoogleLogin = async () => {
-        await firebaseService.signInWithGoogle();
+        if (window.electronAPI) {
+            const authUrl = `https://browser.ponsrischool.in/auth?client_id=desktop-app&redirect_uri=comet-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfigStorage.load() || {}))}`;
+            window.electronAPI.openAuthWindow(authUrl);
+        } else {
+            const url = `https://browser.ponsrischool.in/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
+            window.open(url, "_blank");
+        }
     };
 
     const handleGuestMode = () => {
@@ -111,6 +104,7 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
     const handleGoogleSignOut = async () => {
         try {
             await firebaseService.signOut();
+            store.logout();
             console.log('Signed out from Firebase');
         } catch (error) {
             console.error('Error signing out:', error);
@@ -118,6 +112,7 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
     };
 
     const sections = [
+        { id: 'profile', icon: <UserIcon size={18} />, label: 'Neural Identity' },
         { id: 'appearance', icon: <Monitor size={18} />, label: 'Appearance' },
         { id: 'performance', icon: <Zap size={18} />, label: 'Performance' },
         { id: 'search', icon: <Globe size={18} />, label: 'Search Engine' },
@@ -141,13 +136,13 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
             <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="w-full max-w-6xl h-[85vh] bg-deep-space-bg border border-white/10 rounded-[2.5rem] overflow-hidden flex shadow-[0_30px_100px_rgba(0,0,0,0.8)]"
+                className="w-full max-w-6xl h-[85vh] bg-[#020205] border border-white/5 rounded-[2.5rem] overflow-hidden flex shadow-[0_30px_100px_rgba(0,0,0,0.8)]"
             >
                 {/* Navigation Sidebar */}
-                <div className="w-72 bg-white/[0.02] border-r border-white/5 p-8 flex flex-col gap-2">
-                    <div className="flex items-center gap-3 px-4 mb-10">
-                        <img src="/icon.ico" alt="Comet Icon" className="w-10 h-10 object-contain" />
-                        <span className="text-xl font-black tracking-tighter uppercase">{store.appName}</span>
+                <div className="w-72 bg-white/[0.01] border-r border-white/5 p-8 flex flex-col gap-2">
+                    <div className="flex items-center gap-4 px-4 mb-10">
+                        <img src="/icon.ico" alt="Comet" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
+                        <span className="text-xl font-black tracking-tighter uppercase text-white">COMET</span>
                     </div>
 
                     <div className="flex-1 overflow-y-auto no-scrollbar space-y-1">
@@ -179,17 +174,76 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
 
                 {/* Content Area */}
                 <div className="flex-1 flex flex-col p-12 overflow-y-auto custom-scrollbar bg-black/10">
-                    <header className="flex items-center justify-between mb-12">
+                    <header className="flex items-center justify-between mb-12 no-drag-region">
                         <div>
                             <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">
                                 {activeSection.replace('-', ' ')}
                             </h2>
                             <p className="text-white/30 text-sm">Configure your hardware-accelerated workspace.</p>
                         </div>
-                        <button onClick={onClose} className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all text-sm font-black uppercase tracking-widest border border-white/5">Close</button>
+                        <button onClick={onClose} className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all text-sm font-black uppercase tracking-widest border border-white/5 no-drag-region">Close</button>
                     </header>
 
                     <div className="space-y-12 max-w-3xl">
+                        {activeSection === 'profile' && (
+                            <div className="space-y-10">
+                                <div className="p-10 rounded-[2.5rem] bg-white/[0.02] border border-white/5 relative overflow-hidden group">
+                                    <div className="absolute inset-0 bg-deep-space-accent-neon/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="flex items-center gap-8 relative z-10">
+                                        <div className="relative">
+                                            {store.user?.photoURL ? (
+                                                <Image src={store.user.photoURL} alt="Profile" width={100} height={100} className="rounded-[2.5rem] border-2 border-deep-space-accent-neon/20 shadow-2xl" />
+                                            ) : (
+                                                <div className="w-[100px] h-[100px] rounded-[2.5rem] bg-white/5 border-2 border-white/10 flex items-center justify-center text-white/20">
+                                                    <UserIcon size={40} />
+                                                </div>
+                                            )}
+                                            <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-deep-space-accent-neon flex items-center justify-center text-black border-4 border-[#020205]">
+                                                <ShieldCheck size={14} />
+                                            </div>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">
+                                                {store.user?.displayName || (isGuestMode ? 'Guest Mode Account' : 'Anonymous Entity')}
+                                            </h3>
+                                            <p className="text-secondary-text font-medium mb-6">
+                                                {store.user?.email || 'Unauthorized Local Session'}
+                                            </p>
+                                            <div className="flex gap-3">
+                                                {store.user ? (
+                                                    <button onClick={handleGoogleSignOut} className="btn-vibrant-secondary px-6 no-drag-region">Terminate session</button>
+                                                ) : (
+                                                    <button onClick={handleGoogleLogin} className="btn-vibrant-primary px-8 no-drag-region">Authorize via Google</button>
+                                                )}
+                                                {isGuestMode && !store.user && (
+                                                    <div className="px-6 py-2.5 bg-white/5 border border-white/10 text-white/40 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                        <Zap size={12} /> Guest Mode Enabled
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="p-8 rounded-[2rem] bg-white/[0.01] border border-white/5">
+                                        <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-4">Cloud Status</p>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-3 h-3 rounded-full ${store.user ? 'bg-deep-space-accent-neon animate-pulse shadow-[0_0_10px_#38bdf8]' : 'bg-red-500'}`} />
+                                            <span className="text-sm font-bold text-white">{store.user ? 'Synchronized with Comet Cloud' : 'Isolated Local Session'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="p-8 rounded-[2rem] bg-white/[0.01] border border-white/5">
+                                        <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-4">Workspace Tier</p>
+                                        <div className="flex items-center gap-3 text-white">
+                                            <Zap size={16} className="text-amber-400" />
+                                            <span className="text-sm font-bold">Foundation (Alpha 0.1.3)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {activeSection === 'appearance' && (
                             <div className="space-y-8">
                                 <div className="p-8 rounded-[2rem] bg-white/[0.03] border border-white/5 space-y-8">
@@ -203,7 +257,7 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
                                                 <button
                                                     key={side}
                                                     onClick={() => store.setSidebarSide(side as 'left' | 'right')}
-                                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${store.sidebarSide === side ? 'bg-deep-space-accent-neon text-deep-space-bg' : 'text-white/40 hover:text-white'}`}
+                                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${store.sidebarSide === side ? 'bg-deep-space-accent-neon text-deep-space-bg shadow-[0_0_15px_#38bdf8]' : 'text-white/40 hover:text-white'}`}
                                                 >
                                                     {side}
                                                 </button>
@@ -410,12 +464,7 @@ const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
                         )}
 
                         {activeSection === 'extensions' && (
-                            <div className="p-8 rounded-[2rem] bg-white/[0.03] border border-white/5 space-y-8">
-                                <div className="text-center py-12">
-                                    <Package size={48} className="mx-auto mb-4 text-white/20" />
-                                    <p className="text-white/40">Extensions management coming soon</p>
-                                </div>
-                            </div>
+                            <ExtensionSettings />
                         )}
 
                         {activeSection === 'tabs' && (

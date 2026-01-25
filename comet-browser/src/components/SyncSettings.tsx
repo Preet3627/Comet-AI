@@ -41,9 +41,9 @@ const SyncSettings: React.FC<SyncSettingsProps> = ({ onClose }) => {
         // For now, P2PFileSyncService handles these internally in main process
 
         return () => {
-            cleanupConnected();
-            cleanupDisconnected();
-            cleanupFirebaseReady();
+            if (typeof cleanupConnected === 'function') cleanupConnected();
+            if (typeof cleanupDisconnected === 'function') cleanupDisconnected();
+            if (typeof cleanupFirebaseReady === 'function') cleanupFirebaseReady();
         };
     }, []);
 
