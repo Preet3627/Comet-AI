@@ -64,7 +64,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
             scrollContainerRef.current.scrollLeft += e.deltaY;
           }
         }}
-        className="h-10 flex items-center px-4 gap-1 bg-black/40 border-b border-white/5 overflow-x-auto custom-scrollbar no-drag-region"
+        className="h-10 flex items-center px-4 gap-1 bg-black/40 overflow-x-auto custom-scrollbar no-drag-region"
       >
         {tabs.map((tab) => (
           <div
@@ -92,6 +92,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
                 store.updateTab(tab.id, { isAudible: !tab.isAudible });
               }}
               className="ml-2 p-0.5 rounded-full hover:bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Toggle Mute"
             >
               <Volume2 size={10} />
             </button>
@@ -101,6 +102,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
                 onTabClose(tab.id);
               }}
               className="ml-2 p-0.5 rounded-full hover:bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Close Tab"
             >
               <Plus size={10} className="rotate-45" />
             </button>
@@ -109,6 +111,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
         <button
           onClick={onAddTab}
           className="p-1.5 rounded-lg text-white/20 hover:bg-white/10 hover:text-white transition-all ml-2"
+          title="Add New Tab"
         >
           <Plus size={14} />
         </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { BrowserAI } from '@/lib/BrowserAI';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -39,7 +39,7 @@ import { TabSwitcherOverlay } from '@/components/TabSwitcherOverlay';
 const SidebarIcon = ({ icon, label, active, onClick, collapsed }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, collapsed: boolean }) => (
   <button
     onClick={onClick}
-    className={`group relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ${active ? 'bg-deep-space-accent-neon text-deep-space-bg shadow-[0_0_20px_rgba(0,255,255,0.4)]' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+    className={`group relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ${active ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
   >
     {icon}
     {collapsed && (
@@ -76,8 +76,8 @@ const MusicVisualizer = ({ color = 'rgb', isPlaying = false }: { color?: string,
             delay: i * 0.1,
             backgroundColor: { duration: 3, repeat: Infinity, ease: "linear" }
           }}
-          className="w-[2px] bg-deep-space-accent-neon rounded-full"
-          style={{ boxShadow: color === 'rgb' ? '0 0 8px rgba(0, 255, 255, 0.5)' : `0 0 8px ${color}80` }}
+          className="w-[2px] bg-white/40 rounded-full"
+          style={{ boxShadow: color === 'rgb' ? '0 0 8px rgba(255, 255, 255, 0.2)' : `0 0 8px ${color}80` }}
         />
       ))}
     </div>
@@ -99,6 +99,7 @@ export default function Home() {
   const [railVisible, setRailVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState<{ x: number, y: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [aiPickColor, setAiPickColor] = useState('rgb'); // 'rgb' or a hex string
 
@@ -124,7 +125,23 @@ export default function Home() {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setShowContextMenu({ x: e.clientX, y: e.clientY });
+
+    const menuWidth = 192; // w-48 = 192px
+    const menuHeight = 250; // Approximate height based on content
+    const padding = 16; // Some padding from the edge of the screen
+
+    let x = e.clientX;
+    let y = e.clientY;
+
+    if (e.clientX + menuWidth + padding > window.innerWidth) {
+      x = window.innerWidth - menuWidth - padding;
+    }
+
+    if (e.clientY + menuHeight + padding > window.innerHeight) {
+      y = window.innerHeight - menuHeight - padding;
+    }
+
+    setShowContextMenu({ x, y });
   };
 
   const isBookmarked = store.bookmarks.some(b => b.url === store.currentUrl);
@@ -387,7 +404,7 @@ export default function Home() {
 
   const calculateBounds = useCallback(() => {
     const sidebarWidth = !store.sidebarOpen ? 0 : (store.isSidebarCollapsed ? 70 : (store.sidebarWidth + 70));
-    const headerHeight = 40 + 56; // TitleBar (40) + Toolbar (56)
+    const headerHeight = 40 + 56 + 40; // TitleBar (40) + Toolbar (56) + TabBar (40) - the original tab bar height was 10px, but I'm guessing that padding and other elements were also present and I'll make a more generous assumption for the tab bar height and use 40px
     const x = store.sidebarSide === 'left' ? sidebarWidth : 0;
     const width = window.innerWidth - sidebarWidth;
     const safeWidth = Math.max(0, Math.round(width));
@@ -420,15 +437,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (window.electronAPI && store.activeTabId) {
-      const bounds = calculateBounds();
-      window.electronAPI.activateView({ tabId: store.activeTabId, bounds });
+    if (window.electronAPI) {
+      if (store.activeView === 'browser' && store.activeTabId) {
+        const bounds = calculateBounds();
+        window.electronAPI.activateView({ tabId: store.activeTabId, bounds });
+      } else {
+        window.electronAPI.hideAllViews();
+      }
     }
-  }, [store.activeTabId, calculateBounds]);
+  }, [store.activeTabId, store.activeView, calculateBounds]);
 
   useEffect(() => {
     if (window.electronAPI) {
-      const cleanup = window.electronAPI.onBrowserViewUrlChanged(({ tabId, url }) => {
+      const cleanUrl = window.electronAPI.onBrowserViewUrlChanged(({ tabId, url }) => {
         if (store.tabs.find(t => t.id === tabId)) {
           store.updateTab(tabId, { url });
           if (tabId === store.activeTabId) {
@@ -436,7 +457,17 @@ export default function Home() {
           }
         }
       });
-      return cleanup;
+
+      const cleanTitle = window.electronAPI.onBrowserViewTitleChanged(({ tabId, title }) => {
+        if (store.tabs.find(t => t.id === tabId)) {
+          store.updateTab(tabId, { title });
+        }
+      });
+
+      return () => {
+        cleanUrl();
+        cleanTitle();
+      };
     }
   }, [store.activeTabId, store.tabs]);
 
@@ -554,21 +585,21 @@ export default function Home() {
           {store.activeView === 'browser' && (
             <header className="h-[56px] flex items-center px-4 gap-4 border-b border-white/5 bg-black/20 backdrop-blur-3xl z-40">
               <div className="flex items-center gap-1">
-                <button onClick={() => setRailVisible(!railVisible)} className={`p-2 rounded-xl transition-all ${railVisible ? 'text-white/40' : 'bg-deep-space-accent-neon text-deep-space-bg'}`} title="Toggle Tools Rail">
+                <button onClick={() => setRailVisible(!railVisible)} className={`p-2 rounded-xl transition-all ${railVisible ? 'text-white/40' : 'bg-white text-black'}`} title="Toggle Tools Rail">
                   <Layout size={18} />
                 </button>
                 <button onClick={() => store.toggleSidebar()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="AI Analyst">
                   <Sparkles size={18} />
                 </button>
                 <div className="w-[1px] h-4 bg-white/10 mx-1" />
-                <button onClick={() => window.electronAPI?.goBack()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all"><ChevronLeft size={18} /></button>
-                <button onClick={() => window.electronAPI?.goForward()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all"><ChevronRight size={18} /></button>
-                <button onClick={() => window.electronAPI?.reload()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all"><RotateCw size={18} /></button>
+                <button onClick={() => window.electronAPI?.goBack()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Go Back"><ChevronLeft size={18} /></button>
+                <button onClick={() => window.electronAPI?.goForward()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Go Forward"><ChevronRight size={18} /></button>
+                <button onClick={() => window.electronAPI?.reload()} className="p-2 rounded-xl hover:bg-white/10 text-white/40 hover:text-white transition-all" title="Reload Page"><RotateCw size={18} /></button>
               </div>
               <div className="flex-1 max-w-4xl relative group flex items-center gap-3">
                 <div className="flex-1 relative">
                   <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                    <Search size={14} className="text-white/20 group-focus-within:text-deep-space-accent-neon transition-colors" />
+                    <Search size={14} className="text-white/20 group-focus-within:text-white/60 transition-colors" />
                   </div>
                   <input
                     type="text"
@@ -578,10 +609,10 @@ export default function Home() {
                     onBlur={() => setIsTyping(false)}
                     onKeyDown={(e) => e.key === 'Enter' && handleGo()}
                     placeholder="Search with Comet or enter URL..."
-                    className="w-full bg-white/5 border border-white/5 rounded-2xl py-2 pl-11 pr-4 text-xs text-white/80 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/30 focus:bg-white/10 transition-all font-medium"
+                    className="w-full bg-white/5 border border-white/5 rounded-2xl py-2 pl-11 pr-4 text-xs text-white/80 placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-white/10 focus:bg-white/10 transition-all font-medium"
                   />
                   <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden pointer-events-none rounded-t-2xl">
-                    <motion.div animate={{ x: ['-100%', '100%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="w-1/2 h-full bg-gradient-to-r from-transparent via-deep-space-accent-neon/40 to-transparent" />
+                    <motion.div animate={{ x: ['-100%', '100%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="w-1/2 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                   </div>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     <MusicVisualizer color={aiPickColor} isPlaying={isAudioPlaying} />
@@ -589,7 +620,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex items-center gap-1.5 px-2 bg-white/5 rounded-xl border border-white/5 h-9">
-                  <button onClick={() => setShowClipboard(!showClipboard)} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-deep-space-accent-neon bg-white/10' : 'text-white/30 hover:text-white'}`} title="Clipboard">
+                  <button onClick={() => setShowClipboard(!showClipboard)} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-deep-space-accent-neon bg-white/10' : 'text-white/30 hover:text-white'}`} title="Clipboard Manager">
                     <CopyIcon size={14} />
                   </button>
                   <button onClick={handleCartScan} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-deep-space-accent-neon bg-white/10' : 'text-white/30 hover:text-white'}`} title="Scan Shopping Cart">
@@ -701,7 +732,7 @@ export default function Home() {
               {showCamera && (
                 <div className="absolute inset-0 z-[200] bg-black/80 flex items-center justify-center">
                   <div className="relative w-[800px] h-[600px] bg-black rounded-3xl overflow-hidden border border-white/20">
-                    <button onClick={() => setShowCamera(false)} className="absolute top-4 right-4 z-50 text-white"><X /></button>
+                    <button onClick={() => setShowCamera(false)} className="absolute top-4 right-4 z-50 text-white" title="Close Camera"><X /></button>
                     <PhoneCamera onClose={() => setShowCamera(false)} />
                   </div>
                 </div>
@@ -718,7 +749,7 @@ export default function Home() {
                 <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="absolute bottom-6 right-6 w-[450px] max-h-[600px] bg-[#0A0B14]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] z-[60] flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-white/5 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-deep-space-accent-neon"><Sparkles size={16} /><span className="text-xs font-black uppercase tracking-widest">Neural Analysis</span></div>
-                    <button onClick={() => setAiOverview(null)} className="text-white/40 hover:text-white"><X size={14} /></button>
+                    <button onClick={() => setAiOverview(null)} className="text-white/40 hover:text-white" title="Close Neural Analysis"><X size={14} /></button>
                   </div>
                   <div className="flex-1 p-5 overflow-y-auto custom-scrollbar">
                     <h3 className="text-sm font-bold text-white mb-2">{aiOverview.query}</h3>
@@ -748,6 +779,7 @@ export default function Home() {
           <>
             <div className="fixed inset-0 z-[1000]" onClick={() => setShowContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setShowContextMenu(null); }} />
             <motion.div
+              ref={contextMenuRef}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}

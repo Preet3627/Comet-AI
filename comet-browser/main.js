@@ -166,6 +166,10 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
     }
   });
 
+  newView.webContents.on('page-title-updated', (event, title) => {
+    mainWindow.webContents.send('browser-view-title-changed', { tabId, title });
+  });
+
   // Track audio status
   newView.webContents.on('is-currently-audible-changed', (isAudible) => {
     if (isAudible) audibleTabs.add(tabId);
@@ -440,9 +444,14 @@ ipcMain.handle('select-local-file', async () => {
 const handleDeepLink = (url) => {
   if (!mainWindow) return;
   try {
+    console.log('[Main] Handling Deep Link:', url);
     const parsedUrl = new URL(url);
     if (parsedUrl.protocol === `${PROTOCOL}:`) {
-      const token = parsedUrl.searchParams.get('token');
+      // Always send the full URL to any component listening for the callback
+      mainWindow.webContents.send('auth-callback', url);
+
+      // Extract token for legacy or direct sign-in handlers
+      const token = parsedUrl.searchParams.get('token') || parsedUrl.searchParams.get('id_token');
       if (token) {
         mainWindow.webContents.send('auth-token-received', token);
       }
@@ -464,8 +473,8 @@ if (!gotTheLock) {
       mainWindow.focus();
     }
     // Handle the deep link URL from the command line
-    const url = commandLine.pop();
-    if (url.startsWith(`${PROTOCOL}://`)) {
+    const url = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`));
+    if (url) {
       handleDeepLink(url);
     }
   });
@@ -501,12 +510,25 @@ app.whenReady().then(() => {
   shortcuts.forEach(s => {
     try {
       globalShortcut.register(s.accelerator, () => {
-        if (mainWindow) mainWindow.webContents.send('execute-shortcut', s.action);
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+          mainWindow.webContents.send('execute-shortcut', s.action);
+        }
       });
     } catch (e) {
       console.error(`Failed to register shortcut ${s.accelerator}:`, e);
     }
   });
+});
+
+ipcMain.on('hide-all-views', () => {
+  if (activeTabId && tabViews.has(activeTabId)) {
+    const view = tabViews.get(activeTabId);
+    if (view && mainWindow) {
+      mainWindow.removeBrowserView(view);
+    }
+  }
 });
 
 app.on('will-quit', () => {

@@ -10,11 +10,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   createView: (args) => ipcRenderer.send('create-view', args),
   activateView: (args) => ipcRenderer.send('activate-view', args),
+  hideAllViews: () => ipcRenderer.send('hide-all-views'),
   destroyView: (tabId) => ipcRenderer.send('destroy-view', tabId),
   onBrowserViewUrlChanged: (callback) => {
     const subscription = (event, { tabId, url }) => callback({ tabId, url });
     ipcRenderer.on('browser-view-url-changed', subscription);
     return () => ipcRenderer.removeListener('browser-view-url-changed', subscription);
+  },
+  onBrowserViewTitleChanged: (callback) => {
+    const subscription = (event, { tabId, title }) => callback({ tabId, title });
+    ipcRenderer.on('browser-view-title-changed', subscription);
+    return () => ipcRenderer.removeListener('browser-view-title-changed', subscription);
   },
   navigateBrowserView: (args) => ipcRenderer.send('navigate-browser-view', args),
   goBack: () => ipcRenderer.send('browser-view-go-back'),

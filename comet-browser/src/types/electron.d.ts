@@ -9,7 +9,9 @@ declare global {
             createView: (args: { tabId: string; url: string }) => void;
             activateView: (args: { tabId: string; bounds: { x: number; y: number; width: number; height: number } }) => void;
             destroyView: (tabId: string) => void;
+            hideAllViews: () => void;
             onBrowserViewUrlChanged: (callback: (data: { tabId: string; url: string }) => void) => () => void;
+            onBrowserViewTitleChanged: (callback: (data: { tabId: string; title: string }) => void) => () => void;
             navigateBrowserView: (args: { tabId: string; url: string }) => void;
             navigateTo: (url: string) => void;
             goBack: () => void;
