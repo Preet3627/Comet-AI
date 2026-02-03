@@ -66,4 +66,4 @@ Load local Chrome extensions by placing them in your OS UserData directory:
 
 ---
 
-*Version: 0.5.2-alpha*
+*Version: 0.1.6-stable*

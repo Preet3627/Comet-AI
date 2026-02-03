@@ -76,7 +76,20 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
               }`}
           >
             {tab.isAudible && <Volume2 size={12} className="mr-2 flex-shrink-0 text-sky-400 animate-pulse" />}
-            {!tab.isAudible && <Globe size={12} className="mr-2 flex-shrink-0 text-slate-500" />}
+            {!tab.isAudible && (
+              tab.url && tab.url.startsWith('http') ? (
+                <img
+                  src={`https://www.google.com/s2/favicons?sz=64&domain=${(() => {
+                    try { return new URL(tab.url).hostname; } catch { return 'google.com'; }
+                  })()}`}
+                  className="w-3 h-3 mr-2 flex-shrink-0"
+                  alt=""
+                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.google.com/s2/favicons?sz=64&domain=about:blank'; }}
+                />
+              ) : (
+                <Globe size={12} className="mr-2 flex-shrink-0 text-slate-500" />
+              )
+            )}
             <span
               className={`text-[10px] font-bold truncate flex-1 ${isTabSuspended?.(tab.id) ? 'opacity-30' : ''
                 }`}

@@ -946,8 +946,8 @@ export default function Home() {
                 <button onClick={() => window.electronAPI?.goForward()} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Go Forward"><ChevronRight size={18} /></button>
                 <button onClick={() => window.electronAPI?.reload()} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Reload Page"><RotateCw size={18} /></button>
               </div>
-              <div className="flex-1 max-w-4xl relative group flex items-center gap-3">
-                <div className="flex-1 relative">
+              <div className="flex-1 flex justify-center">
+                <div className="w-full max-w-2xl relative group">
                   <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
                     <Search size={14} className="text-secondary-text group-focus-within:text-primary-text transition-colors" />
                   </div>
@@ -982,13 +982,15 @@ export default function Home() {
                     <button onClick={handleMusicUpload} className="p-1.5 rounded-lg hover:bg-white/10 text-white/20 hover:text-white/60 transition-all" title="Upload Ambient Music">
                       <Music2 size={12} />
                     </button>
-                    <button onClick={() => store.setEnableAmbientMusic(!store.enableAmbientMusic)} className={`p-1.5 rounded-lg hover:bg-white/10 transition-all ${store.enableAmbientMusic ? 'text-accent' : 'text-white/20'}`} title="Ambient Mode">
+                    <button onClick={() => store.setEnableAmbientMusic(!store.setEnableAmbientMusic)} className={`p-1.5 rounded-lg hover:bg-white/10 transition-all ${store.enableAmbientMusic ? 'text-accent' : 'text-white/20'}`} title="Ambient Mode">
                       <Waves size={12} />
                     </button>
                   </div>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-1.5 px-2 bg-primary-bg/5 rounded-xl border border-border-color h-9">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2 bg-primary-bg/5 rounded-xl border border-white/5 h-9">
                   <button
                     onClick={() => setShowDownloads(!showDownloads)}
                     className={`p-1.5 rounded-lg transition-all 
@@ -1018,15 +1020,12 @@ export default function Home() {
                     <Puzzle size={14} />
                   </button>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2">
+                <div className="w-[1px] h-6 bg-border-color mx-1" />
+
                 <button onClick={toggleFullscreen} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Toggle Fullscreen">
                   {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                 </button>
-
-
-                <div className="w-[1px] h-6 bg-border-color mx-1" />
 
                 <button onClick={() => setShowSettings(true)} className="p-1 rounded-2xl hover:scale-110 transition-all outline-none border border-white/10 bg-white/5 overflow-hidden">
                   {store.user?.photoURL ? (

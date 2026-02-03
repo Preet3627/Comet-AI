@@ -168,7 +168,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                             Install PWA
                         </button>
                         <div className="p-4 bg-deep-space-accent-neon/5 rounded-2xl border border-deep-space-accent-neon/10 text-[10px] font-medium text-deep-space-accent-neon/60 text-center leading-relaxed">
-                            Version v0.1.5 Stable <br /> (Production Build)
+                            Version v0.1.6 Stable <br /> (Production Build)
                         </div>
                     </div>
                 </div>
@@ -238,7 +238,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                         <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-4">Workspace Tier</p>
                                         <div className="flex items-center gap-3 text-white">
                                             <Zap size={16} className="text-amber-400" />
-                                            <span className="text-sm font-bold">Foundation (Alpha 0.1.5)</span>
+                                            <span className="text-sm font-bold">Foundation (Alpha 0.1.6)</span>
                                         </div>
                                     </div>
                                 </div>

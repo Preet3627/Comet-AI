@@ -204,6 +204,20 @@ export class BrowserAI {
 
         const cleanInput = input.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
 
+        // 1. Common Daily Sites (High Priority)
+        const commonDailySites = [
+            'google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'github.com',
+            'instagram.com', 'linkedin.com', 'reddit.com', 'amazon.com', 'netflix.com',
+            'wikipedia.org', 'gmail.com', 'chatgpt.com', 'deepseek.com', 'perplexity.ai',
+            'apple.com', 'microsoft.com', 'discord.com', 'spotify.com'
+        ];
+
+        for (const site of commonDailySites) {
+            if (site.startsWith(cleanInput) && site !== cleanInput) {
+                return `https://${site}`;
+            }
+        }
+
         // Create a map to track frequency and most recent appearance for each unique URL
         const historyScores = new Map<string, { lastIndex: number, count: number }>();
         history.forEach((url, index) => {
@@ -217,7 +231,7 @@ export class BrowserAI {
             }
         });
 
-        // 1. Prioritized History match (Prefix logic with recency and frequency boost)
+        // 2. Prioritized History match (Prefix logic with recency and frequency boost)
         let bestMatch: { url: string, score: number } | null = null;
         for (const url of history) {
             const cleanUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
@@ -234,7 +248,7 @@ export class BrowserAI {
         }
         if (bestMatch) return bestMatch.url;
 
-        // 2. Smart TLD completion
+        // 3. Smart TLD completion
         if (!input.includes('.') && input.length > 2) {
             const commonTlds = ['.com', '.org', '.net', '.io', '.dev', '.app', '.xyz', '.co', '.us', '.ai'];
             // Prioritize TLDs based on global commonality or even learned user preference (future)

@@ -4,7 +4,11 @@ const contextMenu = contextMenuRaw.default || contextMenuRaw;
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const isDev = !app.isPackaged;
+// Production mode detection:
+// 1. app.isPackaged - true when running from built .exe
+// 2. NODE_ENV === 'production' - for manual testing before build
+// 3. Check if out/index.html exists - fallback to prod if dev server isn't available
+const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const express = require('express');
 const bodyParser = require('body-parser');
 const { getP2PSync } = require('./src/lib/P2PFileSyncService.js'); // Import the P2P service
@@ -12,6 +16,9 @@ const { getP2PSync } = require('./src/lib/P2PFileSyncService.js'); // Import the
 let p2pSyncService = null; // Declare p2pSyncService here
 
 let mainWindow;
+let mcpServer;
+let networkCheckInterval;
+let clipboardCheckInterval;
 let activeTabId = null;
 let isOnline = true;
 const tabViews = new Map(); // Map of tabId -> BrowserView
@@ -313,17 +320,97 @@ function createWindow() {
     paintWhenInitiallyHidden: false
   });
 
+  // CRITICAL: Multiple safeguards to ensure window ALWAYS shows
+  let windowShown = false;
+
+  // PRODUCTION FIX: For packaged apps (.exe), show immediately
+  // In production, we want the window visible even if content is loading
+  // This prevents the "hidden window" bug completely
+  if (app.isPackaged) {
+    console.log('[Main] Packaged app detected - showing window immediately');
+    mainWindow.show();
+    mainWindow.focus();
+    windowShown = true;
+  } else {
+    // Development: Use ready-to-show for smooth loading
+    mainWindow.once('ready-to-show', () => {
+      if (!windowShown) {
+        console.log('[Main] Window ready-to-show event fired');
+        mainWindow.show();
+        mainWindow.focus();
+        windowShown = true;
+      }
+    });
+  }
+
+  // Fallback: Force show window after 3 seconds if not already shown
+  setTimeout(() => {
+    if (!windowShown && mainWindow) {
+      console.log('[Main] Forcing window to show (3s timeout fallback)');
+      mainWindow.show();
+      mainWindow.focus();
+      windowShown = true;
+    }
+  }, 3000);
+
   mainWindow.setMenuBarVisibility(false);
 
   const url = isDev
     ? 'http://localhost:3000'
     : `file://${path.join(__dirname, 'out/index.html')}`;
 
-  mainWindow.loadURL(url);
+  console.log(`[Main] Loading URL: ${url}`);
+  console.log(`[Main] __dirname: ${__dirname}`);
+  console.log(`[Main] isDev: ${isDev}`);
+
+  // Check if out directory exists in production
+  if (!isDev) {
+    const outPath = path.join(__dirname, 'out');
+    const indexPath = path.join(outPath, 'index.html');
+    if (!fs.existsSync(outPath)) {
+      console.error(`[Main] ERROR: Out directory does not exist: ${outPath}`);
+      console.error('[Main] Run "npm run build" before building the Electron app');
+    } else if (!fs.existsSync(indexPath)) {
+      console.error(`[Main] ERROR: index.html does not exist: ${indexPath}`);
+      console.error('[Main] Run "npm run build" to generate the static export');
+    } else {
+      console.log('[Main] Build files verified');
+    }
+  }
+
+  mainWindow.loadURL(url).catch(err => {
+    console.error('[Main] Failed to load URL:', err);
+    // Still show window even if load fails
+    if (!windowShown && mainWindow) {
+      console.log('[Main] Showing window despite load error');
+      mainWindow.show();
+      mainWindow.focus();
+      windowShown = true;
+    }
+  });
+
+  // Handle load failures
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error(`[Main] Page failed to load: ${errorCode} - ${errorDescription}`);
+    // Show window anyway so user can see the error
+    if (!windowShown && mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+      windowShown = true;
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    // Explicitly quit for multi-process environments like Windows
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
 
   // Initial network check
   checkNetworkStatus();
-  setInterval(checkNetworkStatus, 30000);
+  networkCheckInterval = setInterval(checkNetworkStatus, 30000);
 
   // Ad blocker
   ElectronBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) => {
@@ -408,7 +495,7 @@ function createWindow() {
 
   // Clipboard Monitoring
   let lastClipboardText = clipboard.readText();
-  setInterval(() => {
+  clipboardCheckInterval = setInterval(() => {
     const currentText = clipboard.readText();
     if (currentText && currentText !== lastClipboardText) {
       lastClipboardText = currentText;
@@ -1067,28 +1154,26 @@ if (!gotTheLock) {
     }
   });
 
-  // Handle the case where the app is launched with a deep link
-  app.on('ready', () => {
-    const url = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
-    if (url) {
-      // The createWindow function will handle the window creation.
-      // We need to ensure the window is ready before handling the link.
-      mainWindow.webContents.once('did-finish-load', () => {
-        handleDeepLink(url);
-      });
-    }
-  });
 }
 
 
 app.whenReady().then(() => {
+  createWindow();
+
+  // Handle deep link if launched with one
+  const launchUrl = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
+  if (launchUrl) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      handleDeepLink(launchUrl);
+    });
+  }
+
   // Load persistent auth token on startup
   const authPersistentDataPath = path.join(app.getPath('userData'), 'persistent_data', 'auth_token.json');
   if (fs.existsSync(authPersistentDataPath)) {
     try {
       const authData = JSON.parse(fs.readFileSync(authPersistentDataPath, 'utf-8'));
       if (authData && authData.token) {
-        // Ensure mainWindow is ready before sending
         mainWindow.webContents.once('did-finish-load', () => {
           mainWindow.webContents.send('load-auth-token', authData.token);
           console.log('[Main] Loaded and sent persistent auth token to renderer.');
@@ -1109,7 +1194,7 @@ app.whenReady().then(() => {
     res.json(result);
   });
 
-  mcpApp.listen(MCP_SERVER_PORT, () => {
+  mcpServer = mcpApp.listen(MCP_SERVER_PORT, () => {
     console.log(`MCP Server running on port ${MCP_SERVER_PORT}`);
   });
 
@@ -1135,7 +1220,6 @@ app.whenReady().then(() => {
     if (mainWindow) mainWindow.webContents.send('p2p-ice-candidate', { candidate, remoteDeviceId });
   });
 
-  createWindow();
 
 
   // Handle file downloads
@@ -1497,9 +1581,33 @@ ipcMain.handle('create-desktop-shortcut', async (event, { url, title }) => {
 });
 
 app.on('will-quit', () => {
+  // Clear persistent intervals
+  if (networkCheckInterval) clearInterval(networkCheckInterval);
+  if (clipboardCheckInterval) clearInterval(clipboardCheckInterval);
+
+  // Stop MCP server
+  if (mcpServer) {
+    mcpServer.close();
+    console.log('[Main] MCP Server stopped.');
+  }
+
+  // Disconnect P2P service
+  if (p2pSyncService) {
+    p2pSyncService.disconnect();
+    console.log('[Main] P2P Sync Service disconnected.');
+  }
+
+  // Unregister all shortcuts
   globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+// Final fallback to ensure process exits
+app.on('quit', () => {
+  process.exit(0);
 });
