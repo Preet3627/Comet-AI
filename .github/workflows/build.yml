@@ -70,9 +70,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-
-      - name: Install dependencies (Root)
-        run: npm install
+          cache-dependency-path: comet-browser/package-lock.json
 
       - name: Install dependencies (Browser)
         working-directory: comet-browser
