@@ -1,4 +1,4 @@
-# comet_ai
+# comet_browser_mobile
 
 A new Flutter project.
 

@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = comet_ai
+PRODUCT_NAME = comet_browser_mobile
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.cometAi
+PRODUCT_BUNDLE_IDENTIFIER = id.ponsrischool.browser.cometBrowserMobile
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 id.ponsrischool.browser. All rights reserved.

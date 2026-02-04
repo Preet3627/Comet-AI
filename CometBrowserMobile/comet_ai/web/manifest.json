@@ -1,6 +1,6 @@
 {
-    "name": "comet_ai",
-    "short_name": "comet_ai",
+    "name": "comet_browser_mobile",
+    "short_name": "comet_browser_mobile",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

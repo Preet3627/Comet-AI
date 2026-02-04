@@ -1,4 +1,4 @@
-name: comet_ai
+name: comet_browser_mobile
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -34,6 +34,19 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  webview_flutter: ^4.4.2
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  firebase_database: ^10.4.0
+  firebase_storage: ^11.6.0
+  flutter_webrtc: ^0.10.3
+  url_launcher: ^6.2.1
+  shared_preferences: ^2.2.2
+  lucide_icons: ^0.257.0
+  google_sign_in: ^6.1.6
+  provider: ^6.1.1
+  path_provider: ^2.1.1
+  permission_handler: ^11.1.0
 
 dev_dependencies:
   flutter_test:
