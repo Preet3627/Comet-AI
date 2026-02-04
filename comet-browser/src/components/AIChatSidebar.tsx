@@ -43,7 +43,7 @@ ACTION COMMANDS:
 - [SCREENSHOT_AND_ANALYZE] : Takes a screenshot of the current browser view, performs OCR, and analyzes the content visually.
 - [WEB_SEARCH: query] : Performs a real-time web search.
 - [READ_PAGE_CONTENT] : Reads the full text content of the current active browser tab.
-- LIST_OPEN_TABS] : Lists all currently open browser tabs.
+- [LIST_OPEN_TABS] : Lists all currently open browser tabs.
 - [GENERATE_PDF: title | content] : Generates and downloads a PDF with specified title and content.
 - [GENERATE_DIAGRAM: mermaid_code] : Generates a visual diagram using Mermaid.js syntax.
 
@@ -451,28 +451,34 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
           const executeCommands = async (content: string) => {
             let processedText = content;
 
-            // Handle Navigation Chaining
-            const navMatches = content.matchAll(/\[NAVIGATE:\s*(https?:\/\/[^\s\]]+)\]/gi);
+            // Handle Navigation Chaining - Improved reliability
+            const navMatches = Array.from(content.matchAll(/\[NAVIGATE:\s*(https?:\/\/[^\s\]]+)\]/gi));
             for (const match of navMatches) {
               const url = match[1];
+              console.log('[AI Command] Navigating to:', url);
               store.setCurrentUrl(url);
               store.setActiveView('browser');
-              if (window.electronAPI) window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url });
+              if (window.electronAPI) {
+                await window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url });
+              }
               processedText = processedText.replace(match[0], `🌐 **Navigating to ${url}...**`);
               // Small delay between commands to allow browser to react
-              await new Promise(r => setTimeout(r, 800));
+              await new Promise(r => setTimeout(r, 1000));
             }
 
-            // Handle Search Chaining
-            const searchMatches = content.matchAll(/\[SEARCH:\s*(.*?)\]/gi);
+            // Handle Search Chaining - Improved reliability
+            const searchMatches = Array.from(content.matchAll(/\[SEARCH:\s*(.*?)\]/gi));
             for (const match of searchMatches) {
-              const query = match[1];
+              const query = match[1].trim();
+              console.log('[AI Command] Searching for:', query);
               const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
               store.setCurrentUrl(searchUrl);
               store.setActiveView('browser');
-              if (window.electronAPI) window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url: searchUrl });
+              if (window.electronAPI) {
+                await window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url: searchUrl });
+              }
               processedText = processedText.replace(match[0], `🔍 **Searching for:** ${query}`);
-              await new Promise(r => setTimeout(r, 800));
+              await new Promise(r => setTimeout(r, 1000));
             }
 
             return processedText;
@@ -512,22 +518,28 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
           }
 
           if (text.includes('[SCREENSHOT_AND_ANALYZE]')) {
-            if (window.electronAPI && tesseractWorkerRef.current) {
+            if (window.electronAPI) {
               text = text.replace(/\[SCREENSHOT_AND_ANALYZE\]/i, '📸 **Taking screenshot and analyzing...**');
               setMessages(prev => [...prev, { role: 'model', content: text }]); // Display immediate feedback
 
-              const screenshotDataUrl = await window.electronAPI.captureBrowserViewScreenshot();
-              if (screenshotDataUrl) {
-                const { data: { text: ocrText } } = await tesseractWorkerRef.current.recognize(screenshotDataUrl);
-                const screenshotContext = `\n\n[SCREENSHOT_ANALYSIS]: ${ocrText}`;
-                // Re-send the user's original message with screenshot context for AI to analyze
-                await handleSendMessage(userMessage.content + screenshotContext);
-                return; // Prevent further processing of the current AI response
-              } else {
-                text = '⚠️ **Failed to capture screenshot.**';
+              try {
+                const screenshotDataUrl = await window.electronAPI.captureBrowserViewScreenshot();
+                if (screenshotDataUrl && tesseractWorkerRef.current) {
+                  const { data: { text: ocrText } } = await tesseractWorkerRef.current.recognize(screenshotDataUrl);
+                  const screenshotContext = `\n\n[SCREENSHOT_ANALYSIS]: ${ocrText}`;
+                  console.log('[OCR] Extracted text:', ocrText.substring(0, 200));
+                  // Re-send the user's original message with screenshot context for AI to analyze
+                  await handleSendMessage(userMessage.content + screenshotContext);
+                  return; // Prevent further processing of the current AI response
+                } else {
+                  text = tesseractWorkerRef.current ? '⚠️ **Failed to capture screenshot.**' : '⚠️ **OCR engine still initializing, please try again.**';
+                }
+              } catch (err) {
+                console.error('[OCR] Screenshot analysis failed:', err);
+                text = '⚠️ **Screenshot analysis failed. Please try again.**';
               }
             } else {
-              text = '⚠️ **Screenshot analysis not available.**';
+              text = '⚠️ **Screenshot analysis not available in this environment.**';
             }
           }
 
@@ -604,6 +616,22 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
             }
           }
 
+          // YouTube "Content Not Available" Detection and Auto-Fallback
+          if (store.currentUrl.includes('youtube.com') && text.toLowerCase().includes('not available')) {
+            console.log('[YouTube] Content unavailable detected, triggering web search fallback');
+            const videoTopic = store.currentUrl.match(/[?&]v=([^&]+)/)?.[1] || 'video';
+            const searchQuery = `${videoTopic} video alternative`;
+            text += `\n\n⚠️ YouTube content unavailable. Searching for alternatives... [SEARCH: ${searchQuery}]`;
+            // Execute search automatically
+            setTimeout(async () => {
+              const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+              store.setCurrentUrl(searchUrl);
+              if (window.electronAPI) {
+                await window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url: searchUrl });
+              }
+            }, 1000);
+          }
+
           setMessages(prev => [...prev, { role: 'model', content: text }]);
 
           // Trigger Mermaid re-render if diagrams found
@@ -647,7 +675,7 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
 
   return (
     <div
-      className={`flex flex-col h-full gap-4 p-4 bg-black/60 border-r border-transparent transition-all duration-500 z-50 ${isFullScreen ? 'fixed inset-0 z-[999] bg-[#020205] shadow-2xl overflow-hidden' : ''}
+      className={`flex flex-col h-full gap-4 p-4 bg-black/60 border-r border-transparent transition-all duration-500 z-[100] ${isFullScreen ? 'fixed inset-0 z-[9999] bg-[#020205] shadow-2xl overflow-hidden' : ''}
           ${isDragOver ? 'border-accent/50 bg-accent/5' : ''}
         `}
       style={{
@@ -680,7 +708,9 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
         `}</style>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img src="/icon.ico" alt="Comet" className="w-8 h-8 object-contain" />
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-deep-space-accent-neon via-accent to-purple-500 flex items-center justify-center shadow-[0_0_20px_rgba(0,255,255,0.3)]">
+            <Sparkles size={16} className="text-black animate-pulse" />
+          </div>
           <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white text-neon">Comet AI</h2>
           {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}
         </div>
@@ -789,9 +819,13 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
             type="button"
             onClick={(e) => { e.preventDefault(); handleSendMessage(); }}
             disabled={!inputMessage.trim() || isLoading}
-            className="px-6 py-2 rounded-xl bg-deep-space-accent-neon text-deep-space-bg font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_15px_rgba(0,255,255,0.4)]"
+            className="group relative px-5 py-2.5 rounded-full bg-gradient-to-r from-deep-space-accent-neon to-accent overflow-hidden transition-all hover:shadow-[0_0_30px_rgba(0,255,255,0.6)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Launch ➤
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+            <div className="relative flex items-center gap-2 text-black font-bold text-[10px] uppercase tracking-wider">
+              <Send size={12} className="group-hover:rotate-12 transition-transform" />
+              <span>Launch</span>
+            </div>
           </button>
         </div>
         <LLMProviderSettings
@@ -804,7 +838,7 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
         {/* Permission Dialog */}
         <AnimatePresence>
           {permissionPending && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
               <div className="w-full max-w-xs bg-[#0a0a0f] border border-white/10 rounded-2xl p-6 shadow-2xl">
                 <div className="flex items-center gap-3 mb-4 text-accent">
                   <Shield size={20} />
@@ -827,7 +861,7 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 pointer-events-none z-[99999] border-[3px] border-accent/20 shadow-[inset_0_0_100px_rgba(0,255,255,0.1)] animate-pulse"
+              className="fixed inset-0 pointer-events-none z-[999999] border-[3px] border-accent/20 shadow-[inset_0_0_100px_rgba(0,255,255,0.1)] animate-pulse"
             />
           )}
         </AnimatePresence>
@@ -836,7 +870,7 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
         {/* AI Mistake Warning Popup */}
         <AnimatePresence>
           {store.showAiMistakeWarning && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-xl flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[999999] bg-black/80 backdrop-blur-xl flex items-center justify-center p-6">
               <div className="w-full max-w-sm bg-[#0a0a0f] border border-white/10 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-accent to-transparent" />
                 <div className="flex flex-col items-center text-center space-y-6">

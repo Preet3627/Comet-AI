@@ -209,17 +209,21 @@ interface BrowserState {
 
     // Logout
     logout: () => void;
+
+    // Adblocker
+    enableAdblocker: boolean;
+    setEnableAdblocker: (enable: boolean) => void;
 }
 
 export const useAppStore = create<BrowserState>()(
     persist(
         (set, get) => ({
             // URL and navigation
-            currentUrl: 'about:blank',
-            defaultUrl: 'about:blank',
+            currentUrl: 'https://www.google.com',
+            defaultUrl: 'https://www.google.com',
 
             // Tabs
-            tabs: [{ id: 'default', url: 'about:blank', title: 'New Tab' }],
+            tabs: [{ id: 'default', url: 'https://www.google.com', title: 'New Tab' }],
             activeTabId: 'default',
 
             // History and clipboard
@@ -324,6 +328,15 @@ export const useAppStore = create<BrowserState>()(
             backendStrategy: 'firebase',
             customFirebaseConfig: null,
             customMysqlConfig: null,
+
+            // Adblocker
+            enableAdblocker: false,
+            setEnableAdblocker: (enable) => {
+                set({ enableAdblocker: enable });
+                if (window.electronAPI) {
+                    window.electronAPI.toggleAdblocker(enable);
+                }
+            },
 
             // Performance Mode
             performanceMode: 'normal',
@@ -655,8 +668,8 @@ export const useAppStore = create<BrowserState>()(
                     paymentMethods: [],
                     cloudSyncConsent: null,
                     isGuestMode: false,
-                    tabs: [{ id: 'default', url: 'about:blank', title: 'New Tab' }],
-                    currentUrl: 'about:blank',
+                    tabs: [{ id: 'default', url: 'https://www.google.com', title: 'New Tab' }],
+                    currentUrl: 'https://www.google.com',
                 });
             },
 

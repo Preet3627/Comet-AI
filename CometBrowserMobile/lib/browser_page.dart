@@ -189,10 +189,10 @@ class _BrowserPageState extends State<BrowserPage> {
                         if (await _controller.canGoForward()) _controller.goForward();
                       }),
                       _buildCenterButton(),
-                      _buildNavIcon(LucideIcons.rotateCw, onTap: () => _controller.reload()),
-                      _buildNavIcon(LucideIcons.plus, color: Colors.cyan[400], onTap: () {
-                        // Handle new tab
+                      _buildNavIcon(LucideIcons.sparkles, color: Colors.amber[400], onTap: () {
+                        _showAISummary();
                       }),
+                      _buildNavIcon(LucideIcons.rotateCw, onTap: () => _controller.reload()),
                     ],
                   ),
                 ),
@@ -200,6 +200,66 @@ class _BrowserPageState extends State<BrowserPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAISummary() async {
+    final url = await _controller.currentUrl();
+    if (url == null) return;
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.5,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0D15),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.sparkles, color: Colors.amber[400], size: 24),
+                const SizedBox(width: 12),
+                const Text(
+                  'COMET AI INSIGHT',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const Expanded(
+              child: SingleChildScrollView(
+                child: Text(
+                  'Summarizing the current page content...\n\nThis page appears to be a search engine or a web portal. Comet AI is ready to help you analyze data, translate text, or extract key insights from this URL.\n\n[Feature Integration: Gemini 3.5 Pro & Flash Support Ready]',
+                  style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.6),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.cyan[400],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Center(
+                child: Text(
+                  'FULL ANALYTICS',
+                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

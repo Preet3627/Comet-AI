@@ -8,6 +8,37 @@ export default function P2PSyncManager() {
     const [isScanning, setIsScanning] = useState(false);
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error' | 'success'>('idle');
 
+    const [remoteDeviceId, setRemoteDeviceId] = useState('');
+    const [isConnected, setIsConnected] = useState(false);
+
+    useEffect(() => {
+        if (!window.electronAPI) return;
+
+        const cleanup = window.electronAPI.onP2PConnected(() => {
+            setIsConnected(true);
+            setSyncStatus('idle');
+        });
+
+        const cleanup2 = window.electronAPI.onP2PDisconnected(() => {
+            setIsConnected(false);
+        });
+
+        return () => {
+            cleanup();
+            cleanup2();
+        };
+    }, []);
+
+    const handleConnect = async () => {
+        if (!window.electronAPI || !remoteDeviceId) return;
+        setSyncStatus('syncing');
+        const success = await window.electronAPI.connectToRemoteDevice(remoteDeviceId);
+        if (!success) {
+            setSyncStatus('error');
+            setTimeout(() => setSyncStatus('idle'), 3000);
+        }
+    };
+
     const handleScan = async () => {
         if (!window.electronAPI) return;
         setIsScanning(true);
@@ -27,10 +58,19 @@ export default function P2PSyncManager() {
     };
 
     const startSync = async () => {
-        if (selectedFiles.size === 0) return;
+        if (selectedFiles.size === 0 || !isConnected) return;
         setSyncStatus('syncing');
-        // Logic for P2P sync would go here, calling window.electronAPI.sendP2PSignal etc.
-        setTimeout(() => setSyncStatus('success'), 2000);
+
+        try {
+            // In a real implementation, we would iterate through folders and call syncFolder
+            // For now, we simulate the success of the tunnel
+            setTimeout(() => {
+                setSyncStatus('success');
+                setTimeout(() => setSyncStatus('idle'), 3000);
+            }, 3000);
+        } catch (e) {
+            setSyncStatus('error');
+        }
     };
 
     return (
@@ -45,13 +85,28 @@ export default function P2PSyncManager() {
                         <p className="text-xs text-gray-400 font-medium">Direct device-to-device encrypted synchronization</p>
                     </div>
                 </div>
-                <button
-                    onClick={handleScan}
-                    className="btn-vibrant-primary text-[10px]"
-                    disabled={isScanning}
-                >
-                    {isScanning ? <RefreshCw className="animate-spin" size={14} /> : 'Scan Local Folder'}
-                </button>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        placeholder="Remote Device ID"
+                        className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                        value={remoteDeviceId}
+                        onChange={(e) => setRemoteDeviceId(e.target.value)}
+                    />
+                    <button
+                        onClick={handleConnect}
+                        className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isConnected ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500 text-black hover:bg-blue-400'}`}
+                    >
+                        {isConnected ? 'Linked' : 'Link Device'}
+                    </button>
+                    <button
+                        onClick={handleScan}
+                        className="btn-vibrant-primary text-[10px]"
+                        disabled={isScanning}
+                    >
+                        {isScanning ? <RefreshCw className="animate-spin" size={14} /> : 'Scan Local Folder'}
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col gap-4">

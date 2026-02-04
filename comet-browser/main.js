@@ -1,9 +1,11 @@
-const { app, BrowserWindow, ipcMain, session, shell, clipboard, BrowserView, dialog, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, clipboard, BrowserView, dialog, globalShortcut, Menu } = require('electron');
 const contextMenuRaw = require('electron-context-menu');
 const contextMenu = contextMenuRaw.default || contextMenuRaw;
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const Store = require('electron-store');
+const store = new Store();
 // Production mode detection:
 // 1. app.isPackaged - true when running from built .exe
 // 2. NODE_ENV === 'production' - for manual testing before build
@@ -24,6 +26,7 @@ let isOnline = true;
 const tabViews = new Map(); // Map of tabId -> BrowserView
 const audibleTabs = new Set(); // Track tabs currently playing audio
 const suspendedTabs = new Set(); // Track suspended tabs
+let adBlocker = null;
 
 const extensionsPath = path.join(app.getPath('userData'), 'extensions');
 const memoryPath = path.join(app.getPath('userData'), 'ai_memory.jsonl');
@@ -38,16 +41,63 @@ const fetch = require('cross-fetch'); // Make sure cross-fetch is always availab
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const MCP_SERVER_PORT = process.env.MCP_SERVER_PORT || 3001;
+
+// Global Context Menu for all windows and views
+contextMenu({
+  showSaveImageAs: true,
+  showDragLink: true,
+  showInspectElement: true,
+  showLookUpSelection: true,
+  showSearchWithGoogle: true,
+  prepend: (defaultActions, params, browserWindow) => [
+    {
+      label: 'Open in New Tab',
+      visible: params.linkURL.length > 0,
+      click: () => {
+        if (mainWindow) mainWindow.webContents.send('add-new-tab', params.linkURL);
+      }
+    },
+    {
+      label: 'Search Comet for "{selection}"',
+      visible: params.selectionText.trim().length > 0,
+      click: () => {
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`;
+        if (mainWindow) mainWindow.webContents.send('add-new-tab', searchUrl);
+      }
+    }
+  ]
+});
 let mcpServerPort = MCP_SERVER_PORT;
 // Custom protocol for authentication
 const PROTOCOL = 'comet-browser';
 
-if (process.defaultApp) {
-  if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
-  }
+// Single Instance Lock
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
 } else {
-  app.setAsDefaultProtocolClient(PROTOCOL);
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+
+      // Handle deep links from protocol
+      const url = commandLine.pop();
+      if (url && url.startsWith(`${PROTOCOL}://`)) {
+        mainWindow.webContents.send('auth-callback', url);
+      }
+    }
+  });
+
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient(PROTOCOL);
+  }
 }
 
 // Function to check network status
@@ -93,7 +143,17 @@ const llmGenerateHandler = async (messages, options = {}) => {
       let modelName = 'gemini-1.5-flash';
       let generationConfigOverrides = {};
 
-      if (providerId.includes('2.0-pro')) {
+      if (providerId.includes('3-pro')) {
+        modelName = 'gemini-3-pro';
+      } else if (providerId.includes('3-flash')) {
+        modelName = 'gemini-3-flash';
+      } else if (providerId.includes('3-deep-think')) {
+        modelName = 'gemini-3-deep-think';
+      } else if (providerId.includes('2.5-pro')) {
+        modelName = 'gemini-2.5-pro';
+      } else if (providerId.includes('2.5-flash')) {
+        modelName = 'gemini-2.5-flash';
+      } else if (providerId.includes('2.0-pro')) {
         modelName = 'gemini-2.0-pro-exp-02-05';
       } else if (providerId.includes('2.0-flash-lite')) {
         modelName = 'gemini-2.0-flash-lite-preview-02-05';
@@ -414,13 +474,8 @@ function createWindow() {
 
   // Ad blocker
   ElectronBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) => {
-    try {
-      blocker.enableBlockingInSession(session.defaultSession);
-      console.log('Ad blocker enabled.');
-    } catch (e) {
-      console.warn("Ad blocker requires Electron 29+. Current version may not support registerPreloadScript:", e.message);
-      // Ad blocking not available in this Electron version
-    }
+    adBlocker = blocker;
+    console.log('Ad blocker initialized (waiting for user activation).');
   }).catch(e => console.error("Ad blocker failed to load:", e));
 
   // Handle external links
@@ -538,7 +593,40 @@ async function _scanDirectoryRecursive(currentPath, types) {
 }
 
 // IPC Handlers
+ipcMain.on('open-menu', () => {
+  const menu = Menu.buildFromTemplate([
+    { label: 'Reload', click: () => { const v = tabViews.get(activeTabId); if (v) v.webContents.reload(); } },
+    { label: 'Back', click: () => { const v = tabViews.get(activeTabId); if (v && v.webContents.canGoBack()) v.webContents.goBack(); } },
+    { label: 'Forward', click: () => { const v = tabViews.get(activeTabId); if (v && v.webContents.canGoForward()) v.webContents.goForward(); } },
+    { type: 'separator' },
+    { label: 'Save Page As...', click: () => { if (mainWindow) mainWindow.webContents.send('execute-shortcut', 'save-page'); } },
+    { label: 'Print...', click: () => { const v = tabViews.get(activeTabId); if (v) v.webContents.print(); } },
+    { type: 'separator' },
+    { label: 'Settings', click: () => { if (mainWindow) mainWindow.webContents.send('execute-shortcut', 'open-settings'); } },
+    { label: 'DevTools', click: () => { const v = tabViews.get(activeTabId); if (v) v.webContents.openDevTools({ mode: 'detach' }); } },
+  ]);
+  menu.popup({ window: mainWindow });
+});
+
 ipcMain.handle('get-is-online', () => isOnline);
+
+ipcMain.on('toggle-adblocker', (event, enable) => {
+  if (!adBlocker) {
+    console.warn('Ad blocker not yet initialized.');
+    return;
+  }
+  try {
+    if (enable) {
+      adBlocker.enableBlockingInSession(session.defaultSession);
+      console.log('Ad blocker enabled by user.');
+    } else {
+      adBlocker.disableBlockingInSession(session.defaultSession);
+      console.log('Ad blocker disabled by user.');
+    }
+  } catch (e) {
+    console.error('Failed to toggle ad blocker:', e);
+  }
+});
 
 
 ipcMain.on('show-webview', () => showWebview());
@@ -598,6 +686,27 @@ ipcMain.handle('delete-persistent-data', async (event, key) => {
     console.error('Failed to delete persistent data:', error);
     return { success: false, error: error.message };
   }
+});
+
+// Secure Auth Storage (using electron-store)
+ipcMain.on('save-auth-token', (event, { token, user }) => {
+  store.set('auth_token', token);
+  store.set('user_info', user);
+  console.log('[Auth] Token and user info saved to secure storage');
+});
+
+ipcMain.handle('get-auth-token', () => {
+  return store.get('auth_token');
+});
+
+ipcMain.handle('get-user-info', () => {
+  return store.get('user_info');
+});
+
+ipcMain.on('clear-auth', () => {
+  store.delete('auth_token');
+  store.delete('user_info');
+  console.log('[Auth] Auth data cleared');
 });
 
 // Password Manager Logic
@@ -954,20 +1063,21 @@ ipcMain.handle('load-vector-store', async () => {
 });
 
 const llmProviders = [
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  { id: 'gemini-3-pro', name: 'Gemini 3 Pro' },
+  { id: 'gemini-3-flash', name: 'Gemini 3 Flash' },
+  { id: 'gemini-3-deep-think', name: 'Gemini 3 Deep Think' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
   { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro' },
   { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' },
-  { id: 'gpt-4o', name: 'GPT-4o (Omni)' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-  { id: 'o1', name: 'OpenAI o1 (Reasoning)' },
-  { id: 'o1-mini', name: 'OpenAI o1-mini' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  { id: 'gpt-4o', name: 'GPT-4o' },
+  { id: 'o1', name: 'OpenAI o1' },
+  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet' },
   { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet' },
-  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet (Thinking)' },
   { id: 'ollama', name: 'Ollama (Local AI)' },
-  { id: 'groq-mixtral', name: 'Groq LPU (Mixtral 8x7b)' },
+  { id: 'groq-mixtral', name: 'Groq LPU' },
   { id: 'openai-compatible', name: 'OpenAI Compatible' }
 ];
 let activeLlmProvider = 'gemini-1.5-flash';
@@ -1107,55 +1217,25 @@ ipcMain.handle('ollama-list-models', async () => {
   });
 });
 
-// Deep Linking and Singleton Instance Lock
-const handleDeepLink = (url) => {
+// Deep Linking and persist handling on startup (merged into single instance lock above)
+function handleDeepLink(url) {
   if (!mainWindow) return;
   try {
     console.log('[Main] Handling Deep Link:', url);
     const parsedUrl = new URL(url);
     if (parsedUrl.protocol === `${PROTOCOL}:`) {
-      // Always send the full URL to any component listening for the callback
       mainWindow.webContents.send('auth-callback', url);
 
-      // Extract token for legacy or direct sign-in handlers
-      const token = parsedUrl.searchParams.get('token') || parsedUrl.searchParams.get('id_token');
+      const token = parsedUrl.searchParams.get('token') || parsedUrl.searchParams.get('id_token') || parsedUrl.searchParams.get('auth_token');
       if (token) {
-        mainWindow.webContents.send('auth-token-received', token);
-        // Save the token persistently
-        const persistentDataPath = path.join(app.getPath('userData'), 'persistent_data');
-        if (!fs.existsSync(persistentDataPath)) {
-          fs.mkdirSync(persistentDataPath, { recursive: true });
-        }
-        const filePath = path.join(persistentDataPath, `auth_token.json`);
-        fs.writeFileSync(filePath, JSON.stringify({ token: token, timestamp: Date.now() }), 'utf-8');
-        console.log('[Main] Auth token saved persistently.');
+        store.set('auth_token', token);
+        console.log('[Main] Auth token saved to secure storage.');
       }
     }
   } catch (e) {
     console.error('Failed to parse deep link:', e);
   }
-};
-
-const gotTheLock = app.requestSingleInstanceLock();
-
-if (!gotTheLock) {
-  app.quit();
-} else {
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // Someone tried to run a second instance, we should focus our window.
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-    // Handle the deep link URL from the command line
-    const url = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`));
-    if (url) {
-      handleDeepLink(url);
-    }
-  });
-
 }
-
 
 app.whenReady().then(() => {
   createWindow();
@@ -1168,21 +1248,16 @@ app.whenReady().then(() => {
     });
   }
 
-  // Load persistent auth token on startup
-  const authPersistentDataPath = path.join(app.getPath('userData'), 'persistent_data', 'auth_token.json');
-  if (fs.existsSync(authPersistentDataPath)) {
-    try {
-      const authData = JSON.parse(fs.readFileSync(authPersistentDataPath, 'utf-8'));
-      if (authData && authData.token) {
-        mainWindow.webContents.once('did-finish-load', () => {
-          mainWindow.webContents.send('load-auth-token', authData.token);
-          console.log('[Main] Loaded and sent persistent auth token to renderer.');
-        });
-      }
-    } catch (e) {
-      console.error('[Main] Failed to load persistent auth token:', e);
+  // Load persistent auth token on startup from secure storage
+  mainWindow.webContents.once('did-finish-load', () => {
+    const savedToken = store.get('auth_token');
+    const savedUser = store.get('user_info');
+    if (savedToken) {
+      mainWindow.webContents.send('load-auth-token', savedToken);
+      if (savedUser) mainWindow.webContents.send('load-user-info', savedUser);
+      console.log('[Main] Loaded and sent persistent auth data to renderer.');
     }
-  }
+  });
 
   // MCP Server Setup
   const mcpApp = express();
@@ -1194,8 +1269,8 @@ app.whenReady().then(() => {
     res.json(result);
   });
 
-  mcpServer = mcpApp.listen(MCP_SERVER_PORT, () => {
-    console.log(`MCP Server running on port ${MCP_SERVER_PORT}`);
+  mcpServer = mcpApp.listen(mcpServerPort, () => {
+    console.log(`MCP Server running on port ${mcpServerPort}`);
   });
 
   p2pSyncService = getP2PSync('main-process-device');
@@ -1220,20 +1295,11 @@ app.whenReady().then(() => {
     if (mainWindow) mainWindow.webContents.send('p2p-ice-candidate', { candidate, remoteDeviceId });
   });
 
-
-
   // Handle file downloads
   session.defaultSession.on('will-download', (event, item, webContents) => {
-    // Force download to Downloads folder to avoid dialog issues
     const fileName = item.getFilename();
     const downloadsPath = app.getPath('downloads');
     const saveDataPath = path.join(downloadsPath, fileName);
-
-    // event.preventDefault(); // COMMENTED OUT to ensure download proceeds.
-    // Actually, calling item.setSavePath suppresses the dialog automatically.
-    // So we should NOT call preventDefault if we want it to run.
-    // But let's just remove the preventDefault line or comment it out clearly.
-    // event.preventDefault();
 
     console.log(`[Main] Starting download: ${fileName} to ${saveDataPath}`);
 
@@ -1248,10 +1314,8 @@ app.whenReady().then(() => {
       if (state === 'interrupted') {
         console.log('Download is interrupted but can be resumed');
       } else if (state === 'progressing') {
-        if (item.isPaused()) {
-          console.log('Download is paused');
-        } else {
-          // console.log(`Received bytes: ${item.getReceivedBytes()}`);
+        if (!item.isPaused()) {
+          // progress updates could be sent here
         }
       }
     });
@@ -1282,6 +1346,10 @@ app.whenReady().then(() => {
     { accelerator: 'CommandOrControl+B', action: 'toggle-sidebar' },
     { accelerator: 'CommandOrControl+,', action: 'open-settings' },
     { accelerator: 'CommandOrControl+Shift+N', action: 'new-incognito-tab' },
+    { accelerator: 'CommandOrControl+=', action: 'zoom-in' },
+    { accelerator: 'CommandOrControl+Plus', action: 'zoom-in' },
+    { accelerator: 'CommandOrControl+-', action: 'zoom-out' },
+    { accelerator: 'CommandOrControl+0', action: 'zoom-reset' },
   ];
 
   shortcuts.forEach(s => {
@@ -1290,6 +1358,23 @@ app.whenReady().then(() => {
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.focus();
+
+          if (s.action === 'zoom-in' || s.action === 'zoom-out' || s.action === 'zoom-reset') {
+            const view = tabViews.get(activeTabId);
+            if (view) {
+              const currentZoom = view.webContents.getZoomFactor();
+              let newZoom = currentZoom;
+              if (s.action === 'zoom-in') newZoom += 0.1;
+              else if (s.action === 'zoom-out') newZoom -= 0.1;
+              else if (s.action === 'zoom-reset') newZoom = 1.0;
+
+              if (newZoom >= 0.5 && newZoom <= 3.0) {
+                view.webContents.setZoomFactor(newZoom);
+              }
+            }
+            return;
+          }
+
           mainWindow.webContents.send('execute-shortcut', s.action);
         }
       });

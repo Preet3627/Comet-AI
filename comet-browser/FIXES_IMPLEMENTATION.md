@@ -204,3 +204,17 @@ This will ensure all popups appear above web content by hiding the BrowserView w
 
 **Needs Testing**: 🧪
 - BrowserView resize when sidebar changes (should work, needs verification)
+
+---
+
+### 7. ✅ Fix Store Constructor Error (Main Process Crash) **[COMPLETED]**
+**Problem**: Application crashes on startup with `TypeError: Store is not a constructor` in `main.js`.
+
+**Root Cause**: `electron-store` version 11+ is ESM-only and cannot be used with `require()` in the CommonJS `main.js` file.
+
+**Solution Implemented**:
+- ✅ Downgraded `electron-store` to version 8.1.0 in `package.json`.
+- ✅ Ran `npm install` to apply the change.
+- ✅ Validated that version 8.x supports CommonJS `require`.
+
+**Result**: Application should now launch without the "Store is not a constructor" error.

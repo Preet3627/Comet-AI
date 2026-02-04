@@ -92,6 +92,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('load-auth-token', subscription);
     return () => ipcRenderer.removeListener('load-auth-token', subscription);
   },
+  saveAuthToken: (args) => ipcRenderer.send('save-auth-token', args),
+  getAuthToken: () => ipcRenderer.invoke('get-auth-token'),
+  getUserInfo: () => ipcRenderer.invoke('get-user-info'),
+  clearAuth: () => ipcRenderer.send('clear-auth'),
 
   // Dev-MCP & Analytics
   sendMcpCommand: (command, data) => ipcRenderer.invoke('mcp-command', { command, data }),
@@ -111,6 +115,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleExtension: (id) => ipcRenderer.invoke('toggle-extension', id),
   uninstallExtension: (id) => ipcRenderer.invoke('uninstall-extension', id),
   openExtensionDir: () => ipcRenderer.send('open-extension-dir'),
+  toggleAdblocker: (enable) => ipcRenderer.send('toggle-adblocker', enable),
 
   // Window Controls
   minimizeWindow: () => ipcRenderer.send('minimize-window'),

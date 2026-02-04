@@ -193,14 +193,14 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                     <div className="flex items-center gap-8 relative z-10">
                                         <div className="relative">
                                             {store.user?.photoURL ? (
-                                                <Image src={store.user.photoURL} alt="Profile" width={100} height={100} className="rounded-[2.5rem] border-2 border-deep-space-accent-neon/20 shadow-2xl" />
+                                                <Image src={store.user.photoURL} alt="Profile" width={64} height={64} className="rounded-full border-2 border-deep-space-accent-neon/20 shadow-2xl" />
                                             ) : (
-                                                <div className="w-[100px] h-[100px] rounded-[2.5rem] bg-white/5 border-2 border-white/10 flex items-center justify-center text-white/20">
-                                                    <UserIcon size={40} />
+                                                <div className="w-[64px] h-[64px] rounded-full bg-white/5 border-2 border-white/10 flex items-center justify-center text-white/20">
+                                                    <UserIcon size={24} />
                                                 </div>
                                             )}
-                                            <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-deep-space-accent-neon flex items-center justify-center text-black border-4 border-[#020205]">
-                                                <ShieldCheck size={14} />
+                                            <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-deep-space-accent-neon flex items-center justify-center text-black border-2 border-[#020205]">
+                                                <ShieldCheck size={12} />
                                             </div>
                                         </div>
                                         <div className="flex-1">
@@ -299,6 +299,22 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                                 type="checkbox"
                                                 checked={store.enableAIAssist}
                                                 onChange={() => store.setEnableAIAssist(!store.enableAIAssist)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="relative w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full peer peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-space-accent-neon" />
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-bold text-white mb-1">Ad Blocker</p>
+                                            <p className="text-xs text-white/30">Enable high-performance ad and tracker blocking.</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={store.enableAdblocker}
+                                                onChange={() => store.setEnableAdblocker(!store.enableAdblocker)}
                                                 className="sr-only peer"
                                             />
                                             <div className="relative w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full peer peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-space-accent-neon" />

@@ -331,6 +331,24 @@ export default function Home() {
         e.preventDefault();
         setShowTabSwitcher(true);
       }
+
+      if (e.ctrlKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          window.electronAPI?.changeZoom(-1);
+        } else if (e.key === '-') {
+          e.preventDefault();
+          window.electronAPI?.changeZoom(1);
+        } else if (e.key === '0') {
+          e.preventDefault();
+          // Reset zoom logic - we'll handle this in main.js
+          const shortcuts = [
+            { accelerator: 'CommandOrControl+0', action: 'zoom-reset' }
+          ];
+          // Since the main process already handles zoom-reset via globalShortcut, 
+          // we just need to make sure the key event doesn't propagate if we're in the browser.
+        }
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -441,6 +459,11 @@ export default function Home() {
         store.setIsOnline(onlineStatus);
         console.log("Initial online status:", onlineStatus);
       });
+
+      // Sync Adblocker state on startup
+      if (store.enableAdblocker) {
+        window.electronAPI.toggleAdblocker(true);
+      }
     }
   }, []);
 
@@ -1032,14 +1055,14 @@ export default function Home() {
                     <img
                       src={store.user.photoURL}
                       alt="Profile"
-                      className="w-8 h-8 rounded-full object-cover shadow-[0_0_10px_rgba(56,189,248,0.3)]"
+                      className="w-6 h-6 rounded-full object-cover shadow-[0_0_10px_rgba(56,189,248,0.3)]"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(store.user?.displayName || 'User')}&background=0D8ABC&color=fff`;
                       }}
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-primary-bg/5 border border-border-color flex items-center justify-center text-secondary-text">
-                      <UserIcon size={16} />
+                    <div className="w-6 h-6 rounded-full bg-primary-bg/5 border border-border-color flex items-center justify-center text-secondary-text">
+                      <UserIcon size={14} />
                     </div>
                   )}
                 </button>

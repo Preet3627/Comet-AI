@@ -143,6 +143,7 @@ declare global {
             onAIChatInputText: (callback: (text: string) => void) => () => void;
             translateWebsite: (args: { targetLanguage: string }) => Promise<{ success?: boolean; error?: string }>;
             onTriggerTranslationDialog: (callback: () => void) => () => void;
+            toggleAdblocker: (enable: boolean) => void;
         };
     }
 }

@@ -17,7 +17,8 @@
     "test:prod": "node test-production.js",
     "prebuild-electron": "node verify-build.js",
     "build-electron": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win --x64"
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run build && electron-builder --mac"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.13.4",
@@ -27,6 +28,7 @@
     "body-parser": "^2.2.2",
     "cross-fetch": "^4.1.0",
     "electron-context-menu": "^4.1.1",
+    "electron-store": "^8.1.0",
     "es-errors": "^1.3.0",
     "express": "^5.2.1",
     "firebase": "^12.7.0",
@@ -103,6 +105,13 @@
       "icon": "icon.ico",
       "target": [
         "nsis"
+      ]
+    },
+    "mac": {
+      "icon": "icon.ico",
+      "target": [
+        "dmg",
+        "zip"
       ]
     },
     "directories": {
