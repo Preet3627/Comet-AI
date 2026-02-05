@@ -745,16 +745,16 @@ export default function Home() {
 
   useEffect(() => {
     if (window.electronAPI) {
-      // Hide BrowserView only for truly opaque, full-screen overlays
-      const hasOpaqueOverlay = showSettings || activeManager !== null || showCamera;
+      // Only hide BrowserView for full-screen overlays that completely cover the page
+      // Small overlays (context menu, AI overview, etc.) will use z-[9999] to appear on top
+      const hasFullScreenOverlay = showSettings || activeManager !== null || showCamera;
 
-      if (hasOpaqueOverlay) {
+      if (hasFullScreenOverlay) {
         window.electronAPI.hideAllViews();
         return;
       }
 
-      // If sidebar or other popups are open, we just resize or let them overlay
-      // Note: Sidebar is handled by calculateBounds returning a smaller width
+      // Keep BrowserView visible for browser mode, small overlays will layer on top
       if (store.activeView === 'browser' && store.activeTabId) {
         const bounds = calculateBounds();
         window.electronAPI.activateView({ tabId: store.activeTabId, bounds });
@@ -762,7 +762,14 @@ export default function Home() {
         window.electronAPI.hideAllViews();
       }
     }
-  }, [store.activeTabId, store.activeView, calculateBounds, showSettings, activeManager, showCamera]);
+  }, [
+    store.activeTabId,
+    store.activeView,
+    calculateBounds,
+    showSettings,
+    activeManager,
+    showCamera
+  ]);
 
   useEffect(() => {
     if (window.electronAPI) {

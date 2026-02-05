@@ -555,7 +555,19 @@ export const useAppStore = create<BrowserState>()(
                 const id = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
                 if (window.electronAPI) {
+                    // Create the view first
                     window.electronAPI.createView({ tabId: id, url: finalUrl });
+
+                    // Activate it immediately with default bounds
+                    // The bounds will be updated by the UI component
+                    setTimeout(() => {
+                        if (window.electronAPI) {
+                            window.electronAPI.activateView({
+                                tabId: id,
+                                bounds: { x: 0, y: 40, width: 1200, height: 760 }
+                            });
+                        }
+                    }, 100);
                 }
 
                 set((state) => {

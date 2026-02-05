@@ -58,6 +58,9 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Precache iOS
+        run: flutter precache --ios
+
       - name: Install dependencies
         working-directory: CometBrowserMobile/comet_ai
         run: flutter pub get
@@ -66,16 +69,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: CometBrowserMobile/comet_ai/ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('CometBrowserMobile/comet_ai/ios/Podfile.lock') }}
+          # Use hash of Podfile if lock is missing, or just a default key
+          key: ${{ runner.os }}-pods-${{ hashFiles('CometBrowserMobile/comet_ai/ios/Podfile.lock', 'CometBrowserMobile/comet_ai/ios/Podfile') }}
           restore-keys: |
             ${{ runner.os }}-pods-
 
       - name: Build iOS
         working-directory: CometBrowserMobile/comet_ai
         run: |
-          # Increase memory limit for node if needed (though not directly for flutter, helpful if scripts run)
+          # Use increased memory limit for the linker
           export NODE_OPTIONS="--max-old-space-size=4096"
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign -v
 
       - name: Upload iOS App
         uses: actions/upload-artifact@v4

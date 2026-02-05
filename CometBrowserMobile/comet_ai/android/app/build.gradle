@@ -20,6 +20,10 @@ android {
         jvmTarget = "17"
     }
 
+    kotlin {
+        jvmToolchain(17)
+    }
+
 
     defaultConfig {
         applicationId = "com.example.comet_ai"

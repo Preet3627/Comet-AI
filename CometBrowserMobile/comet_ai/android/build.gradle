@@ -4,7 +4,6 @@ allprojects {
         mavenCentral()
     }
 
-    
     tasks.withType(JavaCompile).configureEach {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -55,11 +54,42 @@ subprojects {
         }
     }
 
+    def configureProject = { p ->
+        configureNamespace(p)
+        if (p.hasProperty('android')) {
+            p.android {
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        
+        // Apply toolchain to all Kotlin projects
+        p.plugins.withType(org.jetbrains.kotlin.gradle.plugin.KotlinBasePlugin) {
+            p.kotlin {
+                jvmToolchain(17)
+            }
+        }
+    }
+
     if (project.state.executed) {
-        configureNamespace(project)
+        configureProject(project)
     } else {
         project.afterEvaluate { p ->
-            configureNamespace(p)
+            configureProject(p)
+        }
+    }
+
+    // fallback for any remaining tasks
+    tasks.withType(JavaCompile).configureEach {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
         }
     }
 }
