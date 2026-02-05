@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:audio_service/audio_service.dart';
+// import 'package:audio_service/audio_service.dart'; // DISABLED FOR iOS BUILD FIX
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
@@ -37,30 +37,17 @@ void main() async {
   const initSettings = InitializationSettings(android: androidSettings);
   await flutterLocalNotificationsPlugin.initialize(initSettings);
 
-  // Init Audio Service
-  final AudioHandler audioHandler = await AudioService.init(
-    builder: () => MusicService(),
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.example.comet_ai.channel.audio',
-      androidNotificationChannelName: 'Comet Music',
-      androidNotificationOngoing: true,
-    ),
-  );
-
-  // Cast to concrete type for specific methods (like fetchSongs) that are not in AudioHandler interface
-  // safely if we know the builder returns MusicService.
-  final musicService = audioHandler as MusicService;
+  // Init Audio Service - TEMPORARILY DISABLED FOR iOS BUILD FIX
+  // See: IOS_BUILD_FIX.md for re-enabling instructions
+  final musicService = MusicService();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SyncService()),
 
-        // Provide as MusicService so UI can access specific methods
+        // Provide stub MusicService (audio features temporarily disabled)
         Provider<MusicService>.value(value: musicService),
-
-        // Also provide as AudioHandler if needed for standard controls
-        Provider<AudioHandler>.value(value: audioHandler),
       ],
       child: const CometApp(),
     ),

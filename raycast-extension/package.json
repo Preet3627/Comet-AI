@@ -1,0 +1,60 @@
+{
+    "name": "comet-browser",
+    "title": "Comet Browser",
+    "description": "Control Comet Browser from Raycast",
+    "icon": "icon.png",
+    "author": "comet",
+    "license": "MIT",
+    "commands": [
+        {
+            "name": "search-tabs",
+            "title": "Search Tabs",
+            "description": "Search and switch between open tabs",
+            "mode": "view"
+        },
+        {
+            "name": "new-tab",
+            "title": "New Tab",
+            "description": "Open a new tab with URL",
+            "mode": "view"
+        },
+        {
+            "name": "search-history",
+            "title": "Search History",
+            "description": "Search browsing history",
+            "mode": "view"
+        },
+        {
+            "name": "ai-search",
+            "title": "AI Search",
+            "description": "Search with AI assistance",
+            "mode": "view"
+        },
+        {
+            "name": "bookmarks",
+            "title": "Bookmarks",
+            "description": "Search and open bookmarks",
+            "mode": "view"
+        },
+        {
+            "name": "quick-actions",
+            "title": "Quick Actions",
+            "description": "Quick browser actions",
+            "mode": "view"
+        }
+    ],
+    "dependencies": {
+        "@raycast/api": "^1.65.0",
+        "@raycast/utils": "^1.12.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.10.0",
+        "@types/react": "^18.2.45",
+        "typescript": "^5.3.3"
+    },
+    "scripts": {
+        "build": "ray build -e dist",
+        "dev": "ray develop",
+        "lint": "ray lint"
+    }
+}

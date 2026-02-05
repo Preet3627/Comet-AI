@@ -1,3 +1,9 @@
+// ⚠️ EXPERIMENTAL FEATURE - TEMPORARILY DISABLED
+// This feature requires audio packages that are currently disabled for iOS build compatibility
+// Packages needed: just_audio, audio_service, on_audio_query
+// See: IOS_BUILD_FIX.md for re-enabling instructions
+
+/* DISABLED FOR iOS BUILD FIX
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:audio_service/audio_service.dart';
@@ -209,5 +215,22 @@ class _DynamicIslandState extends State<DynamicIsland>
         borderRadius: BorderRadius.circular(2),
       ),
     );
+  }
+}
+END OF DISABLED CODE */
+
+import 'package:flutter/material.dart';
+import '../services/music_service.dart';
+
+// Stub widget to prevent compilation errors
+class DynamicIsland extends StatelessWidget {
+  final MusicService musicService;
+
+  const DynamicIsland({super.key, required this.musicService});
+
+  @override
+  Widget build(BuildContext context) {
+    // Return empty widget since music service is disabled
+    return const SizedBox.shrink();
   }
 }

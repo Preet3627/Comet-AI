@@ -65,12 +65,8 @@ subprojects {
             }
         }
         
-        // Apply toolchain to all Kotlin projects
-        p.plugins.withType(org.jetbrains.kotlin.gradle.plugin.KotlinBasePlugin) {
-            p.kotlin {
-                jvmToolchain(17)
-            }
-        }
+        // Kotlin JVM target is configured via kotlinOptions.jvmTarget below
+        // jvmToolchain removed to avoid 'languageVersion is final' error
     }
 
     if (project.state.executed) {

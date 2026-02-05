@@ -67,37 +67,33 @@ const MusicVisualizer = ({ color = 'rgb', isPlaying = false }: { color?: string,
 
   return (
     <motion.div
-      initial={{ width: 0, scale: 0.8, opacity: 0 }}
-      animate={{ width: 'auto', scale: 1, opacity: 1 }}
-      className="flex items-center gap-3 px-3 py-1.5 bg-black/60 backdrop-blur-3xl rounded-full border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] h-8 group hover:scale-105 transition-all duration-500 origin-right mr-2"
+      initial={{ width: 0, opacity: 0 }}
+      animate={{ width: 'auto', opacity: 1 }}
+      exit={{ width: 0, opacity: 0 }}
+      className="flex items-center gap-1.5 px-2 py-1 bg-deep-space-accent-neon/5 backdrop-blur-sm rounded-lg border border-deep-space-accent-neon/20 h-7 group hover:bg-deep-space-accent-neon/10 transition-all duration-300 cursor-pointer"
+      title="Audio playing"
     >
-      <div className="flex gap-[3px] items-center h-4">
-        {[...Array(8)].map((_, i) => (
+      <div className="flex gap-[2px] items-center h-3.5">
+        {[...Array(5)].map((_, i) => (
           <motion.div
             key={i}
             animate={{
-              height: [4, 18, 6, 14, 4],
+              height: [3, 12, 5, 10, 3],
               backgroundColor: color === 'rgb'
-                ? ['#00ffff', '#ff00ff', '#7000ff', '#00ff94', '#00ffff']
+                ? ['#38bdf8', '#818cf8', '#38bdf8']
                 : [color, color, color]
             }}
             transition={{
-              duration: 0.4 + Math.random() * 0.4,
+              duration: 0.5 + Math.random() * 0.3,
               repeat: Infinity,
               ease: "easeInOut",
-              delay: i * 0.08,
+              delay: i * 0.1,
             }}
-            className="w-[2.5px] rounded-full"
+            className="w-[2px] rounded-full"
           />
         ))}
       </div>
-      <div className="flex flex-col justify-center border-l border-white/10 pl-3">
-        <span className="text-[7px] font-black tracking-[0.2em] text-deep-space-accent-neon opacity-80 uppercase leading-none">Comet Audio</span>
-        <span className="text-[6px] font-bold text-white/40 uppercase leading-none mt-1 flex items-center gap-1">
-          <div className="w-1 h-1 rounded-full bg-deep-space-accent-neon animate-pulse" />
-          Analyzing
-        </span>
-      </div>
+      <Music2 size={12} className="text-deep-space-accent-neon/60" />
     </motion.div>
   );
 };
