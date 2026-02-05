@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.comet_ai"
-    compileSdk 36
+    compileSdk 36  // Latest Android API level
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

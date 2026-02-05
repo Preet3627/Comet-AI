@@ -57,17 +57,15 @@ subprojects {
     def configureProject = { p ->
         configureNamespace(p)
         if (p.hasProperty('android')) {
+            // Only configure compileOptions, not compileSdk
+            // compileSdk must be set in individual module build.gradle files
             p.android {
-                compileSdkVersion 36
                 compileOptions {
                     sourceCompatibility JavaVersion.VERSION_17
                     targetCompatibility JavaVersion.VERSION_17
                 }
             }
         }
-        
-        // Kotlin JVM target is configured via kotlinOptions.jvmTarget below
-        // jvmToolchain removed to avoid 'languageVersion is final' error
     }
 
     if (project.state.executed) {

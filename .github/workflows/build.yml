@@ -17,8 +17,8 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: 'temurin'
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -38,13 +38,15 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/pubspec.lock', '**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Upgrade dependencies
+      - name: Install Dart dependencies
         working-directory: CometBrowserMobile/comet_ai
-        run: flutter pub upgrade --major-versions
+        run: |
+          flutter pub get
+          flutter pub upgrade --major-versions
 
       - name: Build APK
         working-directory: CometBrowserMobile/comet_ai
@@ -78,24 +80,30 @@ jobs:
       - name: Precache iOS
         run: flutter precache --ios
 
-      - name: Install dependencies
+      - name: Install Dart dependencies
         working-directory: CometBrowserMobile/comet_ai
-        run: flutter pub upgrade --major-versions
+        run: |
+          flutter pub get
+          flutter pub upgrade --major-versions
 
-      - name: Cache CocoaPods
+      - name: Cache CocoaPods Dependencies
         id: cocoapods-cache
         uses: actions/cache@v4
         with:
-          path: CometBrowserMobile/comet_ai/ios/Pods
-          # Use hash of Podfile if lock is missing, or just a default key
-          key: ${{ runner.os }}-pods-${{ hashFiles('CometBrowserMobile/comet_ai/ios/Podfile.lock', 'CometBrowserMobile/comet_ai/ios/Podfile') }}
+          path: |
+            CometBrowserMobile/comet_ai/ios/Pods
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-pods-${{ hashFiles('CometBrowserMobile/comet_ai/pubspec.lock') }}-${{ hashFiles('CometBrowserMobile/comet_ai/ios/Podfile') }}
           restore-keys: |
+            ${{ runner.os }}-pods-${{ hashFiles('CometBrowserMobile/comet_ai/pubspec.lock') }}-
             ${{ runner.os }}-pods-
 
-      - name: Install pods
-        if: steps.cocoapods-cache.outputs.cache-hit != 'true'
+      - name: Install CocoaPods
         working-directory: CometBrowserMobile/comet_ai/ios
-        run: pod install --repo-update
+        run: |
+          gem install cocoapods
+          pod repo update
+          pod install --repo-update
 
       - name: Build iOS
         working-directory: CometBrowserMobile/comet_ai
