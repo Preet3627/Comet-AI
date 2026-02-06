@@ -36,7 +36,7 @@ void main() async {
   const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
   const initSettings = InitializationSettings(android: androidSettings);
   await flutterLocalNotificationsPlugin.initialize(
-    initSettings,
+    initializationSettings: initSettings,
     onDidReceiveNotificationResponse: (NotificationResponse response) {},
   );
 
