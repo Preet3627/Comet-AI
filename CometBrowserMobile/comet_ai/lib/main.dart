@@ -37,7 +37,7 @@ void main() async {
   const initSettings = InitializationSettings(android: androidSettings);
   await flutterLocalNotificationsPlugin.initialize(
     settings: initSettings,
-    onDidReceiveNotificationResponse: (NotificationResponse response) async {
+    onDidReceiveNotificationResponse: (NotificationResponse response) {
       // Handle notification response
       debugPrint('Notification received: ${response.payload}');
     },
