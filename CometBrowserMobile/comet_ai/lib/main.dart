@@ -35,7 +35,13 @@ void main() async {
   final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
   const initSettings = InitializationSettings(android: androidSettings);
-  await flutterLocalNotificationsPlugin.initialize(initSettings);
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: initSettings,
+    onDidReceiveNotificationResponse: (NotificationResponse response) async {
+      // Handle notification response
+      debugPrint('Notification received: ${response.payload}');
+    },
+  );
 
   // Init Audio Service - TEMPORARILY DISABLED FOR iOS BUILD FIX
   // See: IOS_BUILD_FIX.md for re-enabling instructions
