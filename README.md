@@ -104,9 +104,9 @@ Framework: Electron + Next.js
 
 ✅ Windows: Fully functional, installable beta available
 
-🧪 macOS: Under development (build & signing pipeline in progress)
+✅ MacOS: Fully functional, installable beta available 
 
-🧪 Linux: Under development (AppImage & Debian packaging)
+✅ Linux: Fully functional, installable beta available
 
 
 📱 Mobile (Android / iOS)
