@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Lock, Eye, EyeOff, Search, Plus, Trash2, Key, Globe, User, ShieldCheck, Copy, Check } from 'lucide-react';
@@ -91,6 +93,8 @@ export default function PasswordManager() {
                         />
                     </div>
                     <button
+                        type="button"
+                        title={isAdding ? "Close Add Entry" : "Add New Entry"}
                         onClick={() => setIsAdding(!isAdding)}
                         className="p-2 bg-violet-600 hover:bg-violet-500 rounded-xl transition-all shadow-[0_0_20px_rgba(139,92,246,0.3)]"
                     >
@@ -128,8 +132,8 @@ export default function PasswordManager() {
                         </div>
                     </div>
                     <div className="flex justify-end gap-3 mt-2">
-                        <button onClick={() => setIsAdding(false)} className="px-6 py-2 text-xs font-bold text-gray-500 hover:text-white transition-colors">Cancel</button>
-                        <button onClick={handleAdd} className="btn-vibrant-primary px-8">Seal Entry</button>
+                        <button type="button" onClick={() => setIsAdding(false)} className="px-6 py-2 text-xs font-bold text-gray-500 hover:text-white transition-colors">Cancel</button>
+                        <button type="button" onClick={handleAdd} className="btn-vibrant-primary px-8">Seal Entry</button>
                     </div>
                 </div>
             )}
@@ -164,6 +168,8 @@ export default function PasswordManager() {
                                             {showPlain[item.id] ? item.password : '••••••••••••'}
                                         </span>
                                         <button
+                                            type="button"
+                                            title={showPlain[item.id] ? "Hide Password" : "Show Password"}
                                             onClick={() => togglePassword(item.id)}
                                             className="text-gray-500 hover:text-white transition-colors p-1"
                                         >
@@ -174,12 +180,16 @@ export default function PasswordManager() {
 
                                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
                                     <button
+                                        type="button"
+                                        title="Copy Password"
                                         onClick={() => handleCopy(item.password, item.id)}
                                         className={`p-2 rounded-lg transition-all ${copiedId === item.id ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white'}`}
                                     >
                                         {copiedId === item.id ? <Check size={16} /> : <Copy size={16} />}
                                     </button>
                                     <button
+                                        type="button"
+                                        title="Delete Entry"
                                         onClick={() => handleDelete(item.id)}
                                         className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400/80 hover:text-red-400 rounded-lg transition-all"
                                     >
