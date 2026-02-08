@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell, clipboard, BrowserView, dialog, globalShortcut, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, clipboard, BrowserView, dialog, globalShortcut, Menu, protocol, desktopCapturer, screen, nativeImage } = require('electron');
 const contextMenuRaw = require('electron-context-menu');
 const contextMenu = contextMenuRaw.default || contextMenuRaw;
 const fs = require('fs');
@@ -124,8 +124,15 @@ function readMemory() {
   }).filter(Boolean);
 }
 
+const llmCache = new Map();
+
 // Global LLM Generation Handler
 const llmGenerateHandler = async (messages, options = {}) => {
+  const cacheKey = JSON.stringify(messages);
+  if (llmCache.has(cacheKey)) {
+    return llmCache.get(cacheKey);
+  }
+
   const providerId = options.provider || activeLlmProvider;
   const config = llmConfigs[providerId] || {};
   const apiKey = options.apiKey || config.apiKey;
@@ -134,6 +141,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
   const timeoutId = setTimeout(() => controller.abort(), providerId === 'ollama' ? 30000 : 90000); // 30s for local Ollama, 90s for reasoning
 
   try {
+    let result;
     if (providerId.startsWith('gemini')) {
       const gKey = apiKey || process.env.GEMINI_API_KEY;
       if (!gKey) return { error: 'Missing Gemini API Key' };
@@ -200,10 +208,9 @@ const llmGenerateHandler = async (messages, options = {}) => {
         },
       });
 
-      const result = await chat.sendMessage(lastMessage.content);
-      const response = await result.response;
-      clearTimeout(timeoutId);
-      return { text: response.text() };
+      const genResult = await chat.sendMessage(lastMessage.content);
+      const response = await genResult.response;
+      result = { text: response.text() };
 
     } else if (providerId.startsWith('gpt') || providerId.startsWith('o1') || providerId === 'openai-compatible') {
       const oaiKey = apiKey || config.apiKey || process.env.OPENAI_API_KEY;
@@ -233,8 +240,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
         signal: controller.signal
       });
       const data = await response.json();
-      clearTimeout(timeoutId);
-      return { text: data.choices?.[0]?.message?.content || 'No response from intelligence provider.' };
+      result = { text: data.choices?.[0]?.message?.content || 'No response from intelligence provider.' };
 
     } else if (providerId.startsWith('claude') || providerId === 'anthropic') {
       const anthropicKey = apiKey || process.env.ANTHROPIC_API_KEY;
@@ -259,8 +265,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
         signal: controller.signal
       });
       const data = await response.json();
-      clearTimeout(timeoutId);
-      return { text: data.content?.[0]?.text || data.content?.find(c => c.type === 'text')?.text || 'No response from Claude.' };
+      result = { text: data.content?.[0]?.text || data.content?.find(c => c.type === 'text')?.text || 'No response from Claude.' };
 
     } else if (providerId === 'ollama') {
       const baseUrl = config.baseUrl || 'http://localhost:11434';
@@ -279,11 +284,11 @@ const llmGenerateHandler = async (messages, options = {}) => {
         signal: controller.signal
       });
       const data = await response.json();
-      clearTimeout(timeoutId);
       if (!data.message?.content) {
-        return { error: `Ollama returned an empty response. Ensure the model '${model}' is downloaded and reachable.` };
+        result = { error: `Ollama returned an empty response. Ensure the model '${model}' is downloaded and reachable.` };
+      } else {
+        result = { text: data.message.content };
       }
-      return { text: data.message.content };
 
     } else if (providerId.includes('groq')) {
       const groqKey = apiKey || process.env.GROQ_API_KEY;
@@ -305,13 +310,15 @@ const llmGenerateHandler = async (messages, options = {}) => {
         signal: controller.signal
       });
       const data = await response.json();
-      clearTimeout(timeoutId);
-      return { text: data.choices?.[0]?.message?.content || 'No response from Groq.' };
+      result = { text: data.choices?.[0]?.message?.content || 'No response from Groq.' };
 
     } else {
-      clearTimeout(timeoutId);
-      return { error: `Provider '${providerId}' is not configured.` };
+      result = { error: `Provider '${providerId}' is not configured.` };
     }
+
+    clearTimeout(timeoutId);
+    llmCache.set(cacheKey, result);
+    return result;
   } catch (e) {
     clearTimeout(timeoutId);
     console.error("LLM Error:", e);
@@ -319,7 +326,86 @@ const llmGenerateHandler = async (messages, options = {}) => {
   }
 };
 
+ipcMain.handle('extract-search-results', async (event, tabId) => {
+  const view = tabViews.get(tabId);
+  if (!view) return { error: 'No active view for extraction' };
+
+  try {
+    const results = await view.webContents.executeJavaScript(`
+      (() => {
+        const organicResults = Array.from(document.querySelectorAll('div.g, li.g, div.rc')); // Common Google search result selectors
+        const extracted = [];
+        for (let i = 0; i < Math.min(3, organicResults.length); i++) {
+          const result = organicResults[i];
+          const titleElement = result.querySelector('h3');
+          const linkElement = result.querySelector('a');
+          const snippetElement = result.querySelector('span.st, div.s > div > span'); // Common snippet selectors
+
+          if (titleElement && linkElement) {
+            extracted.push({
+              title: titleElement.innerText,
+              url: linkElement.href,
+              snippet: snippetElement ? snippetElement.innerText : ''
+            });
+          }
+        }
+        return extracted;
+      })();
+    `);
+    return { success: true, results };
+  } catch (e) {
+    console.error("Failed to extract search results:", e);
+    return { success: false, error: e.message };
+  }
+});
+
 // When menu opens
+ipcMain.handle('extract-search-results', async (event, tabId) => {
+  const view = tabViews.get(tabId);
+  if (!view) return { error: 'No active view for extraction' };
+
+  try {
+    const results = await view.webContents.executeJavaScript(`
+      (() => {
+        const organicResults = Array.from(document.querySelectorAll('div.g, li.g, div.rc')); // Common Google search result selectors
+        const extracted = [];
+        for (let i = 0; i < Math.min(3, organicResults.length); i++) {
+          const result = organicResults[i];
+          const titleElement = result.querySelector('h3');
+          const linkElement = result.querySelector('a');
+          const snippetElement = result.querySelector('span.st, div.s > div > span'); // Common snippet selectors
+
+          if (titleElement && linkElement) {
+            extracted.push({
+              title: titleElement.innerText,
+              url: linkElement.href,
+              snippet: snippetElement ? snippetElement.innerText : ''
+            });
+          }
+        }
+        return extracted;
+      })();
+    `);
+    return { success: true, results };
+  } catch (e) {
+    console.error("Failed to extract search results:", e);
+    return { success: false, error: e.message };
+  }
+});
+
+// IPC handler for search suggestions
+ipcMain.handle('get-suggestions', async (event, query) => {
+  // TODO: Implement actual history and bookmark suggestions
+  // For now, return some dummy data based on the query
+  const suggestions = [];
+  if (query.length > 0) {
+    suggestions.push({ type: 'search', text: `Search Google for "${query}"`, url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
+    suggestions.push({ type: 'history', text: `History: ${query} past visit`, url: `https://example.com/history/${query}` });
+    suggestions.push({ type: 'bookmark', text: `Bookmark: ${query} docs`, url: `https://docs.example.com/${query}` });
+  }
+  return suggestions;
+});
+
 // When menu opens
 function hideWebview() {
   if (!mainWindow) return;
@@ -559,8 +645,173 @@ function createWindow() {
         mainWindow.webContents.send('clipboard-changed', currentText);
       }
     }
-  }, 1000);
+  }, 3000);
 }
+
+ipcMain.handle('test-gemini-api', async (event, apiKey) => {
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const result = await model.generateContent("test");
+    await result.response; // Ensure the call completes
+    return { success: true };
+  } catch (error) {
+    console.error("Gemini API test failed:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+const gmailService = require('./src/lib/gmailService.js');
+
+ipcMain.handle('get-gmail-messages', async () => {
+  return await gmailService.getGmailMessages();
+});
+
+ipcMain.on('save-ai-response', (event, content) => {
+  dialog.showSaveDialog(mainWindow, {
+    title: 'Save AI Response',
+    defaultPath: 'ai-response.txt',
+  }).then(result => {
+    if (!result.canceled && result.filePath) {
+      fs.writeFileSync(result.filePath, content);
+    }
+  });
+});
+
+ipcMain.handle('export-chat-txt', async (event, messages) => {
+  try {
+    const content = messages.map(msg => `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content}`).join('\n\n');
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Chat as Text',
+      defaultPath: `comet-ai-chat-${Date.now()}.txt`,
+      filters: [{ name: 'Text Files', extensions: ['txt'] }]
+    });
+
+    if (!canceled && filePath) {
+      fs.writeFileSync(filePath, content);
+      return { success: true };
+    }
+    return { success: false, error: 'Save dialog canceled' };
+  } catch (error) {
+    console.error('Failed to export chat as text:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+
+ipcMain.handle('export-chat-pdf', async (event, messages) => {
+  try {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Comet AI Chat Export</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; color: #333; }
+          .message { margin-bottom: 15px; padding: 10px; border-radius: 8px; }
+          .user-message { background-color: #e6f7ff; text-align: right; }
+          .ai-message { background-color: #f0f0f0; text-align: left; }
+          .role { font-weight: bold; margin-bottom: 5px; }
+          pre { background-color: #eee; padding: 10px; border-radius: 5px; overflow-x: auto; }
+          img { max-width: 100%; height: auto; }
+        </style>
+      </head>
+      <body>
+        <h1>Comet AI Chat Export</h1>
+        ${messages.map(msg => `
+          <div class="message ${msg.role === 'user' ? 'user-message' : 'ai-message'}">
+            <div class="role">${msg.role === 'user' ? 'User' : 'AI'}</div>
+            <div>${msg.content.replace(/\n/g, '<br/>')}</div>
+          </div>
+        `).join('')}
+      </body>
+      </html>
+    `;
+
+    const tempWindow = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        offscreen: true // Render offscreen
+      }
+    });
+
+    tempWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+
+    await new Promise(resolve => tempWindow.webContents.on('did-finish-load', resolve));
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Chat as PDF',
+      defaultPath: `comet-ai-chat-${Date.now()}.pdf`,
+      filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+    });
+
+    if (!canceled && filePath) {
+      const pdfBuffer = await tempWindow.webContents.printToPDF({});
+      fs.writeFileSync(filePath, pdfBuffer);
+      tempWindow.close();
+      return { success: true };
+    }
+
+    tempWindow.close();
+    return { success: false, error: 'Save dialog canceled' };
+  } catch (error) {
+    console.error('Failed to export chat as PDF:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('gmail-authorize', async () => {
+  const { authorize } = require('./src/lib/gmailService.js');
+  try {
+    await authorize();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+
+ipcMain.handle('gmail-list-messages', async (event, query, maxResults) => {
+  const { listMessages } = require('./src/lib/gmailService.js');
+  try {
+    const messages = await listMessages(query, maxResults);
+    return { success: true, messages };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('gmail-get-message', async (event, messageId) => {
+  const { getMessage } = require('./src/lib/gmailService.js');
+  try {
+    const message = await getMessage(messageId);
+    return { success: true, message };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('gmail-send-message', async (event, to, subject, body, threadId) => {
+  const { sendMessage } = require('./src/lib/gmailService.js');
+  try {
+    const result = await sendMessage(to, subject, body, threadId);
+    return { success: true, result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('gmail-add-label-to-message', async (event, messageId, labelName) => {
+  const { addLabelToMessage } = require('./src/lib/gmailService.js');
+  try {
+    const result = await addLabelToMessage(messageId, labelName);
+    return { success: true, result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 
 // Helper function for recursive directory scanning
 async function _scanDirectoryRecursive(currentPath, types) {
@@ -792,6 +1043,14 @@ ipcMain.on('open-auth-window', (event, authUrl) => {
           mainWindow.webContents.send('auth-callback', url);
         }
         authWindow.close();
+      } else if (url.startsWith('http://localhost') && url.includes('code=')) { // Gmail OAuth redirect
+        event.preventDefault();
+        const urlParams = new URLSearchParams(new URL(url).search);
+        const code = urlParams.get('code');
+        if (code) {
+          ipcMain.emit('gmail-oauth-code', null, code); // Send code to main process, which relays to gmailService
+          authWindow.close();
+        }
       }
     });
 
@@ -801,6 +1060,13 @@ ipcMain.on('open-auth-window', (event, authUrl) => {
           mainWindow.webContents.send('auth-callback', url);
         }
         authWindow.close();
+      } else if (url.startsWith('http://localhost') && url.includes('code=')) { // Gmail OAuth redirect
+        const urlParams = new URLSearchParams(new URL(url).search);
+        const code = urlParams.get('code');
+        if (code) {
+          ipcMain.emit('gmail-oauth-code', null, code); // Send code to main process, which relays to gmailService
+          authWindow.close();
+        }
       }
     });
 
@@ -852,6 +1118,10 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
     return { action: 'deny' };
   });
 
+  newView.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.send('on-tab-loaded', { tabId, url: newView.webContents.getURL() });
+  });
+
   newView.webContents.on('did-navigate', (event, navUrl) => {
     mainWindow.webContents.send('browser-view-url-changed', { tabId, url: navUrl });
     if (navUrl.includes('/search?') || navUrl.includes('?q=')) {
@@ -892,7 +1162,58 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
   tabViews.set(tabId, newView);
 });
 
+const tabLastActive = new Map();
+
+ipcMain.on('suspend-tab', (event, tabId) => {
+  const view = tabViews.get(tabId);
+  if (view) {
+    view.webContents.destroy();
+    tabViews.delete(tabId);
+    suspendedTabs.add(tabId);
+    if (mainWindow) {
+      mainWindow.webContents.send('tab-suspended', tabId);
+    }
+  }
+});
+
+ipcMain.on('resume-tab', (event, { tabId, url }) => {
+  if (suspendedTabs.has(tabId)) {
+    suspendedTabs.delete(tabId);
+    // The 'create-view' handler will be called by the frontend,
+    // which will create a new BrowserView for the tab.
+    if (mainWindow) {
+      mainWindow.webContents.send('tab-resumed', tabId);
+    }
+  }
+});
+
+setInterval(() => {
+  const now = Date.now();
+  const inactiveTimeout = 5 * 60 * 1000; // 5 minutes
+  for (const [tabId, lastActive] of tabLastActive.entries()) {
+    if (now - lastActive > inactiveTimeout && tabId !== activeTabId) {
+      const view = tabViews.get(tabId);
+      if (view) {
+        // We don't want to suspend audible tabs
+        if (audibleTabs.has(tabId)) continue;
+        
+        console.log(`Suspending inactive tab: ${tabId}`);
+        ipcMain.emit('suspend-tab', {}, tabId);
+      }
+    }
+  }
+}, 60 * 1000); // Check every minute
+
 ipcMain.on('activate-view', (event, { tabId, bounds }) => {
+  tabLastActive.set(tabId, Date.now());
+
+  if (suspendedTabs.has(tabId)) {
+    if (mainWindow) {
+      mainWindow.webContents.send('resume-tab-and-activate', tabId);
+    }
+    return;
+  }
+
   if (activeTabId && tabViews.has(activeTabId)) {
     const oldView = tabViews.get(activeTabId);
     if (oldView) {
@@ -1015,6 +1336,35 @@ ipcMain.handle('capture-browser-view-screenshot', async () => {
   } catch (e) {
     console.error("Failed to capture page screenshot:", e);
     return null;
+  }
+});
+
+ipcMain.handle('capture-screen-region', async (event, { x, y, width, height }) => {
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+    // Find the primary display source. On multi-monitor setups, display_id is relevant.
+    // For simplicity, we'll try to find the one corresponding to the primary display.
+    // This might need refinement for complex multi-monitor scenarios.
+    const primaryDisplayId = screen.getPrimaryDisplay().id;
+    const primaryScreenSource = sources.find(source => source.display_id === String(primaryDisplayId));
+
+    if (!primaryScreenSource) {
+      return { success: false, error: 'Primary screen source not found.' };
+    }
+
+    let image = primaryScreenSource.thumbnail; // This is a NativeImage
+
+    // If coordinates are provided, crop the image
+    if (x !== undefined && y !== undefined && width !== undefined && height !== undefined) {
+      const cropRect = { x, y, width, height };
+      image = image.crop(cropRect);
+    }
+
+    return { success: true, dataURL: image.toDataURL() };
+
+  } catch (error) {
+    console.error('[Main] Failed to capture screen region:', error);
+    return { success: false, error: error.message };
   }
 });
 
@@ -1170,15 +1520,72 @@ ipcMain.handle('ollama-import-model', async (event, { modelName, filePath }) => 
   }
 });
 
-ipcMain.handle('select-local-file', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('select-local-file', async (event, options = {}) => {
+  const defaultOptions = {
     properties: ['openFile'],
-    filters: [{ name: 'GGUF Models', extensions: ['gguf', 'bin'] }]
-  });
+    filters: [{ name: 'All Files', extensions: ['*'] }]
+  };
+  
+  const dialogOptions = { ...defaultOptions, ...options };
+  
+  const result = await dialog.showOpenDialog(mainWindow, dialogOptions);
   if (!result.canceled && result.filePaths.length > 0) {
     return result.filePaths[0];
   }
   return null;
+});
+
+// Shell Command Execution
+ipcMain.handle('execute-shell-command', async (event, command) => {
+  return new Promise((resolve) => {
+    exec(command, { timeout: 10000 }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({ success: false, error: error.message, output: stderr });
+      } else {
+        resolve({ success: true, output: stdout.trim(), error: stderr });
+      }
+    });
+  });
+});
+
+// Open External Application
+ipcMain.handle('open-external-app', async (event, app_name_or_path) => {
+  try {
+    const fullPath = path.resolve(app_name_or_path); // Resolve to absolute path
+    const result = await shell.openPath(fullPath);
+    if (result) {
+      // If result is a string, it indicates an error message
+      return { success: false, error: result };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('[Main] Failed to open external app:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Click Element in Browser View
+ipcMain.handle('click-element', async (event, selector) => {
+  try {
+    const activeView = tabViews.get(activeTabId);
+    if (!activeView) {
+      return { success: false, error: 'No active browser view' };
+    }
+    
+    await activeView.webContents.executeJavaScript(`
+      const element = document.querySelector('${selector}');
+      if (element) {
+        element.click();
+        true;
+      } else {
+        false;
+      }
+    `);
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('ollama-list-models', async () => {
@@ -1217,6 +1624,42 @@ ipcMain.handle('ollama-list-models', async () => {
   });
 });
 
+ipcMain.handle('search-applications', async (event, query) => {
+  const platform = process.platform;
+  let command = '';
+  let parser = (stdout) => { }; // Function to parse command output
+
+  if (platform === 'win32') {
+    // Windows: Search in Start Menu programs and common install locations
+    // This is a simplified approach. A more robust solution might involve PowerShell to query installed apps.
+    // For now, let's just search for executables in PATH and common locations.
+    command = `where ${query}.exe 2>nul || dir /s /b "C:\\Program Files\\**\\${query}.exe" 2>nul || dir /s /b "C:\\Program Files (x86)\\**\\${query}.exe" 2>nul`;
+    parser = (stdout) => stdout.split('\n').filter(line => line.trim().length > 0).map(p => ({ name: path.basename(p, path.extname(p)), path: p.trim() }));
+  } else if (platform === 'darwin') {
+    // macOS: Use mdfind (Spotlight)
+    command = `mdfind 'kMDItemKind == "Application" && kMDItemDisplayName == "*${query}*"'`;
+    parser = (stdout) => stdout.split('\n').filter(line => line.trim().length > 0).map(p => ({ name: path.basename(p, '.app'), path: p.trim() }));
+  } else if (platform === 'linux') {
+    // Linux: Search for .desktop files and executables in common PATHs
+    command = `find /usr/share/applications /usr/local/share/applications ~/.local/share/applications -name "*${query}*.desktop" -print 2>/dev/null | xargs -r grep -l '^Exec=.*${query}' | while read -r f; do basename "$f"; done`;
+    parser = (stdout) => stdout.split('\n').filter(line => line.trim().length > 0).map(name => ({ name: name.replace('.desktop', ''), path: '' })); // Path is harder to get directly for desktop files
+  } else {
+    return { success: false, error: `Unsupported platform: ${platform}` };
+  }
+
+  return new Promise((resolve) => {
+    exec(command, { timeout: 5000 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`App search error on ${platform}:`, error);
+        resolve({ success: false, error: stderr || error.message });
+      } else {
+        const results = parser(stdout);
+        resolve({ success: true, results });
+      }
+    });
+  });
+});
+
 // Deep Linking and persist handling on startup (merged into single instance lock above)
 function handleDeepLink(url) {
   if (!mainWindow) return;
@@ -1238,6 +1681,20 @@ function handleDeepLink(url) {
 }
 
 app.whenReady().then(() => {
+  protocol.handle('comet', (request) => {
+    const url = new URL(request.url);
+    const resourcePath = url.hostname; // e.g., 'extensions', 'vault'
+
+    // Depending on the resourcePath, serve different content
+    if (resourcePath === 'extensions') {
+      return new Response('<h1>Comet Extensions</h1><p>This is the extensions page.</p>', { headers: { 'content-type': 'text/html' } });
+    } else if (resourcePath === 'vault') {
+      return new Response('<h1>Comet Vault</h1><p>This is the vault page.</p>', { headers: { 'content-type': 'text/html' } });
+    }
+    // Fallback for unknown comet URLs
+    return new Response('<h1>404 Not Found</h1><p>Unknown Comet resource.</p>', { headers: { 'content-type': 'text/html' } });
+  });
+
   createWindow();
 
   // Handle deep link if launched with one
@@ -1337,51 +1794,6 @@ app.whenReady().then(() => {
     item.resume();
   });
 
-  // Register Global Shortcuts
-  const shortcuts = [
-    { accelerator: 'CommandOrControl+T', action: 'new-tab' },
-    { accelerator: 'CommandOrControl+W', action: 'close-tab' },
-    { accelerator: 'CommandOrControl+Tab', action: 'next-tab' },
-    { accelerator: 'CommandOrControl+Shift+Tab', action: 'prev-tab' },
-    { accelerator: 'CommandOrControl+B', action: 'toggle-sidebar' },
-    { accelerator: 'CommandOrControl+,', action: 'open-settings' },
-    { accelerator: 'CommandOrControl+Shift+N', action: 'new-incognito-tab' },
-    { accelerator: 'CommandOrControl+=', action: 'zoom-in' },
-    { accelerator: 'CommandOrControl+Plus', action: 'zoom-in' },
-    { accelerator: 'CommandOrControl+-', action: 'zoom-out' },
-    { accelerator: 'CommandOrControl+0', action: 'zoom-reset' },
-  ];
-
-  shortcuts.forEach(s => {
-    try {
-      globalShortcut.register(s.accelerator, () => {
-        if (mainWindow) {
-          if (mainWindow.isMinimized()) mainWindow.restore();
-          mainWindow.focus();
-
-          if (s.action === 'zoom-in' || s.action === 'zoom-out' || s.action === 'zoom-reset') {
-            const view = tabViews.get(activeTabId);
-            if (view) {
-              const currentZoom = view.webContents.getZoomFactor();
-              let newZoom = currentZoom;
-              if (s.action === 'zoom-in') newZoom += 0.1;
-              else if (s.action === 'zoom-out') newZoom -= 0.1;
-              else if (s.action === 'zoom-reset') newZoom = 1.0;
-
-              if (newZoom >= 0.5 && newZoom <= 3.0) {
-                view.webContents.setZoomFactor(newZoom);
-              }
-            }
-            return;
-          }
-
-          mainWindow.webContents.send('execute-shortcut', s.action);
-        }
-      });
-    } catch (e) {
-      console.error(`Failed to register shortcut ${s.accelerator}:`, e);
-    }
-  });
 });
 
 ipcMain.handle('get-open-tabs', async () => {
@@ -1480,6 +1892,42 @@ ipcMain.on('send-p2p-signal', (event, { signal, remoteDeviceId }) => {
     return;
   }
   p2pSyncService.sendSignal(signal, remoteDeviceId);
+});
+
+// IPC handler to update global shortcuts
+ipcMain.on('update-shortcuts', (event, shortcuts) => {
+  // Unregister all existing shortcuts to prevent conflicts
+  globalShortcut.unregisterAll();
+
+  shortcuts.forEach(s => {
+    try {
+      if (s.accelerator) { // Only register if an accelerator is provided
+        globalShortcut.register(s.accelerator, () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+
+            // Handle zoom actions directly in main process for better responsiveness
+            if (s.action === 'zoom-in') {
+              const view = tabViews.get(activeTabId);
+              if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() + 0.1);
+            } else if (s.action === 'zoom-out') {
+              const view = tabViews.get(activeTabId);
+              if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() - 0.1);
+            } else if (s.action === 'zoom-reset') {
+              const view = tabViews.get(activeTabId);
+              if (view) view.webContents.setZoomFactor(1.0);
+            } else {
+              // Send other shortcut actions to the renderer
+              mainWindow.webContents.send('execute-shortcut', s.action);
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.error(`Failed to register shortcut ${s.accelerator}:`, e);
+    }
+  });
 });
 
 ipcMain.handle('scan-folder', async (event, folderPath, types) => {
@@ -1663,6 +2111,57 @@ ipcMain.handle('create-desktop-shortcut', async (event, { url, title }) => {
     console.error('[Main] Failed to create shortcut:', error);
     return { error: error.message };
   }
+});
+
+ipcMain.handle('set-alarm', async (event, { time, message }) => {
+  const platform = process.platform;
+  let command = '';
+
+  const alarmTime = new Date(time);
+  if (isNaN(alarmTime.getTime())) {
+    return { success: false, error: 'Invalid alarm time format.' };
+  }
+
+  // Format time for various OS commands
+  const hour = alarmTime.getHours();
+  const minute = alarmTime.getMinutes();
+  const year = alarmTime.getFullYear();
+  const month = alarmTime.getMonth() + 1; // Month is 0-indexed
+  const day = alarmTime.getDate();
+
+  const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  const formattedDate = `${month}/${day}/${year}`;
+
+  if (platform === 'win32') {
+    // Windows: Use PowerShell to create a scheduled task
+    // Note: Creating scheduled tasks requires Administrator privileges.
+    // This command will create a basic task that displays a message.
+    command = `powershell.exe -Command "$Action = New-ScheduledTaskAction -Execute 'msg.exe' -Argument '* ${message}'; $Trigger = New-ScheduledTaskTrigger -Once -At '${formattedTime}'; Register-ScheduledTask -TaskName 'CometAlarm_${Date.now()}' -Action $Action -Trigger $Trigger -Description '${message}'"`;
+  } else if (platform === 'darwin') {
+    // macOS: Use osascript to create a Calendar event or a reminder
+    // Creating a reminder is more straightforward for a simple alarm.
+    command = `osascript -e 'tell application "Reminders" to make new reminder with properties {name:"${message}", remind me date:"${alarmTime.toISOString()}"}'`;
+    // Alternatively, for a notification at a specific time:
+    // command = `osascript -e 'display notification "${message}" with title "Comet Alarm" subtitle "Time to Wake Up!"' -e 'delay $(((${alarmTime.getTime()} - $(date +%s%3N)) / 1000))' -e 'display dialog "${message}" buttons {"OK"} default button 1 with title "Comet Alarm"'`;
+  } else if (platform === 'linux') {
+    // Linux: Use 'at' command (requires 'at' daemon to be running)
+    // Example: echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate}
+    // `at` command format: `at [-m] TIME [DATE]`, e.g., `at 10:00 tomorrow`
+    command = `echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate}`;
+  } else {
+    return { success: false, error: `Unsupported platform for alarms: ${platform}` };
+  }
+
+  return new Promise((resolve) => {
+    exec(command, { timeout: 10000 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Set alarm error on ${platform}:`, error);
+        resolve({ success: false, error: stderr || error.message });
+      } else {
+        resolve({ success: true, message: `Alarm set for ${alarmTime.toLocaleString()}` });
+      }
+    });
+  });
 });
 
 app.on('will-quit', () => {

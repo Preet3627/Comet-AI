@@ -11,7 +11,7 @@ const UnifiedCartPanel = ({ onClose, onScan }: { onClose: () => void, onScan: ()
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className={`absolute top-20 ${store.sidebarSide === 'right' && store.sidebarOpen ? 'right-[290px]' : 'right-4'} w-96 glass-vibrant z-50 rounded-[2rem] p-8 shadow-3xl bg-black/40 border border-white/10`}
+            className={`absolute top-20 ${store.sidebarSide === 'right' && store.sidebarOpen ? 'right-[290px]' : 'right-4'} w-96 glass-vibrant z-[1000] rounded-[2rem] p-8 shadow-3xl bg-black/40 border border-white/10`}
         >
             <div className="flex items-center justify-between mb-8">
                 <div>

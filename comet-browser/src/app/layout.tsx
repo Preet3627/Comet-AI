@@ -3,6 +3,7 @@
 import { useAppStore } from '@/store/useAppStore';
 import type { Metadata } from "next";
 import "./globals.css";
+import { useEffect } from 'react';
 
 import TitleBar from "@/components/TitleBar";
 
@@ -21,6 +22,37 @@ export default function RootLayout({
 }>) {
   const store = useAppStore();
   const isLandingPage = store.activeView === 'landing-page';
+
+  useEffect(() => {
+    const unsubscribeSuspend = window.electronAPI?.onTabSuspended((tabId) => {
+      store.suspendTab(tabId);
+    });
+
+    const unsubscribeResume = window.electronAPI?.onTabResumed((tabId) => {
+      store.resumeTab(tabId);
+    });
+
+    const unsubscribeResumeAndActivate = window.electronAPI?.onResumeTabAndActivate((tabId) => {
+      const tab = store.tabs.find(t => t.id === tabId);
+      if (tab) {
+        store.resumeTab(tabId);
+        window.electronAPI?.createView({ tabId, url: tab.url });
+        setTimeout(() => {
+          window.electronAPI?.activateView({
+            tabId: tabId,
+            bounds: { x: 0, y: 40, width: 1200, height: 760 }
+          });
+          store.setActiveTabId(tabId);
+        }, 100);
+      }
+    });
+
+    return () => {
+      unsubscribeSuspend?.();
+      unsubscribeResume?.();
+      unsubscribeResumeAndActivate?.();
+    };
+  }, [store]);
 
   return (
     <html lang="en" className="dark">

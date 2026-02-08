@@ -162,7 +162,7 @@ comet-browser/
 ├── verify-build.js        # Pre-build verification
 ├── test-production.js     # Production mode tester
 └── release/               # Built installers (created by electron-builder)
-    └── Comet Browser Setup 0.1.6.exe
+    └── Comet Browser Setup 0.1.7.exe
 ```
 
 ## Diagnostic Commands
@@ -203,4 +203,4 @@ If issues persist, provide:
 ---
 
 **Last Updated**: 2026-02-03
-**Version**: 0.1.6
+**Version**: 0.1.7

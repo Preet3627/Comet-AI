@@ -142,7 +142,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                 {/* Navigation Sidebar */}
                 <div className="w-72 bg-white/[0.01] border-r border-white/5 p-8 flex flex-col gap-2">
                     <div className="flex items-center gap-4 px-4 mb-10">
-                        <img src="/icon.ico" alt="Comet" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
+                        <img src="/icon.png" alt="Comet" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
                         <span className="text-xl font-black tracking-tighter uppercase text-white">COMET</span>
                     </div>
 
@@ -168,7 +168,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                             Install PWA
                         </button>
                         <div className="p-4 bg-deep-space-accent-neon/5 rounded-2xl border border-deep-space-accent-neon/10 text-[10px] font-medium text-deep-space-accent-neon/60 text-center leading-relaxed">
-                            Version v0.1.6 Stable <br /> (Production Build)
+                            Version v0.1.7 Stable <br /> (Production Build)
                         </div>
                     </div>
                 </div>
@@ -238,7 +238,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                         <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-4">Workspace Tier</p>
                                         <div className="flex items-center gap-3 text-white">
                                             <Zap size={16} className="text-amber-400" />
-                                            <span className="text-sm font-bold">Foundation (Alpha 0.1.6)</span>
+                                            <span className="text-sm font-bold">Foundation (Alpha 0.1.7)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -590,7 +590,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
 
                         {activeSection === 'about' && (
                             <div className="text-center py-20">
-                                <img src="/icon.ico" alt="Comet Icon" className="w-24 h-24 mx-auto mb-8 shadow-2xl animate-pulse" />
+                                <img src="/icon.png" alt="Comet Icon" className="w-24 h-24 mx-auto mb-8 shadow-2xl animate-pulse" />
                                 <h2 className="text-5xl font-black tracking-tighter mb-4">{store.appName}</h2>
                                 <p className="text-white/40 max-w-md mx-auto mb-10 text-sm leading-relaxed font-medium">
                                     A performance-hardened Chromium shell with native AI orchestration, optimized for decentralized workflows.

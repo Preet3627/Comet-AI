@@ -24,6 +24,8 @@ interface LLMProviderSettingsProps {
   ollamaModels: { name: string; modified_at: string; }[];
   setOllamaModels: (models: { name: string; modified_at: string; }[]) => void;
   setError: (error: string | null) => void; // New prop for setting errors
+  showSettings: boolean; // New prop for controlling visibility
+  setShowSettings: (show: boolean) => void; // New prop for setting visibility
 }
 
 const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
@@ -31,7 +33,7 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
   const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
   const [activeProviderId, setActiveProviderId] = useState<string | null>(null);
   const [selectedProviderConfig, setSelectedProviderConfig] = useState<LLMProviderOptions>({});
-  const [showSettings, setShowSettings] = useState<boolean>(false);
+  // const [showSettings, setShowSettings] = useState<boolean>(false); // Removed internal state
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // Initialize a local instance for Web fallback
@@ -112,24 +114,13 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
 
   return (
     <div className="border border-white/5 rounded-2xl overflow-hidden glass-dark transition-all">
-      <button
-        onClick={() => setShowSettings(!showSettings)}
-        className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors no-drag-region"
-      >
-        <div className="flex items-center gap-2">
-          <Settings size={14} className="text-white/40" />
-          <span className="text-white/60 text-[10px] font-black uppercase tracking-widest">Ecosystem Settings</span>
-        </div>
-        <span className={`text-[10px] text-white/30 transform transition-transform duration-300 ${showSettings ? 'rotate-180' : ''}`}>▼</span>
-      </button>
-
       <AnimatePresence>
-        {showSettings && (
+        {props.showSettings && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-t border-white/5"
+            className="overflow-hidden" // Removed border-t to let the parent AIChatSidebar handle it
           >
             <div className="p-4 space-y-6 custom-scrollbar max-h-[450px] overflow-y-auto">
               <ThemeSettings {...props} />
@@ -392,6 +383,24 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                           value={store.geminiApiKey || ''}
                           onChange={(e) => store.setGeminiApiKey(e.target.value)}
                         />
+                        <button
+                          onClick={async () => {
+                            if (window.electronAPI) {
+                              setFeedback("Testing Gemini API...");
+                              const result = await window.electronAPI.testGeminiApi(store.geminiApiKey);
+                              if (result.success) {
+                                setFeedback("Gemini API Test: Success!");
+                              } else {
+                                setFeedback(`Gemini API Test: Failed! ${result.error}`);
+                              }
+                              setTimeout(() => setFeedback(null), 3000);
+                            }
+                          }}
+                          className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-white/60 text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
+                        >
+                          <Check size={12} />
+                          Test Gemini API
+                        </button>
                         <p className="text-[10px] text-white/30 italic">Targeting latest {activeProviderId === 'gemini-3-pro' ? 'Pro' : 'Flash'} v3 model.</p>
                       </div>
                     )}
@@ -460,6 +469,25 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                   <span className="text-[10px] uppercase font-black tracking-widest text-white/30">Vault Status</span>
                 </div>
                 <span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Secure</span>
+              </div>
+
+              {/* Extensions Directory */}
+              <div className="pt-4 border-t border-white/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <Puzzle size={12} className="text-deep-space-accent-neon" />
+                  <label className="block text-[10px] uppercase font-black tracking-widest text-white/40">Extensions</label>
+                </div>
+                <button
+                  onClick={() => {
+                    if (window.electronAPI) {
+                      window.electronAPI.openExtensionDir();
+                    }
+                  }}
+                  className="w-full mt-2 py-3 bg-white/5 hover:bg-white/10 text-white/60 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <FolderOpen size={12} />
+                  Open Extensions Directory
+                </button>
               </div>
             </div>
           </motion.div>

@@ -118,6 +118,17 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
         >
           <Plus size={14} />
         </button>
+        <button
+          onClick={() => {
+            if (window.electronAPI) {
+              window.electronAPI.translateWebsite({ targetLanguage: store.selectedLanguage });
+            }
+          }}
+          className="p-1.5 rounded-lg text-slate-500 hover:bg-white/5 hover:text-white transition-all ml-2"
+          title="Translate Page"
+        >
+          <Globe size={14} />
+        </button>
       </div>
     </>
   );

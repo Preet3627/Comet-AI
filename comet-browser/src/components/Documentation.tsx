@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { FileText, Cpu, Zap, Shield, Bookmark, ChevronRight, Github, ExternalLink } from 'lucide-react';
 
 const README_CONTENT = `
-# ☄️ Comet Browser (v0.1.3)
+# ☄️ Comet Browser (v0.1.7)
 Made in India 🇮🇳
 ### The Intelligent Workspace for the Future
 
@@ -80,7 +80,7 @@ Building a browser is considered "impossible" for a solo dev. Doing it on a lagg
 2.  Understands what I'm reading.
 3.  Works offline.
 
-Despite constant crashes, build failures (Electron is heavy!), and school pressure, **v0.1.3** is here. It stands as a testament to what "Agentic Coding" and sheer willpower can achieve.
+Despite constant crashes, build failures (Electron is heavy!), and school pressure, **v0.1.7** is here. It stands as a testament to what "Agentic Coding" and sheer willpower can achieve.
 
 ---
 
@@ -132,7 +132,7 @@ const Documentation = () => {
                                     Official Documentation
                                 </span>
                                 <span className="text-white/20 text-[10px] font-bold uppercase tracking-widest">
-                                    Release 0.1.3
+                                    Release 0.1.7
                                 </span>
                             </div>
                             <h1 className="text-5xl lg:text-7xl font-black text-white tracking-tighter leading-none italic">

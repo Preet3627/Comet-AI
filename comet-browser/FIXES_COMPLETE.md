@@ -178,11 +178,11 @@ node verify-build.js
 
 # Step 3: Build Windows installer
 npm run dist:win
-# Creates: release/Comet Browser Setup 0.1.6.exe
+# Creates: release/Comet Browser Setup 0.1.7.exe
 ```
 
 ### Installation:
-1. Run `Comet Browser Setup 0.1.6.exe`
+1. Run `Comet Browser Setup 0.1.7.exe`
 2. Install to default location or choose custom
 3. Installer creates:
    - Desktop shortcut ✅
@@ -280,4 +280,4 @@ Before releasing a new build:
 
 **Status**: ✅ **COMPLETE - READY FOR PRODUCTION**
 **Last Updated**: 2026-02-03
-**Version**: 0.1.6+
+**Version**: 0.1.7+

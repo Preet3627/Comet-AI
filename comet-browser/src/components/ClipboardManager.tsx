@@ -15,8 +15,8 @@ const ClipboardManager = () => {
         setTimeout(() => setCopiedIndex(null), 2000);
     };
 
-    return (
-        <div className="flex flex-col h-full bg-black/20 rounded-2xl border border-white/5 overflow-hidden">
+return (
+        <div className="flex flex-col h-full bg-black/20 rounded-2xl border border-white/5 overflow-hidden relative z-[1000]">
             <header className="p-4 border-b border-white/5 flex items-center justify-between bg-white/5">
                 <div className="flex items-center gap-2">
                     <Clipboard size={16} className="text-deep-space-accent-neon" />

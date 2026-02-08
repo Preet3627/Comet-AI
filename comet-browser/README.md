@@ -1,4 +1,4 @@
-# ☄️ Comet AI Browser (v0.1.6 Stable)
+# ☄️ Comet AI Browser (v0.1.7 Stable)
 
 <div align="center">
 
@@ -8,7 +8,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.1.6-green)]()
+[![Version](https://img.shields.io/badge/Version-0.1.7-green)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
 
 [Features](#-comprehensive-features) • [Download](#-download) • [Setup Guide](#-setup-guide) • [Documentation](#-documentation) • [License](#-license)
@@ -17,11 +17,11 @@
 
 ---
 
-## 🚀 Project Status: v0.1.6 "Intelligence Refined"
+## 🚀 Project Status: v0.1.7 "Evolving Intelligence"
 
 Comet is a high-performance, privacy-hardened browser built for architects of the future. Developed by **PreetPatel (Latestinssan)**, it combines native AI orchestration with military-grade privacy.
 
-*   **v0.1.6 Highlights**: Persistent AI Disclaimer Toggles, Neural URL Prediction, Dynamic Tab Favicons, and Realigned Premium Layout.
+*   **v0.1.7 Highlights**: Enhanced AI Features, Seamless Google Login, Improved UI/UX, Local Vector Memory, and Advanced Document Generation.
 *   **Target**: High-performance browsing even on "potato PCs" (low-end hardware optimization).
 
 ---
@@ -70,7 +70,7 @@ Comet is a high-performance, privacy-hardened browser built for architects of th
 
 | Platform | Version | Status | Size |
 |----------|---------|--------|------|
-| 🪟 **Windows** | [v0.1.6 (.exe)](https://github.com/Preet3627/Browser-AI/releases/download/Comet-Browser/Comet.Browser.Setup.0.1.6.exe) | ✅ Stable | ~150 MB |
+| 🪟 **Windows** | [v0.1.7 (.exe)](https://github.com/Preet3627/Browser-AI/releases/download/Comet-Browser/Comet.Browser.Setup.0.1.7.exe) | ✅ Stable | ~150 MB |
 | 🍎 **macOS** | Coming soon | 🧪 Beta | – |
 | 🐧 **Linux** | Coming soon | 🧪 Beta | – |
 | 🤖 **Android** | Coming soon | 🧪 In-Dev | – |
@@ -113,7 +113,7 @@ npm run dist:win
 Create a `.env.local` file:
 ```env
 NEXT_PUBLIC_APP_NAME=Comet
-NEXT_PUBLIC_APP_VERSION=0.1.6
+NEXT_PUBLIC_APP_VERSION=0.1.7
 GEMINI_API_KEY=your_key_here
 OPENAI_API_KEY=your_key_here
 ```

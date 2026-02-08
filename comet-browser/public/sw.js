@@ -1,4 +1,4 @@
-const CACHE_NAME = 'comet-v0.1.5';
+const CACHE_NAME = 'comet-v0.1.7';
 const ASSETS = [
     '/',
     '/manifest.json'

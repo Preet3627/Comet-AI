@@ -33,9 +33,11 @@ declare global {
 
             // Download APIs
             onDownloadStarted: (callback: (filename: string) => void) => () => void;
-            triggerDownload: (url: string, filename: string) => void;
+            triggerDownload: (url: string, filename: string) => Promise<boolean>;
             on: (channel: string, listener: (...args: any[]) => void) => () => void; // Generic 'on' for ipcRenderer events
             onAddNewTab: (callback: (url: string) => void) => () => void; // Specific add new tab event
+
+            getSuggestions: (query: string) => Promise<any[]>; // New IPC handler
 
             // LLM & Memory APIs
             getAvailableLLMProviders: () => Promise<{ id: string; name: string }[]>;

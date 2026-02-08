@@ -30,6 +30,9 @@ interface BrowserState {
     addIncognitoTab: (url?: string) => void;
     removeTab: (id: string) => void;
     updateTab: (id: string, updates: Partial<{ url: string; title: string; isAudible?: boolean; isSuspended?: boolean; priority?: 'low' | 'normal' | 'high'; keepAlive?: boolean }>) => void;
+    suspendTab: (id: string) => void;
+    resumeTab: (id: string) => void;
+    setTabs: (tabs: BrowserState['tabs']) => void;
     setCurrentUrl: (url: string) => void;
     setActiveTabId: (id: string) => void;
     setActiveTab: (id: string) => void; // Alias for setActiveTabId
@@ -372,6 +375,17 @@ export const useAppStore = create<BrowserState>()(
                     tab.id === id ? { ...tab, ...updates } : tab
                 )
             })),
+            suspendTab: (id) => set((state) => ({
+                tabs: state.tabs.map(tab =>
+                    tab.id === id ? { ...tab, isSuspended: true } : tab
+                )
+            })),
+            resumeTab: (id) => set((state) => ({
+                tabs: state.tabs.map(tab =>
+                    tab.id === id ? { ...tab, isSuspended: false } : tab
+                )
+            })),
+            setTabs: (tabs) => set({ tabs }),
 
             // Performance Mode
             setPerformanceMode: (mode) => set({ performanceMode: mode }),
@@ -512,11 +526,17 @@ export const useAppStore = create<BrowserState>()(
             })),
 
             // Shortcuts
-            updateShortcut: (action, accelerator) => set((state) => ({
-                shortcuts: state.shortcuts.map(s =>
-                    s.action === action ? { ...s, accelerator } : s
-                )
-            })),
+            updateShortcut: (action, accelerator) => {
+                set((state) => ({
+                    shortcuts: state.shortcuts.map(s =>
+                        s.action === action ? { ...s, accelerator } : s
+                    )
+                }));
+                // Call main process to update global shortcut
+                if (window.electronAPI) {
+                    window.electronAPI.updateShortcuts([{ action, accelerator }]);
+                }
+            },
             setHasSeenWelcomePage: (seen) => set({ hasSeenWelcomePage: seen }),
 
             setBackendStrategy: (strategy) => set({ backendStrategy: strategy }),
@@ -702,6 +722,12 @@ if (typeof window !== 'undefined' && window.electronAPI) {
             useAppStore.getState().setActiveView('browser');
         }
     });
+
+    // Sync initial shortcuts with main process on startup
+    const initialShortcuts = useAppStore.getState().shortcuts;
+    if (initialShortcuts && initialShortcuts.length > 0) {
+        window.electronAPI.updateShortcuts(initialShortcuts);
+    }
 
     if (auth) {
         onAuthStateChanged(auth, (user) => {

@@ -93,8 +93,8 @@ const BrowserViewContainer: React.FC<BrowserViewContainerProps> = ({ initialUrl 
     }
   }, [omnibarUrl, currentUrl]);
 
-  return (
-    <div className="w-full h-full relative overflow-hidden bg-[#050510]">
+return (
+    <div className="w-full h-full relative overflow-hidden bg-[#050510] z-[1]">
       <AnimatePresence>
         {isLoading && (
           <motion.div

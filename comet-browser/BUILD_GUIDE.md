@@ -42,13 +42,13 @@ npm run dist:win
 
 **Build time**: ~2-5 minutes depending on your machine
 
-**Output location**: `release/Comet Browser Setup 0.1.6.exe`
+**Output location**: `release/Comet Browser Setup 0.1.7.exe`
 
 ## Installation & Testing
 
 ### Install the App
 1. Navigate to `release/` folder
-2. Double-click `Comet Browser Setup 0.1.6.exe`
+2. Double-click `Comet Browser Setup 0.1.7.exe`
 3. Follow installation wizard
 4. Default location: `C:\Users\<You>\AppData\Local\Programs\Comet Browser\`
 
@@ -144,6 +144,6 @@ See `FIXES_COMPLETE.md` for technical details on fixes applied.
 
 ---
 
-**Build Version**: 0.1.6+
+**Build Version**: 0.1.7+
 **Platform**: Windows x64
 **Build Tool**: electron-builder

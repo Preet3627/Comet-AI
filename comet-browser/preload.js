@@ -41,10 +41,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setProxy: (config) => ipcRenderer.invoke('set-proxy', config),
   capturePage: () => ipcRenderer.invoke('capture-page'),
   captureBrowserViewScreenshot: () => ipcRenderer.invoke('capture-browser-view-screenshot'),
+  captureScreenRegion: (args) => ipcRenderer.invoke('capture-screen-region', args),
   sendInputEvent: (input) => ipcRenderer.invoke('send-input-event', input),
   openDevTools: () => ipcRenderer.send('open-dev-tools'),
   changeZoom: (deltaY) => ipcRenderer.send('change-zoom', deltaY),
   executeJavaScript: (code) => ipcRenderer.invoke('execute-javascript', code),
+  openExternalApp: (appNameOrPath) => ipcRenderer.invoke('open-external-app', appNameOrPath),
+  searchApplications: (query) => ipcRenderer.invoke('search-applications', query),
+  getSuggestions: (query) => ipcRenderer.invoke('get-suggestions', query), // New IPC handler
   onAudioStatusChanged: (callback) => {
     const subscription = (event, isPlaying) => callback(isPlaying);
     ipcRenderer.on('audio-status-changed', subscription);
@@ -57,6 +61,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('download-started', subscription);
     return () => ipcRenderer.removeListener('download-started', subscription);
   },
+  onTabLoaded: (callback) => {
+    const subscription = (event, { tabId, url }) => callback({ tabId, url });
+    ipcRenderer.on('on-tab-loaded', subscription);
+    return () => ipcRenderer.removeListener('on-tab-loaded', subscription);
+  },
 
   // LLM & Memory APIs
   getAvailableLLMProviders: () => ipcRenderer.invoke('llm-get-available-providers'),
@@ -68,6 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveVectorStore: (data) => ipcRenderer.invoke('save-vector-store', data),
   loadVectorStore: () => ipcRenderer.invoke('load-vector-store'),
   webSearchRag: (query) => ipcRenderer.invoke('web-search-rag', query),
+  extractSearchResults: (tabId) => ipcRenderer.invoke('extract-search-results', tabId),
   translateWebsite: (args) => ipcRenderer.invoke('translate-website', args),
   onTriggerTranslationDialog: (callback) => {
     const subscription = () => callback();
@@ -96,6 +106,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAuthToken: () => ipcRenderer.invoke('get-auth-token'),
   getUserInfo: () => ipcRenderer.invoke('get-user-info'),
   clearAuth: () => ipcRenderer.send('clear-auth'),
+
+  // Gmail API
+  testGeminiApi: (apiKey) => ipcRenderer.invoke('test-gemini-api', apiKey),
+  gmailAuthorize: () => ipcRenderer.invoke('gmail-authorize'),
+  gmailListMessages: (query, maxResults) => ipcRenderer.invoke('gmail-list-messages', query, maxResults),
+  gmailGetMessage: (messageId) => ipcRenderer.invoke('gmail-get-message', messageId),
+  gmailSendMessage: (to, subject, body, threadId) => ipcRenderer.invoke('gmail-send-message', to, subject, body, threadId),
+  gmailAddLabelToMessage: (messageId, labelName) => ipcRenderer.invoke('gmail-add-label-to-message', messageId, labelName),
+  onGmailOAuthCode: (callback) => { // New event listener for OAuth code
+    const subscription = (event, code) => callback(code);
+    ipcRenderer.on('gmail-oauth-code', subscription);
+    return () => ipcRenderer.removeListener('gmail-oauth-code', subscription);
+  },
 
   // Dev-MCP & Analytics
   sendMcpCommand: (command, data) => ipcRenderer.invoke('mcp-command', { command, data }),
@@ -158,10 +181,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('execute-shortcut', subscription);
   },
   updateShortcuts: (shortcuts) => ipcRenderer.send('update-shortcuts', shortcuts),
+  setAlarm: (time, message) => ipcRenderer.invoke('set-alarm', { time, message }),
 
   // Tab Optimization APIs
   suspendTab: (tabId) => ipcRenderer.send('suspend-tab', tabId),
-  resumeTab: (tabId) => ipcRenderer.send('resume-tab', tabId),
+  resumeTab: (args) => ipcRenderer.send('resume-tab', args),
+  onTabSuspended: (callback) => {
+    const subscription = (event, tabId) => callback(tabId);
+    ipcRenderer.on('tab-suspended', subscription);
+    return () => ipcRenderer.removeListener('tab-suspended', subscription);
+  },
+  onTabResumed: (callback) => {
+    const subscription = (event, tabId) => callback(tabId);
+    ipcRenderer.on('tab-resumed', subscription);
+    return () => ipcRenderer.removeListener('tab-resumed', subscription);
+  },
+  onResumeTabAndActivate: (callback) => {
+    const subscription = (event, tabId) => callback(tabId);
+    ipcRenderer.on('resume-tab-and-activate', subscription);
+    return () => ipcRenderer.removeListener('resume-tab-and-activate', subscription);
+  },
   getMemoryUsage: () => ipcRenderer.invoke('get-memory-usage'),
 
   importOllamaModel: (data) => ipcRenderer.invoke('ollama-import-model', data),
@@ -208,6 +247,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
   },
+
+  saveAiResponse: (content) => ipcRenderer.send('save-ai-response', content),
 
   // Persistent Storage APIs for user data
   savePersistentData: (key, data) => ipcRenderer.invoke('save-persistent-data', { key, data }),

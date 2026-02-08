@@ -25,7 +25,7 @@ import {
 import { firebaseConfigStorage, FirebaseConfig } from "@/lib/firebaseConfigStorage";
 
 const COMET_README = `
-# ☄️ Comet Browser (v0.1.3)
+# ☄️ Comet Browser (v0.1.7)
 Made in India 🇮🇳
 ### The Intelligent Workspace for the Future
 
@@ -39,7 +39,7 @@ Made in India 🇮🇳
 
 ---
 
-## 🚀 Features (v0.1.3 Stable)
+## 🚀 Features (v0.1.7 Stable)
 
 ### 🧠 Intelligence & RAG
 *   **Perplexity-Style Answers**: Ask complex questions to your sidebar. Comet scans your current page and retrieves relevant context from your history.
@@ -199,7 +199,7 @@ const LandingPage = () => {
                         <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }}>
                             <div className="inline-block px-4 py-1.5 rounded-full bg-sky-500/10 border border-sky-400/20 text-sky-400 text-[10px] font-black uppercase tracking-widest mb-8">
                                 <Sparkles size={12} className="inline mr-2" />
-                                Experimental Preview • v0.1.3 Stable
+                                Experimental Preview • v0.1.7 Stable
                             </div>
                             <h1 className="text-7xl md:text-[8.5rem] font-black uppercase mb-8 leading-[0.82] tracking-tighter text-white">
                                 Navigate <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-indigo-400 to-purple-500 animate-gradient-x">THE VOID</span>
@@ -340,7 +340,7 @@ const LandingPage = () => {
                             </div>
                             <div>
                                 <h3 className="text-4xl font-black text-white uppercase tracking-tighter">Documentation</h3>
-                                <p className="text-slate-500 font-bold uppercase tracking-[0.2em] text-xs">V0.1.3 Hardware Specification</p>
+                                <p className="text-slate-500 font-bold uppercase tracking-[0.2em] text-xs">V0.1.7 Hardware Specification</p>
                             </div>
                         </div>
 

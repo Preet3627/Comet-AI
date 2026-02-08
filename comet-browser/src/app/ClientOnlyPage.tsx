@@ -42,6 +42,7 @@ import TitleBar from '@/components/TitleBar';
 import { useOptimizedTabs } from '@/hooks/useOptimizedTabs';
 import { VirtualizedTabBar } from '@/components/VirtualizedTabBar';
 import { TabSwitcherOverlay } from '@/components/TabSwitcherOverlay';
+import SpotlightSearchOverlay from '@/components/SpotlightSearchOverlay';
 
 const SidebarIcon = ({ icon, label, active, onClick, collapsed }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, collapsed: boolean }) => (
   <button
@@ -106,8 +107,9 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSection, setSettingsSection] = useState('profile');
   const [showCart, setShowCart] = useState(false);
-  const [urlPrediction, setUrlPrediction] = useState<string | null>(null);
+  const [urlPrediction, setUrlPrediction] = useState<string | null>(null); // Changed to string | null
   const [isTyping, setIsTyping] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]); // New state for additional suggestions
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean } | null>(null);
   const [aiOverview, setAiOverview] = useState<{ query: string, result: string | null, sources: { text: string; metadata: any; }[] | null, isLoading: boolean } | null>(null);
   const [showTabSwitcher, setShowTabSwitcher] = useState(false);
@@ -128,6 +130,13 @@ export default function Home() {
   const [showTranslateDialog, setShowTranslateDialog] = useState(false);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(false);
+  const [inputValue, setInputValue] = useState(store.currentUrl); // New state for input field's raw value
+  const [showSpotlightSearch, setShowSpotlightSearch] = useState(false); // New state for global spotlight search
+
+  // Synchronize inputValue with store.currentUrl
+  useEffect(() => {
+    setInputValue(store.currentUrl);
+  }, [store.currentUrl]);
 
   // Sidebar items configuration
   const sidebarItems = [
@@ -231,9 +240,15 @@ export default function Home() {
     }
   };
 
-  const handleMusicUpload = async () => {
+const handleMusicUpload = async () => {
     if (window.electronAPI) {
-      const filePath = await window.electronAPI.selectLocalFile();
+      const filePath = await window.electronAPI.selectLocalFile({
+        filters: [
+          { name: 'Audio Files', extensions: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile', 'openDirectory']
+      });
       if (filePath) {
         store.setAmbientMusicUrl(`file://${filePath}`);
       }
@@ -479,18 +494,28 @@ export default function Home() {
     }
   }, [addClipboardItem]);
 
-  // Debounced Predictor
+  // Debounced Predictor and Suggestions Fetcher
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (isTyping && store.currentUrl.length > 2) {
-        const pred = await BrowserAI.predictUrl(store.currentUrl, store.history.map(h => h.url));
+      if (isTyping && inputValue.length > 2) {
+        // Fetch URL prediction
+        const pred = await BrowserAI.predictUrl(inputValue, store.history.map(h => h.url));
         setUrlPrediction(pred);
+
+        // Fetch additional suggestions
+        if (window.electronAPI) {
+          const fetchedSuggestions = await window.electronAPI.getSuggestions(inputValue);
+          setSuggestions(fetchedSuggestions);
+        }
       } else {
         setUrlPrediction(null);
+        setSuggestions([]); // Clear suggestions when not typing or input is too short
       }
     }, 150);
     return () => clearTimeout(timer);
-  }, [store.currentUrl, isTyping, store.history]);
+  }, [inputValue, isTyping, store.history]); // Depend on inputValue
+
+  const inputRef = useRef<HTMLInputElement>(null); // New ref for the input element
 
   // Active Time Tracker
   useEffect(() => {
@@ -592,9 +617,11 @@ export default function Home() {
     }
   }, [store.aiProvider]);
 
-  const handleGo = () => {
-    let url = store.currentUrl.trim();
+  const handleGo = (urlToNavigate?: string) => { // Accept optional URL
+    let url = urlToNavigate || inputValue.trim(); // Use inputValue if no specific URL provided
     if (!url) return;
+
+    store.setCurrentUrl(url); // Ensure global state is updated
 
     const isAuthUrl = (testUrl: string) => {
       try {
@@ -807,77 +834,95 @@ export default function Home() {
   }, [store]);
 
   useEffect(() => {
-    if (window.electronAPI) {
-      const cleanup = window.electronAPI.onAuthCallback(async (event: any, url: string) => {
-        console.log("Auth callback received in ClientOnlyPage:", url);
-        try {
-          const parsed = new URL(url);
-          const status = parsed.searchParams.get("auth_status");
-          const token = parsed.searchParams.get("id_token") || parsed.searchParams.get("token");
-          const uid = parsed.searchParams.get("uid");
-          const email = parsed.searchParams.get("email");
-          const name = parsed.searchParams.get("name");
-          const photo = parsed.searchParams.get("photo");
-          const configParam = parsed.searchParams.get("firebase_config");
+    const cleanup = window.electronAPI.onAuthCallback(async (event: any, url: string) => {
+      console.log("Auth callback received in ClientOnlyPage:", url);
+      try {
+        const parsed = new URL(url);
+        const status = parsed.searchParams.get("auth_status");
+        const token = parsed.searchParams.get("id_token") || parsed.searchParams.get("token");
+        const uid = parsed.searchParams.get("uid");
+        const email = parsed.searchParams.get("email");
+        const name = parsed.searchParams.get("name");
+        const photo = parsed.searchParams.get("photo");
+        const configParam = parsed.searchParams.get("firebase_config");
 
-          if (status === "success" && uid && email) {
-            if (configParam) {
-              try {
-                const config = JSON.parse(atob(configParam));
-                firebaseConfigStorage.save(config);
-                store.setCustomFirebaseConfig(config);
-                firebaseService.reinitialize();
-              } catch (e) {
-                console.error("Failed to parse returned firebase config:", e);
-              }
+        if (status === "success" && uid && email) {
+          if (configParam) {
+            try {
+              const config = JSON.parse(atob(configParam));
+              firebaseConfigStorage.save(config);
+              store.setCustomFirebaseConfig(config);
+              firebaseService.reinitialize();
+            } catch (e) {
+              console.error("Failed to parse returned firebase config:", e);
             }
-
-            if (token) {
-              const credential = GoogleAuthProvider.credential(token);
-              try {
-                await firebaseService.signInWithCredential(credential);
-                console.log("Firebase signed in successfully via deep link");
-              } catch (e: any) {
-                console.error("Firebase sign-in failed:", e);
-              }
-            }
-
-            // Set user data after ensuring firebase auth is established
-            store.setUser({
-              uid,
-              email,
-              displayName: name || email.split('@')[0],
-              photoURL: photo || "",
-            });
-
-            if (email.endsWith("@ponsrischool.in")) store.setAdmin(true);
-
-            store.setHasSeenWelcomePage(true);
-            store.setActiveView('browser');
-            store.startActiveSession();
           }
-        } catch (e: any) {
-          console.error("Error processing auth callback:", e);
+
+          if (token) {
+            const credential = GoogleAuthProvider.credential(token);
+            try {
+              await firebaseService.signInWithCredential(credential);
+              console.log("Firebase signed in successfully via deep link");
+            } catch (e: any) {
+              console.error("Firebase sign-in failed:", e);
+            }
+          }
+
+          // Set user data after ensuring firebase auth is established
+          store.setUser({
+            uid,
+            email,
+            displayName: name || email.split('@')[0],
+            photoURL: photo || "",
+          });
+
+          if (email.endsWith("@ponsrischool.in")) store.setAdmin(true);
+
+          store.setHasSeenWelcomePage(true);
+          store.setActiveView('browser');
+          store.startActiveSession();
         }
-      });
-      return cleanup;
-    }
+      } catch (e: any) {
+        console.error("Error processing auth callback:", e);
+      }
+    });
+    return cleanup;
   }, [store]);
 
-  if ((!store.user && !store.hasSeenWelcomePage) || store.activeView === 'landing-page') {
-    return (
-      <div className={`flex flex-col min-h-screen w-full bg-deep-space relative font-sans text-primary-text transition-all duration-700`}>
-        <TitleBar />
-        <div className="flex-1 pt-10 bg-[#020205]">
-          <LandingPage />
-        </div>
-      </div>
-    );
-  }
+  // Auto-trigger Google Login if no user and not already seen welcome page
+  useEffect(() => {
+      if (!store.user && !store.hasSeenWelcomePage && window.electronAPI) {
+          const GOOGLE_CLIENT_ID = '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com'; // Placeholder
+          const GOOGLE_REDIRECT_URI = 'https://browser.ponsrischool.in/oauth2callback';
+
+          const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+              `client_id=${GOOGLE_CLIENT_ID}&` +
+              `redirect_uri=${GOOGLE_REDIRECT_URI}&` +
+              `response_type=code&` +
+              `scope=email profile openid&` +
+              `access_type=offline&` +
+              `prompt=consent`;
+
+          window.electronAPI.openAuthWindow(authUrl);
+          store.setHasSeenWelcomePage(true); // Prevent re-triggering on subsequent renders
+      }
+  }, [store.user, store.hasSeenWelcomePage]);
+
+  // Temporarily commented out for automatic Google login
+  // if ((!store.user && !store.hasSeenWelcomePage) || store.activeView === 'landing-page') {
+  //   return (
+  //     <div className={`flex flex-col min-h-screen w-full bg-deep-space relative font-sans text-primary-text transition-all duration-700`}>
+  //       <TitleBar />
+  //       <div className="flex-1 pt-10 bg-[#020205]">
+  //         <LandingPage />
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className={`flex flex-col h-screen w-full bg-deep-space overflow-hidden relative font-sans text-primary-text transition-all duration-700`}>
-      <TitleBar />
+      <TitleBar onToggleSpotlightSearch={() => setShowSpotlightSearch(prev => !prev)} />
       <div className={`flex flex-1 overflow-hidden relative pt-10 bg-[#020205]`} onContextMenu={handleContextMenu}>
         {/* Navigation Sidebar (Rail) */}
         <AnimatePresence>
@@ -978,17 +1023,19 @@ export default function Home() {
                     <Search size={14} className="text-secondary-text group-focus-within:text-primary-text transition-colors" />
                   </div>
                   <input
+                    ref={inputRef} // Add ref
                     type="text"
-                    value={store.currentUrl === 'about:blank' ? '' : store.currentUrl}
-                    onChange={(e) => store.setCurrentUrl(e.target.value)}
+                    value={inputValue}
+                    onChange={(e) => { setInputValue(e.target.value); setIsTyping(true); }}
                     onFocus={() => setIsTyping(true)}
                     onBlur={() => setIsTyping(false)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleGo();
+                      if (e.key === 'Enter') handleGo(inputValue); // Pass inputValue to handleGo
                       if (e.key === 'Tab' && urlPrediction && isTyping) {
                         e.preventDefault();
-                        store.setCurrentUrl(urlPrediction);
+                        setInputValue(urlPrediction); // Update input value with prediction
                         setUrlPrediction(null);
+                        handleGo(urlPrediction); // Navigate to the predicted URL
                       }
                     }}
                     placeholder="Search with Comet or enter URL..."
@@ -996,8 +1043,8 @@ export default function Home() {
                   />
                   {urlPrediction && isTyping && (
                     <div className="absolute inset-y-0 left-11 right-4 flex items-center pointer-events-none text-xs text-white/20 font-medium z-0">
-                      <span>{store.currentUrl}</span>
-                      <span className="opacity-100">{urlPrediction.substring(store.currentUrl.length)}</span>
+                      <span>{inputValue}</span>
+                      <span className="opacity-100">{urlPrediction.substring(inputValue.length)}</span>
                     </div>
                   )}
                   <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden pointer-events-none rounded-t-2xl">
@@ -1012,6 +1059,30 @@ export default function Home() {
                       <Waves size={12} />
                     </button>
                   </div>
+                  {isTyping && suggestions.length > 0 && (
+                    <div
+                      className="absolute left-0 right-0 top-full mt-1 bg-primary-bg/95 backdrop-blur-md border border-border-color rounded-xl shadow-lg z-50 overflow-hidden"
+                      style={{ width: inputRef.current ? inputRef.current.offsetWidth : 'auto' }}
+                    >
+                      {suggestions.map((s, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-3 px-4 py-2 hover:bg-accent/10 cursor-pointer text-sm"
+                          onClick={() => {
+                            handleGo(s.url);
+                            setSuggestions([]); // Clear suggestions after selection
+                            setIsTyping(false); // Stop typing state
+                          }}
+                        >
+                          {s.type === 'search' && <Search size={14} className="text-secondary-text" />}
+                          {s.type === 'history' && <RefreshCcw size={14} className="text-secondary-text" />}
+                          {s.type === 'bookmark' && <Bookmark size={14} className="text-secondary-text" />}
+                          <span className="flex-1 text-primary-text truncate">{s.text}</span>
+                          <span className="text-secondary-text text-xs">{s.url}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1409,6 +1480,7 @@ export default function Home() {
       </AnimatePresence>
 
       <audio ref={ambientAudioRef} src={store.ambientMusicUrl} loop hidden />
+      <SpotlightSearchOverlay show={showSpotlightSearch} onClose={() => setShowSpotlightSearch(false)} />
     </div>
   );
 }

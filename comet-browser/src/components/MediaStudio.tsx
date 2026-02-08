@@ -60,8 +60,8 @@ const MediaStudio = () => {
         }, 1500);
     };
 
-    return (
-        <div className="flex h-full w-full bg-[#030308] gap-4 p-4 text-white font-sans">
+return (
+        <div className="flex h-full w-full bg-[#030308] gap-4 p-4 text-white font-sans relative z-[1000]">
             <div className="w-64 glass-dark rounded-3xl border border-white/5 flex flex-col p-4 gap-2">
                 <div className="p-4 mb-4">
                     <h2 className="text-xl font-black uppercase tracking-tight text-white mb-1">Media Studio</h2>

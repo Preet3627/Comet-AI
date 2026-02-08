@@ -119,7 +119,8 @@ export class BrowserAI {
                 window.electronAPI.saveVectorStore(serializableData);
             }
 
-            if (this.vectorMemory.length > 300) {
+            // Keep the vector memory size manageable, e.g., 2000 entries
+            if (this.vectorMemory.length > 2000) { // Increased from 300
                 const old = this.vectorMemory.shift();
                 old?.vector.dispose();
             }
@@ -199,10 +200,20 @@ export class BrowserAI {
      * Predictive URL Prefilling
      * Uses current input to find the most likely historical or suggested match
      */
-    static async predictUrl(input: string, history: string[]): Promise<string | null> {
-        if (!input || input.length < 2) return null;
+    static async predictUrl(input: string, history: string[]): Promise<string[]> {
+        if (!input || input.length < 2) return [];
 
+        const suggestions: { url: string, score: number }[] = [];
         const cleanInput = input.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
+        const protocolPrefix = input.startsWith('https://') ? 'https://' : input.startsWith('http://') ? 'http://' : '';
+
+        // Helper to add suggestions without duplicates and with a score
+        const addSuggestion = (url: string, score: number = 0) => {
+            const normalizedUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
+            if (!suggestions.some(s => s.url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '') === normalizedUrl)) {
+                suggestions.push({ url, score });
+            }
+        };
 
         // 1. Common Daily Sites (High Priority)
         const commonDailySites = [
@@ -214,48 +225,72 @@ export class BrowserAI {
 
         for (const site of commonDailySites) {
             if (site.startsWith(cleanInput) && site !== cleanInput) {
-                return `https://${site}`;
+                // Give common sites a high base score
+                addSuggestion(`https://${site}`, 1000);
             }
         }
 
         // Create a map to track frequency and most recent appearance for each unique URL
         const historyScores = new Map<string, { lastIndex: number, count: number }>();
         history.forEach((url, index) => {
-            const cleanUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
-            if (historyScores.has(cleanUrl)) {
-                const entry = historyScores.get(cleanUrl)!;
+            const cleanHistUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
+            if (historyScores.has(cleanHistUrl)) {
+                const entry = historyScores.get(cleanHistUrl)!;
                 entry.count++;
                 entry.lastIndex = index;
             } else {
-                historyScores.set(cleanUrl, { lastIndex: index, count: 1 });
+                historyScores.set(cleanHistUrl, { lastIndex: index, count: 1 });
             }
         });
 
         // 2. Prioritized History match (Prefix logic with recency and frequency boost)
-        let bestMatch: { url: string, score: number } | null = null;
+        const historyMatches: { url: string, score: number }[] = [];
         for (const url of history) {
-            const cleanUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
-            if (cleanUrl.startsWith(cleanInput) && cleanUrl !== cleanInput) {
-                const entry = historyScores.get(cleanUrl);
+            const cleanHistUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
+            // Only suggest if it's a direct prefix match and not an exact match to the input
+            // unless the input is a full domain (e.g., "google.com")
+            if (cleanHistUrl.startsWith(cleanInput) && cleanHistUrl !== cleanInput && cleanHistUrl.length > cleanInput.length) {
+                const entry = historyScores.get(cleanHistUrl);
                 let score = 0;
                 if (entry) {
-                    score = entry.count * 100 - entry.lastIndex; // Boost by frequency, penalize by age
+                    // Boost by frequency, penalize by age (higher index = older)
+                    score = (entry.count * 200) - (history.length - entry.lastIndex);
+                    // Further boost for closer matches
+                    score += (cleanInput.length / cleanHistUrl.length) * 50;
                 }
-                if (!bestMatch || score > bestMatch.score) {
-                    bestMatch = { url, score };
-                }
+                addSuggestion(url, score);
             }
         }
-        if (bestMatch) return bestMatch.url;
 
-        // 3. Smart TLD completion
+        // 3. Smart TLD completion (only if input doesn't contain a dot and is long enough)
         if (!input.includes('.') && input.length > 2) {
             const commonTlds = ['.com', '.org', '.net', '.io', '.dev', '.app', '.xyz', '.co', '.us', '.ai'];
-            // Prioritize TLDs based on global commonality or even learned user preference (future)
-            return `${input}${commonTlds[0]}`;
+            commonTlds.forEach(tld => {
+                const fullUrl = `${protocolPrefix}${cleanInput}${tld}`;
+                if (!fullUrl.endsWith(cleanInput)) { // Avoid suggesting "goo.com" if input is "goo.com"
+                    addSuggestion(fullUrl, 50); // Lower score for generic TLD suggestions
+                }
+            });
+        }
+        
+        // 4. Default search suggestion if no good URL prediction
+        if (suggestions.length === 0 && input.length > 0 && !input.includes(' ')) {
+            addSuggestion(`https://www.google.com/search?q=${encodeURIComponent(input)}`, 1);
         }
 
-        return null;
+
+        // Filter out any suggestions that are just the input itself if the input is a full domain
+        const finalSuggestions = suggestions.filter(s => {
+            const sClean = s.url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/$/, '');
+            const inputClean = input.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/$/, '');
+            return sClean !== inputClean;
+        });
+
+        // Sort by score (descending) and take top 4
+        return finalSuggestions
+            .sort((a, b) => b.score - a.score)
+            .map(s => s.url)
+            .slice(0, 4);
     }
 
     /**
