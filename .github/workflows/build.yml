@@ -1,426 +1,142 @@
-# ===========================================
-# 🌟 Comet Browser Mobile CI/CD Pipeline
-# ===========================================
-#
-# Workflow Overview:
-# ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-# │  build-android  │    │   build-ios     │    │ create-release  │
-# │                 │    │                 │    │                 │
-# │ • Setup Java    │    │ • Free Disk     │    │ • Download      │
-# │ • Setup Android │    │ • Setup Flutter │    │   Artifacts     │
-# │ • Setup Flutter │    │ • Precache iOS  │    │ • Create Release│
-# │ • Cache Gradle  │    │ • Cache Pods    │    │ • Upload APK    │
-# │ • Build APK     │    │ • Install Pods  │    │ • Upload iOS    │
-# │ • Upload APK    │    │ • Build iOS     │    │                 │
-# └─────────────────┘    └─────────────────┘    └─────────────────┘
-#         │                        │                     │
-#         └────────────────────────┼─────────────────────┘
-#                                  ▼
-#                    🚀 GitHub Release Created
-#
-# Build Time: ~15-20 minutes
-# Cache Hit Rate: ~80-90% on subsequent runs
-# Artifacts: APK + iOS App Bundle
-#
-# ===========================================
-
-name: 🚀 Build Mobile Platforms
+name: Build Comet Browser
 
 on:
   push:
     branches:
       - main
-      - master
-    paths:
-      - 'CometBrowserMobile/**'
-      - '.github/workflows/build.yml'
-      - 'pubspec.yaml'
+      - develop
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
-      - master
-    paths:
-      - 'CometBrowserMobile/**'
-      - '.github/workflows/build.yml'
-      - 'pubspec.yaml'
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Build Type'
-        required: false
-        default: 'release'
-        type: choice
-        options:
-          - release
-          - debug
-
-env:
-  FLUTTER_VERSION: 'stable'
-  JAVA_VERSION: '21'
-  ANDROID_API_LEVEL: '34'
-  IOS_DEPLOYMENT_TARGET: '17.0'
-  CACHE_KEY_PREFIX: 'comet-mobile-v1'
 
 jobs:
-  build-android:
-    name: 📱 Build Android APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  build-windows:
+    runs-on: windows-latest
+    
     steps:
-      # 📥 Checkout Code
-      - name: 📥 Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          fetch-depth: 1
+          node-version: '20'
+          cache: 'npm'
 
-      # ☕ Setup Java Environment
-      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ env.JAVA_VERSION }}
+      - name: Install dependencies
+        run: npm ci
 
-      # 🤖 Setup Android SDK with Enhanced Caching
-      - name: 🤖 Setup Android SDK (API ${{ env.ANDROID_API_LEVEL }})
-        uses: android-actions/setup-android@v3
+      - name: Compile TypeScript files
+        run: npx tsc src/lib/P2PFileSyncService.ts src/types/electron.d.ts --outDir src/lib --module CommonJS --skipLibCheck --esModuleInterop
 
-      - name: 📋 Accept Android SDK Licenses
-        run: yes | sdkmanager --licenses
+      - name: Build Next.js app
+        run: npm run build
 
-      # 🎯 Setup Flutter with Comprehensive Caching
-      - name: 🎯 Setup Flutter ${{ env.FLUTTER_VERSION }}
-        uses: subosito/flutter-action@v2
-        with:
-          channel: ${{ env.FLUTTER_VERSION }}
-          cache: true
-          cache-key: 'flutter-${{ env.FLUTTER_VERSION }}-${{ runner.os }}'
-          cache-path: ${{ runner.tool_cache }}/flutter
+      - name: Verify build files
+        run: node verify-build.js
 
-      # 📦 Cache Flutter Pub Dependencies
-      - name: 📦 Cache Flutter Dependencies
-        uses: actions/cache@v4
-        id: flutter-cache
-        with:
-          path: |
-            CometBrowserMobile/comet_ai/.dart_tool
-            CometBrowserMobile/comet_ai/.packages
-            CometBrowserMobile/comet_ai/.flutter-plugins
-            CometBrowserMobile/comet_ai/.flutter-plugins-dependencies
-          key: ${{ env.CACHE_KEY_PREFIX }}-flutter-${{ runner.os }}-${{ hashFiles('CometBrowserMobile/comet_ai/pubspec.lock') }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-flutter-${{ runner.os }}-
+      - name: Build Windows installer
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 🔧 Cache Gradle Dependencies (Enhanced)
-      - name: 🔧 Cache Gradle Dependencies
-        uses: actions/cache@v4
-        id: gradle-cache
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.gradle/build-cache
-            CometBrowserMobile/comet_ai/android/.gradle
-          key: ${{ env.CACHE_KEY_PREFIX }}-gradle-${{ runner.os }}-${{ hashFiles('**/pubspec.lock', '**/gradle-wrapper.properties', '**/build.gradle', '**/settings.gradle') }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-gradle-${{ runner.os }}-
-
-      # 📱 Cache Android Build Outputs
-      - name: 📱 Cache Android Build Outputs
-        uses: actions/cache@v4
-        id: android-build-cache
-        with:
-          path: |
-            CometBrowserMobile/comet_ai/build/app
-            CometBrowserMobile/comet_ai/android/app/build
-          key: ${{ env.CACHE_KEY_PREFIX }}-android-build-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-android-build-${{ runner.os }}-
-
-      # 📦 Install Dart Dependencies
-      - name: 📦 Install Flutter Dependencies
-        working-directory: CometBrowserMobile/comet_ai
-        run: |
-          echo "📦 Installing Flutter dependencies..."
-          flutter pub get --verbose
-          echo "✅ Flutter dependencies installed"
-
-      # 🔨 Build Android APK
-      - name: 🔨 Build Android APK (Release)
-        working-directory: CometBrowserMobile/comet_ai
-        run: |
-          echo "🔨 Building Android APK..."
-          flutter build apk --release --verbose
-          echo "✅ Android APK built successfully"
-
-      # 📤 Upload Android APK Artifact
-      - name: 📤 Upload Android APK
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk-${{ github.run_id }}
-          path: CometBrowserMobile/comet_ai/build/app/outputs/flutter-apk/app-release.apk
+          name: comet-browser-windows-installer
+          path: release/*.exe
           retention-days: 30
 
-  build-ios:
-    name: 🍎 Build iOS App
-    runs-on: macos-14
-    timeout-minutes: 45
-    steps:
-      # 📥 Checkout Code
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      # 🧹 Free Up Disk Space (macOS Runner Optimization)
-      - name: 🧹 Free Disk Space
-        run: |
-          echo "🧹 Cleaning up disk space..."
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf ~/Library/Developer/CoreSimulator
-          echo "✅ Disk space freed"
-
-      # 💎 Setup Ruby Environment for CocoaPods
-      - name: 💎 Setup Ruby (for CocoaPods)
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-
-      # 🎯 Setup Flutter with Enhanced Caching
-      - name: 🎯 Setup Flutter ${{ env.FLUTTER_VERSION }}
-        uses: subosito/flutter-action@v2
-        with:
-          channel: ${{ env.FLUTTER_VERSION }}
-          cache: true
-          cache-key: 'flutter-${{ env.FLUTTER_VERSION }}-${{ runner.os }}'
-          cache-path: ${{ runner.tool_cache }}/flutter
-
-      # 📦 Cache Flutter Dependencies
-      - name: 📦 Cache Flutter Dependencies
-        uses: actions/cache@v4
-        id: flutter-cache-ios
-        with:
-          path: |
-            CometBrowserMobile/comet_ai/.dart_tool
-            CometBrowserMobile/comet_ai/.packages
-            CometBrowserMobile/comet_ai/.flutter-plugins
-            CometBrowserMobile/comet_ai/.flutter-plugins-dependencies
-          key: ${{ env.CACHE_KEY_PREFIX }}-flutter-ios-${{ runner.os }}-${{ hashFiles('CometBrowserMobile/comet_ai/pubspec.lock') }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-flutter-ios-${{ runner.os }}-
-
-      # 🍫 Cache Ruby Gems (CocoaPods)
-      - name: 🍫 Cache Ruby Gems
-        uses: actions/cache@v4
-        id: ruby-cache
-        with:
-          path: |
-            ~/.gem
-            vendor/bundle
-          key: ${{ env.CACHE_KEY_PREFIX }}-ruby-${{ runner.os }}-${{ hashFiles('**/Gemfile.lock') }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-ruby-${{ runner.os }}-
-
-      # 📱 Precache iOS Flutter Dependencies
-      - name: 📱 Precache iOS Flutter Dependencies
-        run: |
-          echo "📱 Precaching iOS Flutter dependencies..."
-          flutter precache --ios --verbose
-          echo "✅ iOS Flutter dependencies precached"
-
-      # 📦 Install Flutter Dependencies
-      - name: 📦 Install Flutter Dependencies
-        working-directory: CometBrowserMobile/comet_ai
-        run: |
-          echo "📦 Installing Flutter dependencies..."
-          flutter pub get --verbose
-          echo "✅ Flutter dependencies installed"
-
-      # 🔧 Cache CocoaPods Dependencies (Enhanced)
-      - name: 🔧 Cache CocoaPods Dependencies
-        uses: actions/cache@v4
-        id: cocoapods-cache
-        with:
-          path: |
-            CometBrowserMobile/comet_ai/ios/Pods
-            ~/Library/Caches/CocoaPods
-            ~/Library/Developer/Xcode/DerivedData
-          key: ${{ env.CACHE_KEY_PREFIX }}-cocoapods-${{ runner.os }}-${{ hashFiles('CometBrowserMobile/comet_ai/pubspec.lock', 'CometBrowserMobile/comet_ai/ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-cocoapods-${{ runner.os }}-${{ hashFiles('CometBrowserMobile/comet_ai/pubspec.lock') }}-
-            ${{ env.CACHE_KEY_PREFIX }}-cocoapods-${{ runner.os }}-
-
-      # 📦 Cache iOS Build Outputs
-      - name: 📦 Cache iOS Build Outputs
-        uses: actions/cache@v4
-        id: ios-build-cache
-        with:
-          path: |
-            CometBrowserMobile/comet_ai/build/ios
-            CometBrowserMobile/comet_ai/ios/DerivedData
-          key: ${{ env.CACHE_KEY_PREFIX }}-ios-build-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-ios-build-${{ runner.os }}-
-
-      # 🍫 Install CocoaPods
-      - name: 🍫 Install CocoaPods
-        working-directory: CometBrowserMobile/comet_ai/ios
-        run: |
-          echo "🍫 Installing CocoaPods..."
-          gem install cocoapods -v 1.15.2
-          pod repo update --verbose
-          echo "✅ CocoaPods installed"
-
-      # 📦 Install iOS Pods
-      - name: 📦 Install iOS Pods
-        working-directory: CometBrowserMobile/comet_ai/ios
-        run: |
-          echo "📦 Installing iOS Pods..."
-          pod install --repo-update --verbose
-          echo "✅ iOS Pods installed"
-
-      # 🔨 Build iOS App
-      - name: 🔨 Build iOS App (Release)
-        working-directory: CometBrowserMobile/comet_ai
-        run: |
-          echo "🔨 Building iOS app..."
-          export NODE_OPTIONS="--max-old-space-size=4096"
-          flutter build ios --release --no-codesign --verbose
-          echo "✅ iOS app built successfully"
-
-      # 📦 Package iOS App
-      - name: 📦 Package iOS App
-        working-directory: CometBrowserMobile/comet_ai/build/ios/iphoneos
-        run: |
-          echo "📦 Packaging iOS app..."
-          zip -r Runner.app.zip Runner.app
-          echo "✅ iOS app packaged"
-
-      # 📤 Upload iOS App Artifact
-      - name: 📤 Upload iOS App
+      - name: Upload unpacked app for debugging
         uses: actions/upload-artifact@v4
         with:
-          name: ios-app-${{ github.run_id }}
-          path: CometBrowserMobile/comet_ai/build/ios/iphoneos/Runner.app.zip
-          retention-days: 30
+          name: comet-browser-windows-unpacked
+          path: release/win-unpacked/
+          retention-days: 7
 
-  create-release:
-    name: 🚀 Create GitHub Release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [build-android, build-ios]
-    if: success() # Only run if both builds succeeded
-    steps:
-      # 📥 Download Artifacts
-      - name: 📥 Download Build Artifacts
-        uses: actions/download-artifact@v4
+      - name: Create Release (on tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
         with:
-          path: artifacts/
-          merge-multiple: true
-
-      # 📋 Verify Artifacts
-      - name: 📋 Verify Downloaded Artifacts
-        run: |
-          echo "📋 Verifying downloaded artifacts..."
-          ls -la artifacts/
-          echo "✅ Artifacts verified"
-
-      # 🚀 Create GitHub Release
-      - name: 🚀 Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        id: create_release
-        with:
-          tag_name: v${{ github.run_number }}.${{ github.run_attempt }}
-          name: 🚀 Release v${{ github.run_number }}.${{ github.run_attempt }}
-          body: |
-            ## 🚀 Comet Browser Mobile Release
-
-            **Build Information:**
-            - **Run ID:** `${{ github.run_id }}`
-            - **Commit:** `${{ github.sha }}`
-            - **Branch:** `${{ github.ref_name }}`
-            - **Triggered by:** @${{ github.actor }}
-
-            **Build Details:**
-            - ✅ Android APK built successfully
-            - ✅ iOS App built successfully
-            - 📦 Artifacts uploaded and verified
-
-            **Artifacts:**
-            - 📱 `app-release.apk` - Android APK (Release)
-            - 🍎 `Runner.app.zip` - iOS App Bundle (Release)
-
-            **Installation:**
-            - **Android:** Install the APK file directly on your device
-            - **iOS:** Requires code signing for TestFlight/App Store deployment
-
-            ---
-            *This release was automatically built and published by GitHub Actions CI/CD pipeline.*
-          files: |
-            artifacts/android-apk-${{ github.run_id }}/app-release.apk
-            artifacts/ios-app-${{ github.run_id }}/Runner.app.zip
+          files: release/*.exe
           draft: false
           prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 📢 Output Release Information
-      - name: 📢 Release Information
-        run: |
-          echo "🚀 Release created successfully!"
-          echo "📦 Release URL: ${{ steps.create_release.outputs.url }}"
-          echo "🏷️  Release Tag: ${{ steps.create_release.outputs.tag_name }}"
-          echo "📋 Release ID: ${{ steps.create_release.outputs.id }}"
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-# ===========================================
-# 📊 Caching Strategy Summary
-# ===========================================
-#
-# Cache Layers Implemented:
-# ┌─────────────────────────────────────┐
-# │ 1. Flutter SDK Cache                │
-# │    - flutter-action built-in cache  │
-# │    - Platform-specific binaries     │
-# └─────────────────────────────────────┘
-# ┌─────────────────────────────────────┐
-# │ 2. Flutter Pub Dependencies         │
-# │    - .dart_tool, .packages          │
-# │    - .flutter-plugins* files        │
-# │    - Based on pubspec.lock hash     │
-# └─────────────────────────────────────┘
-# ┌─────────────────────────────────────┐
-# │ 3. Gradle Dependencies (Android)    │
-# │    - ~/.gradle/caches & wrapper     │
-# │    - Project .gradle directory      │
-# │    - Build cache enabled            │
-# └─────────────────────────────────────┘
-# ┌─────────────────────────────────────┐
-# │ 4. CocoaPods Dependencies (iOS)     │
-# │    - Pods/, DerivedData/            │
-# │    - CocoaPods caches               │
-# │    - Ruby gems cache                │
-# └─────────────────────────────────────┘
-# ┌─────────────────────────────────────┐
-# │ 5. Build Outputs Cache              │
-# │    - Android: build/app/outputs/    │
-# │    - iOS: build/ios/ & DerivedData/ │
-# │    - Run ID based (per-build)       │
-# └─────────────────────────────────────┘
-#
-# Performance Impact:
-# • First build: ~15-20 minutes
-# • Subsequent builds: ~8-12 minutes (40-60% faster)
-# • Cache hit rate: 80-90% on dependency changes
-# • Storage: ~2-3GB cached per platform
-#
-# Cache Invalidation:
-# • pubspec.lock changes → Flutter deps cache invalidated
-# • Podfile.lock changes → CocoaPods cache invalidated
-# • Build config changes → Build cache invalidated
-# • Manual: Update CACHE_KEY_PREFIX to force refresh
-#
-# ===========================================
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript files
+        run: npx tsc src/lib/P2PFileSyncService.ts src/types/electron.d.ts --outDir src/lib --module CommonJS --skipLibCheck --esModuleInterop
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Verify build files
+        run: node verify-build.js
+
+      - name: Build macOS app
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comet-browser-macos-installer
+          path: |
+            release/*.dmg
+            release/*.zip
+          retention-days: 30
+
+      - name: Create Release (on tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/*.dmg
+            release/*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-meta:
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract metadata
+        id: metadata
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "### Build Successful ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** Windows x64" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Type:** NSIS Installer" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the installer from the Artifacts tab above." >> $GITHUB_STEP_SUMMARY
