@@ -1,4 +1,6 @@
 // Browser-AI/comet-browser/src/app/settings/page.tsx
+"use client";
+
 import SettingsPanel from '@/components/SettingsPanel';
 
 export default function SettingsPage() {

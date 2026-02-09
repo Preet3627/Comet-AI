@@ -14,7 +14,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Zap, Send, ShoppingBag, Globe, Plus, Bookmark,
   RotateCw, AlertTriangle, DownloadCloud, ShoppingCart, Copy as CopyIcon,
   FolderOpen, ScanLine, Search, Puzzle, Briefcase, RefreshCcw, Layout, MoreVertical,
-  CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves
+  CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves, Sparkles
 } from 'lucide-react';
 import MediaSuggestions from './MediaSuggestions';
 import { offlineChatbot } from '@/lib/OfflineChatbot';

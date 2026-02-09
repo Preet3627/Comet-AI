@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import {
     Monitor, Shield, Globe, Info, Download,
     ChevronRight, ShieldCheck, Key, Package, Keyboard,
-    Briefcase, ShieldAlert, Database, LogIn, LogOut, History as HistoryIcon, User as UserIcon, Zap, RefreshCw, Languages
+    Briefcase, ShieldAlert, Database, LogIn, LogOut, History as HistoryIcon, User as UserIcon, Zap, RefreshCw, Languages, Music2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import SearchEngineSettings from './SearchEngineSettings';
