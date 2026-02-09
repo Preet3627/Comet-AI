@@ -1,36 +1,9 @@
 name: Build All Platforms (Mobile & Desktop)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch: {}
 
 jobs:
-  visualize:
-    name: Build Architecture Visualization
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Generate Architecture Diagram
-        run: |
-          echo "## Build Architecture" >> $GITHUB_STEP_SUMMARY
-          echo '```mermaid' >> $GITHUB_STEP_SUMMARY
-          echo 'graph TD' >> $GITHUB_STEP_SUMMARY
-          echo '    Trigger(Push Tag / Manual) --> BuildMobile[Build Mobile Apps]' >> $GITHUB_STEP_SUMMARY
-          echo '    Trigger --> BuildDesktop[Build Desktop Apps]' >> $GITHUB_STEP_SUMMARY
-          echo '    BuildMobile --> Android(Android APK)' >> $GITHUB_STEP_SUMMARY
-          echo '    BuildMobile --> iOS(iOS App Bundle)' >> $GITHUB_STEP_SUMMARY
-          echo '    BuildDesktop --> Windows(Windows EXE)' >> $GITHUB_STEP_SUMMARY
-          echo '    BuildDesktop --> macOS(macOS DMG)' >> $GITHUB_STEP_SUMMARY
-          echo '    BuildDesktop --> Linux(Linux AppImage)' >> $GITHUB_STEP_SUMMARY
-          echo '    Android --> Release(Release Assets)' >> $GITHUB_STEP_SUMMARY
-          echo '    iOS --> Release' >> $GITHUB_STEP_SUMMARY
-          echo '    Windows --> Release' >> $GITHUB_STEP_SUMMARY
-          echo '    macOS --> Release' >> $GITHUB_STEP_SUMMARY
-          echo '    Linux --> Release' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
   build-mobile:
     name: Build Mobile (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -119,16 +92,11 @@ jobs:
         working-directory: comet-browser
         run: npm install
 
-      - name: Rebuild native modules for Electron
-        working-directory: comet-browser
-        run: npx electron-rebuild
-        continue-on-error: true
-
       - name: Build Desktop App
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
-          NEXT_PUBLIC_APP_VERSION: 0.1.7
+          NEXT_PUBLIC_APP_VERSION: 0.1.6
         run: ${{ matrix.build_cmd }}
 
       - name: Upload Desktop Artifact
@@ -136,32 +104,3 @@ jobs:
         with:
           name: desktop-${{ matrix.target }}
           path: ${{ matrix.artifact_path }}
-
-  release:
-    name: Create GitHub Release
-    needs: [build-mobile, build-desktop]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Organize Release Assets
-        run: |
-          mkdir release-assets
-          find artifacts -type f \( -name "*.apk" -o -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" \) -exec cp {} release-assets/ \;
-          ls -R release-assets
-
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-assets/*
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true

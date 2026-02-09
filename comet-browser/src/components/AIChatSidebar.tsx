@@ -2003,6 +2003,16 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
                   </button>
                   <button
                     onClick={() => {
+                      handleSendMessage('[FIND_AND_CLICK: ]'); // Prompt AI to ask for text
+                      setShowActionsMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <ScanLine size={14} />
+                    <span>Find & Click Text (OCR)</span>
+                  </button>
+                  <button
+                    onClick={() => {
                       const lastMessage = messages.filter((m) => m.role === 'model').pop();
                       if (lastMessage && window.electronAPI) {
                         window.electronAPI.saveAiResponse(lastMessage.content);
