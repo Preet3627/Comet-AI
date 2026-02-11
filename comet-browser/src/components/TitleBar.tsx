@@ -64,7 +64,7 @@ const TitleBar = ({ onToggleSpotlightSearch }: TitleBarProps) => {
                 </button>
             </div>
             {/* Comet AI Logo and Text */}
-            <div className="flex items-center gap-2 px-3 no-drag-region">
+            <div className="flex items-center gap-2 px-3 drag-region">
                 <img src="/icon.ico" alt="Comet AI Logo" className="w-5 h-5 object-contain" />
                 <span className="text-xs font-black uppercase tracking-widest text-white/80">Comet-AI</span>
             </div>

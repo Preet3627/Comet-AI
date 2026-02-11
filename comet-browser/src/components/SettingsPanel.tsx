@@ -142,7 +142,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
             >
                 {/* Navigation Sidebar */}
                 <div className="w-72 bg-white/[0.01] border-r border-white/5 p-8 flex flex-col gap-2">
-                    <div className="flex items-center gap-4 px-4 mb-10">
+                    <div className="flex items-center gap-4 px-4 mb-10 drag-region cursor-move" title="Drag to move window">
                         <img src="/icon.png" alt="Comet" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
                         <span className="text-xl font-black tracking-tighter uppercase text-white">COMET</span>
                     </div>
@@ -169,7 +169,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                             Install PWA
                         </button>
                         <div className="p-4 bg-deep-space-accent-neon/5 rounded-2xl border border-deep-space-accent-neon/10 text-[10px] font-medium text-deep-space-accent-neon/60 text-center leading-relaxed">
-                            Version v0.1.7 Stable <br /> (Production Build)
+                            Version v0.2.0 Stable <br /> (Enhancement Update)
                         </div>
                     </div>
                 </div>

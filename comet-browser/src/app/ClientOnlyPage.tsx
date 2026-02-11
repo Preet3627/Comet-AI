@@ -1516,18 +1516,28 @@ export default function Home() {
             <div className="w-full max-w-sm bg-[#0a0a0f] border border-white/10 rounded-2xl shadow-3xl overflow-hidden p-6">
               <h3 className="text-sm font-black uppercase tracking-widest text-white mb-4 text-center">TRANSLATE SITE</h3>
               <div className="grid grid-cols-2 gap-2">
-                {['hi', 'ta', 'te', 'bn', 'ml', 'kn', 'mr', 'gu'].map(langCode => (
+                {[
+                  { code: 'hi', name: 'Hindi' },
+                  { code: 'gu', name: 'Gujarati' },
+                  { code: 'mr', name: 'Marathi' },
+                  { code: 'bn', name: 'Bengali' },
+                  { code: 'ta', name: 'Tamil' },
+                  { code: 'te', name: 'Telugu' },
+                  { code: 'ml', name: 'Malayalam' },
+                  { code: 'kn', name: 'Kannada' }
+                ].map(lang => (
                   <button
-                    key={langCode}
+                    key={lang.code}
                     onClick={async () => {
                       if (window.electronAPI) {
-                        await window.electronAPI.translateWebsite({ targetLanguage: langCode });
+                        await window.electronAPI.translateWebsite({ targetLanguage: lang.code });
                       }
                       setShowTranslateDialog(false);
                     }}
-                    className="px-4 py-2 bg-white/5 hover:bg-accent/10 border border-white/5 hover:border-accent/40 rounded-xl text-xs font-bold transition-all text-white/80 hover:text-white"
+                    className="flex flex-col items-center justify-center p-4 bg-white/5 hover:bg-accent/10 border border-white/5 hover:border-accent/40 rounded-xl transition-all group"
                   >
-                    {langCode.toUpperCase()}
+                    <span className="text-sm font-black text-white group-hover:text-accent transition-colors">{lang.name}</span>
+                    <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-1">{lang.code}</span>
                   </button>
                 ))}
               </div>
