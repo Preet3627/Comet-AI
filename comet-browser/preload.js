@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openDevTools: () => ipcRenderer.send('open-dev-tools'),
   changeZoom: (deltaY) => ipcRenderer.send('change-zoom', deltaY),
   executeJavaScript: (code) => ipcRenderer.invoke('execute-javascript', code),
+  clickElement: (selector) => ipcRenderer.invoke('click-element', selector),
+  typeText: (selector, text) => ipcRenderer.invoke('type-text', { selector, text }),
+  fillForm: (data) => ipcRenderer.invoke('fill-form', data),
   openExternalApp: (appNameOrPath) => ipcRenderer.invoke('open-external-app', appNameOrPath),
   searchApplications: (query) => ipcRenderer.invoke('search-applications', query),
   getSuggestions: (query) => ipcRenderer.invoke('get-suggestions', query), // New IPC handler

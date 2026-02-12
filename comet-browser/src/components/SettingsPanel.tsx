@@ -143,7 +143,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                 {/* Navigation Sidebar */}
                 <div className="w-72 bg-white/[0.01] border-r border-white/5 p-8 flex flex-col gap-2">
                     <div className="flex items-center gap-4 px-4 mb-10 drag-region cursor-move" title="Drag to move window">
-                        <img src="/icon.png" alt="Comet" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
+                        <img src="icon.png" alt="Comet" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
                         <span className="text-xl font-black tracking-tighter uppercase text-white">COMET</span>
                     </div>
 
@@ -657,7 +657,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
 
                         {activeSection === 'about' && (
                             <div className="text-center py-20">
-                                <img src="/icon.png" alt="Comet Icon" className="w-24 h-24 mx-auto mb-8 shadow-2xl animate-pulse" />
+                                <img src="icon.png" alt="Comet Icon" className="w-24 h-24 mx-auto mb-8 shadow-2xl animate-pulse" />
                                 <h2 className="text-5xl font-black tracking-tighter mb-4">{store.appName}</h2>
                                 <p className="text-white/40 max-w-md mx-auto mb-10 text-sm leading-relaxed font-medium">
                                     A performance-hardened Chromium shell with native AI orchestration, optimized for decentralized workflows.

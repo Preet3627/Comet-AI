@@ -2273,7 +2273,7 @@ function createPopupWindow(type, options = {}) {
   // Load the appropriate content
   const baseUrl = isDev
     ? 'http://localhost:3003'
-    : `file://${path.join(__dirname, 'out')}`;
+    : `file://${path.join(__dirname, 'out', 'index.html')}`;
 
   let route = '';
   switch (type) {
@@ -2299,7 +2299,22 @@ function createPopupWindow(type, options = {}) {
       route = `/${type}`;
   }
 
-  const url = isDev ? `${baseUrl}${route}` : `${baseUrl}/index.html#${route}`;
+  let url;
+  if (isDev) {
+    url = `${baseUrl}${route}`;
+  } else {
+    // For static export, Next.js creates folder/index.html
+    const routePath = route === '/' ? '/index.html' : `${route}/index.html`;
+    const fullPath = path.join(__dirname, 'out', routePath);
+    if (fs.existsSync(fullPath)) {
+      url = `file://${fullPath}`;
+    } else {
+      // Fallback to hash routing if file doesn't exist
+      url = `file://${path.join(__dirname, 'out', 'index.html')}#${route}`;
+    }
+  }
+
+  console.log(`[Main] Loading popup URL: ${url}`);
   popup.loadURL(url);
 
   popup.once('ready-to-show', () => {
@@ -2459,14 +2474,93 @@ ipcMain.on('google-oauth-login', (event) => {
 // SHELL COMMAND EXECUTION - For AI control of system features
 // ============================================================================
 
-// Universal Translation using free-translate
-const { translate: freeTranslate } = require('free-translate');
+// Universal Translation using Google Translate API (Fallback for missing free-translate)
 ipcMain.handle('translate-text', async (event, { text, from, to }) => {
   try {
-    const translated = await freeTranslate(text, { from: from || 'auto', to });
-    return { success: true, translated };
+    const sl = from || 'auto';
+    const tl = to;
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data && data[0]) {
+      const translated = data[0].map(x => x[0]).join('');
+      return { success: true, translated };
+    }
+    return { success: false, error: 'Invalid response from translation service' };
   } catch (error) {
     console.error('[Main] Translation failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('click-element', async (event, selector) => {
+  const view = tabViews.get(activeTabId);
+  if (!view) return { success: false, error: 'No active view' };
+  try {
+    const result = await view.webContents.executeJavaScript(`
+      (() => {
+        const el = document.querySelector('${selector}');
+        if (el) {
+          el.click();
+          return true;
+        }
+        return false;
+      })()
+    `);
+    return { success: result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('type-text', async (event, { selector, text }) => {
+  const view = tabViews.get(activeTabId);
+  if (!view) return { success: false, error: 'No active view' };
+  try {
+    await view.webContents.executeJavaScript(`
+      (() => {
+        const el = document.querySelector('${selector}');
+        if (el) {
+          el.focus();
+          el.value = '${text.replace(/'/g, "\\'")}';
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      })()
+    `);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('fill-form', async (event, formData) => {
+  const view = tabViews.get(activeTabId);
+  if (!view) return { success: false, error: 'No active view' };
+  try {
+    await view.webContents.executeJavaScript(`
+      (() => {
+        const data = ${JSON.stringify(formData)};
+        let successCount = 0;
+        for (const [selector, value] of Object.entries(data)) {
+           const el = document.querySelector(selector);
+           if (el) {
+             el.focus();
+             el.value = value;
+             el.dispatchEvent(new Event('input', { bubbles: true }));
+             el.dispatchEvent(new Event('change', { bubbles: true }));
+             successCount++;
+           }
+        }
+        return successCount;
+      })()
+    `);
+    return { success: true };
+  } catch (error) {
     return { success: false, error: error.message };
   }
 });
@@ -2509,6 +2603,20 @@ ipcMain.handle('execute-shell-command', async (event, command) => {
 // ============================================================================
 // SCREEN CAPTURE - For OCR and cross-app clicking
 // ============================================================================
+ipcMain.handle('capture-browser-view-screenshot', async () => {
+  const view = tabViews.get(activeTabId);
+  if (view) {
+    try {
+      const image = await view.webContents.capturePage();
+      return image.toDataURL();
+    } catch (e) {
+      console.error('Failed to capture browser view:', e);
+      return null;
+    }
+  }
+  return null;
+});
+
 ipcMain.handle('capture-screen-region', async (event, { x, y, width, height }) => {
   console.log('[Screen] Capturing region:', { x, y, width, height });
 

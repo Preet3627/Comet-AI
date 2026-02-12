@@ -138,6 +138,8 @@ declare global {
 
             // Element Control (deprecated - use performCrossAppClick instead)
             clickElement: (selector: string) => Promise<{ success: boolean; error?: string }>;
+            typeText: (selector: string, text: string) => Promise<{ success: boolean; error?: string }>;
+            fillForm: (data: any) => Promise<{ success: boolean; error?: string }>;
             findAndClickText: (targetText: string) => Promise<{ success: boolean; x?: number; y?: number; error?: string; foundText?: string }>;
 
             // Gmail Integration

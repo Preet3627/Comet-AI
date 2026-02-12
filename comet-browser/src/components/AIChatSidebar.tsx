@@ -601,6 +601,8 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
                   await delay(1000);
                   break;
 
+
+
                 case 'SCREENSHOT_AND_ANALYZE':
                   if (window.electronAPI) {
                     commandOutput = '📸 **Taking screenshot and analyzing...**';
@@ -1329,7 +1331,8 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
                     setMessages(prev => [...prev, { role: 'model', content: commandOutput }]);
 
                     try {
-                      const { success, dataURL, error: captureError } = await (window.electronAPI as any).captureScreenRegion(coords as { x: number; y: number; width: number; height: number });
+                      // Fix: captureScreenRegion returns { image, success, error }
+                      const { success, image: dataURL, error: captureError } = await (window.electronAPI as any).captureScreenRegion(coords as { x: number; y: number; width: number; height: number });
                       if (success && dataURL && tesseractWorkerRef.current) {
                         const { data: { text: ocrText } } = await tesseractWorkerRef.current.recognize(dataURL);
                         // Add to vector memory
@@ -1371,27 +1374,60 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
                   break;
 
                 case 'FIND_AND_CLICK':
-                  if (window.electronAPI?.findAndClickText) {
-                    const textToFind = cmd.value?.trim() || '';
-                    commandOutput = textToFind ? `🔍 **Finding and clicking:** "${textToFind}"` : '⚠️ **No text specified for Find & Click.**';
+                  if (window.electronAPI && tesseractWorkerRef.current) {
+                    const textToFind = cmd.value?.trim().toLowerCase() || '';
+                    if (!textToFind) {
+                      commandOutput = '⚠️ **No text specified for Find & Click.**';
+                      setMessages(prev => [...prev, { role: 'model', content: commandOutput }]);
+                      break;
+                    }
+
+                    commandOutput = `🔍 **Scanning screen for "${textToFind}"...**`;
                     setMessages(prev => [...prev, { role: 'model', content: commandOutput }]);
-                    if (textToFind) {
-                      try {
-                        const result = await window.electronAPI.findAndClickText(textToFind);
-                        if (result.success) {
-                          await handleSendMessage(userMessage.content + `\n\n[FIND_AND_CLICK_SUCCESS]: Clicked at (${result.x}, ${result.y})`);
+
+                    try {
+                      // 1. Capture Screen
+                      const width = window.screen.width * window.devicePixelRatio;
+                      const height = window.screen.height * window.devicePixelRatio;
+
+                      const { success, image } = await window.electronAPI.captureScreenRegion({ x: 0, y: 0, width, height });
+
+                      if (success && image) {
+                        // 2. OCR
+                        const { data } = await tesseractWorkerRef.current.recognize(image);
+                        // 3. Find Match
+                        // Tesseract.js v7 Page type structure requires traversing blocks/paragraphs/lines
+                        const words = data.blocks
+                          ? data.blocks.flatMap(block =>
+                            block.paragraphs.flatMap(para =>
+                              para.lines.flatMap(line => line.words)
+                            )
+                          )
+                          : [];
+
+                        const match = words.find((w: any) => w.text.toLowerCase().includes(textToFind));
+
+                        if (match) {
+                          const { x0, y0, x1, y1 } = match.bbox;
+                          const clickX = Math.round((x0 + x1) / 2);
+                          const clickY = Math.round((y0 + y1) / 2);
+
+                          // 4. Click
+                          await window.electronAPI.performCrossAppClick({ x: clickX, y: clickY });
+                          commandOutput = `✅ **Clicked "${match.text}" at (${clickX}, ${clickY}).**`;
                         } else {
-                          await handleSendMessage(userMessage.content + `\n\n[FIND_AND_CLICK_ERROR]: ${result.error}`);
+                          commandOutput = `❌ **Text "${textToFind}" not found on screen.**`;
                         }
-                      } catch (err) {
-                        await handleSendMessage(userMessage.content + `\n\n[FIND_AND_CLICK_ERROR]: ${(err as Error)?.message || 'Failed'}`);
+                      } else {
+                        commandOutput = `❌ **Failed to capture screen.**`;
                       }
-                      shouldReturn = true;
+                    } catch (err: any) {
+                      commandOutput = `❌ **Error during Find & Click: ${err.message}**`;
                     }
                   } else {
-                    commandOutput = '⚠️ **Find & Click not available in this environment.**';
+                    commandOutput = '⚠️ **Find & Click not available (Worker not ready).**';
                   }
-                  await delay(1500);
+                  await delay(2000);
                   break;
 
                 case 'GENERATE_PDF':
@@ -1569,60 +1605,73 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
                 case 'EXPLAIN_CAPABILITIES':
                   commandOutput = `🧠 **Comet AI is preparing a detailed explanation of its capabilities...**`;
                   setMessages(prev => [...prev, { role: 'model', content: commandOutput }]);
-                  await delay(2000); // Initial delay before starting the explanation
+                  await delay(2000);
 
                   const capabilitiesExplanation = `
-                                🌟 **Comet AI Capabilities:** [WAIT: 1000]
+🌟 **Comet AI Capabilities:** [WAIT: 1000]
 
-                                I am the core intelligence of the Comet Browser, designed to assist you with a wide range of tasks by controlling the browser and interacting with your operating system. [WAIT: 1500]
+I am the core intelligence of the Comet Browser. [WAIT: 1500]
 
-                                **My core functionalities include:** [WAIT: 1000]
+**Core functionalities include:** [WAIT: 1000]
 
-                                **1. Browser Automation:** [WAIT: 500]
-                                   - [NAVIGATE: url]: I can take you to any web address. [WAIT: 700]
-                                   - [SEARCH: query]: I can search the web using your default search engine. [WAIT: 700]
-                                   - [RELOAD], [GO_BACK], [GO_FORWARD]: I can control your browsing history. [WAIT: 700]
-                                   - [WEB_SEARCH: query]: I perform real-time web searches and analyze the top results. [WAIT: 1000]
-                                   - [READ_PAGE_CONTENT]: I can read and summarize the full text content of any active browser tab. [WAIT: 1000]
-                                   - [LIST_OPEN_TABS]: I can list all your open browser tabs. [WAIT: 700]
-                                   - [CLICK_ELEMENT: selector]: I can click on specific elements within a browser page. [WAIT: 1000]
+**1. Browser Automation:** [WAIT: 500]
+   - [NAVIGATE: url] : Go to any URL.
+   - [SEARCH: query] : Search with default engine.
+   - [READ_PAGE_CONTENT] : Read active tab content.
 
-                                **2. Data Handling & Content Generation:** [WAIT: 500]
-                                   - [GENERATE_PDF: title | content]: I can generate and download PDF documents. [WAIT: 700]
-                                   - [GENERATE_DIAGRAM: mermaid_code]: I can create visual diagrams using Mermaid.js syntax. [WAIT: 700]
+**2. Vision & OS Interaction:** [WAIT: 500]
+   - [SCREENSHOT_AND_ANALYZE] : Visual analysis.
+   - [OCR_SCREEN: x,y,width,height] : Read screen text.
+   - [FIND_AND_CLICK: text] : Automate OS clicks.
 
-                                **3. Vision & Interaction (OCR):** [WAIT: 500]
-                                   - [SCREENSHOT_AND_ANALYZE]: I can take screenshots of the current browser view, perform OCR, and analyze the content visually. [WAIT: 1500]
-                                   - [OCR_COORDINATES: x,y,width,height]: I can perform OCR on specific pixel coordinates within the browser view. [WAIT: 1000]
-                                   - [OCR_SCREEN: x,y,width,height]: I can perform OCR on any part of your OS screen, or the full screen if no coordinates are specified. [WAIT: 1500]
-                                   - [FIND_AND_CLICK: text]: I can find visible text on your screen (e.g. buttons, labels) via OCR and click it automatically. [WAIT: 1500]
-                                   - [GUIDE_CLICK: description | x,y,width,height]: I can guide you to click on specific areas of your OS screen by providing instructions and coordinates. [WAIT: 1500]
+**3. System Controls:** [WAIT: 500]
+   - [SET_VOLUME: %] : Control audio.
+   - [SET_BRIGHTNESS: %] : Control brightness.
+   - [SHELL_COMMAND: cmd] : Execute commands.
 
-                                **4. System & Integration Controls:** [WAIT: 500]
-                                   - [SET_THEME: dark|light|system]: I can change the browser's UI theme. [WAIT: 700]
-                                   - [OPEN_VIEW: browser|workspace|webstore|pdf|media|coding]: I can switch between different application views. [WAIT: 1000]
-                                   - [SHELL_COMMAND: command]: I can execute shell commands to interact with your operating system, for example, to control brightness or volume (Requires OS permissions). [WAIT: 1500]
-                                   - [WAIT: duration_ms]: I can pause my execution for a specified duration, allowing you to read or take action. [WAIT: 1000]
-
-                                **5. Gmail Integration:** [WAIT: 500]
-                                   - [GMAIL_AUTHORIZE]: I can help you authorize Gmail API access. [WAIT: 700]
-                                   - [GMAIL_LIST_MESSAGES: query | maxResults]: I can list your Gmail messages based on a query. [WAIT: 700]
-                                   - [GMAIL_GET_MESSAGE: messageId]: I can retrieve the content of a specific Gmail message. [WAIT: 700]
-                                   - [GMAIL_SEND_MESSAGE: to | subject | body | threadId]: I can send emails on your behalf. [WAIT: 700]
-                                   - [GMAIL_ADD_LABEL: messageId | labelName]: I can add labels to your Gmail messages. [WAIT: 1000]
-
-                                I can execute multiple commands in a single response, allowing for complex multi-step tasks. For example: [NAVIGATE: https://example.com] [READ_PAGE_CONTENT] [WAIT: 1000] [SUMMARIZE] [WAIT: 1000] [GENERATE_PDF: Summary | {summary_content}]. [WAIT: 2000]
-
-                                My cognitive capabilities include Hybrid RAG (combining local memory and online search), Vision (through screenshots and OCR), and Automation (managing passwords and settings). [WAIT: 2000]
-
-                                How can I assist you further?
-                                `;
-                  await handleSendMessage(userMessage.content + capabilitiesExplanation);
+How can I assist you today?
+`.trim();
+                  await executeCommands(capabilitiesExplanation);
                   shouldReturn = true;
                   break;
 
+
+                case 'TYPE_TEXT':
+                  if (window.electronAPI) {
+                    const [selector, text] = cmd.value.split(' | ');
+                    commandOutput = `⌨️ **Typing "${text}" into "${selector}"...**`;
+                    setMessages(prev => [...prev, { role: 'model', content: commandOutput }]);
+                    try {
+                      await window.electronAPI.typeText(selector, text);
+                      commandOutput = `✅ **Typed text successfully.**`;
+                    } catch (err: any) {
+                      commandOutput = `❌ **Error typing text: ${err.message}.**`;
+                    }
+                  } else {
+                    commandOutput = '⚠️ **Type text not available.**';
+                  }
+                  await delay(1000);
+                  break;
+
+                case 'FILL_FORM':
+                  if (window.electronAPI) {
+                    const formData = JSON.parse(cmd.value);
+                    commandOutput = `📝 **Filling form with data...**`;
+                    setMessages(prev => [...prev, { role: 'model', content: commandOutput }]);
+                    try {
+                      await window.electronAPI.fillForm(formData);
+                      commandOutput = `✅ **Form filled successfully.**`;
+                    } catch (err: any) {
+                      commandOutput = `❌ **Error filling form: ${err.message}.**`;
+                    }
+                  } else {
+                    commandOutput = '⚠️ **Fill form not available.**';
+                  }
+                  await delay(1000);
+                  break;
+
                 default:
-                  commandOutput = `⚠️ **Unknown command: ${cmd.type}**`;
+                  commandOutput = `⚠️ ** Unknown command: ${cmd.type}** `;
                   break;
               }
 
@@ -1658,7 +1707,7 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
             console.log('[YouTube] Content unavailable detected, triggering web search fallback');
             const videoTopic = store.currentUrl.match(/[?&]v=([^&]+)/)?.[1] || 'video';
             const searchQuery = `${videoTopic} video alternative`;
-            setMessages(prev => [...prev, { role: 'model', content: `\n\n⚠️ YouTube content unavailable. Searching for alternatives... [SEARCH: ${searchQuery}]` }]);
+            setMessages(prev => [...prev, { role: 'model', content: `\n\n⚠️ YouTube content unavailable.Searching for alternatives...[SEARCH: ${searchQuery}]` }]);
 
             // Execute search automatically after a short delay
             await delay(2000); // Wait for the message to be displayed
@@ -1854,7 +1903,7 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center">
-            <img src="/icon.png" alt="Comet AI Icon" className="w-full h-full object-contain" />
+            <img src="icon.png" alt="Comet AI Icon" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white text-neon">Comet AI</h2>
           {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}

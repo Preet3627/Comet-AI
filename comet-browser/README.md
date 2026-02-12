@@ -44,6 +44,7 @@ Comet v0.2.0 brings significant user experience improvements, focusing on custom
 ### 🎯 Advanced AI Capabilities
 *   **Unified Search (Spotlight)**: Press `Windows/CMD + Shift + Space` to search apps, WiFi settings, Bluetooth, and the web—even with the browser closed!
 *   **AI System Control**: AI can now control **Brightness, Volume, WiFi, and Bluetooth** via natural language.
+*   **Type Text & Fill Forms**: AI can now type text into inputs and auto-fill complex forms with a single command.
 *   **Cross-App OCR Clicking**: AI can now detect and click on text in **any application** on your computer.
 *   **AI Popup Interface**: A sleek, minimal AI popup that appears for cross-app actions and visual feedback.
 
