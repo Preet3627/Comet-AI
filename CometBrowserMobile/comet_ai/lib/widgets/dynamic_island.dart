@@ -1,18 +1,11 @@
-// ⚠️ EXPERIMENTAL FEATURE - TEMPORARILY DISABLED
-// This feature requires audio packages that are currently disabled for iOS build compatibility
-// Packages needed: just_audio, audio_service, on_audio_query
-// See: IOS_BUILD_FIX.md for re-enabling instructions
-
-/* DISABLED FOR iOS BUILD FIX
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:provider/provider.dart';
 import '../services/music_service.dart';
 
 class DynamicIsland extends StatefulWidget {
-  final MusicService musicService;
-
-  const DynamicIsland({super.key, required this.musicService});
+  const DynamicIsland({super.key});
 
   @override
   State<DynamicIsland> createState() => _DynamicIslandState();
@@ -24,14 +17,16 @@ class _DynamicIslandState extends State<DynamicIsland>
 
   @override
   Widget build(BuildContext context) {
+    final musicService = Provider.of<MusicService>(context);
+
     return StreamBuilder<MediaItem?>(
-      stream: widget.musicService.mediaItem,
+      stream: musicService.mediaItem,
       builder: (context, snapshot) {
         final mediaItem = snapshot.data;
         if (mediaItem == null) return const SizedBox.shrink();
 
         return StreamBuilder<PlaybackState>(
-          stream: widget.musicService.playbackState,
+          stream: musicService.playbackState,
           builder: (context, playbackSnapshot) {
             final playing = playbackSnapshot.data?.playing ?? false;
 
@@ -72,7 +67,11 @@ class _DynamicIslandState extends State<DynamicIsland>
                       vertical: _isExpanded ? 20 : 6,
                     ),
                     child: _isExpanded
-                        ? _buildExpandedContent(mediaItem, playing)
+                        ? _buildExpandedContent(
+                            mediaItem,
+                            playing,
+                            musicService,
+                          )
                         : _buildMinimalContent(playing),
                   ),
                 ),
@@ -99,7 +98,11 @@ class _DynamicIslandState extends State<DynamicIsland>
     );
   }
 
-  Widget _buildExpandedContent(MediaItem item, bool isPlaying) {
+  Widget _buildExpandedContent(
+    MediaItem item,
+    bool isPlaying,
+    MusicService musicService,
+  ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -158,7 +161,7 @@ class _DynamicIslandState extends State<DynamicIsland>
           children: [
             IconButton(
               icon: const Icon(LucideIcons.skipBack, color: Colors.white),
-              onPressed: widget.musicService.skipToPrevious,
+              onPressed: musicService.skipToPrevious,
             ),
             IconButton(
               icon: Icon(
@@ -166,13 +169,11 @@ class _DynamicIslandState extends State<DynamicIsland>
                 color: Colors.white,
                 size: 32,
               ),
-              onPressed: isPlaying
-                  ? widget.musicService.pause
-                  : widget.musicService.play,
+              onPressed: isPlaying ? musicService.pause : musicService.play,
             ),
             IconButton(
               icon: const Icon(LucideIcons.skipForward, color: Colors.white),
-              onPressed: widget.musicService.skipToNext,
+              onPressed: musicService.skipToNext,
             ),
           ],
         ),
@@ -215,22 +216,5 @@ class _DynamicIslandState extends State<DynamicIsland>
         borderRadius: BorderRadius.circular(2),
       ),
     );
-  }
-}
-END OF DISABLED CODE */
-
-import 'package:flutter/material.dart';
-import '../services/music_service.dart';
-
-// Stub widget to prevent compilation errors
-class DynamicIsland extends StatelessWidget {
-  final MusicService? musicService;
-
-  const DynamicIsland({super.key, this.musicService});
-
-  @override
-  Widget build(BuildContext context) {
-    // Return empty widget since music service is disabled
-    return const SizedBox.shrink();
   }
 }

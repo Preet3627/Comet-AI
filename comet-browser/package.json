@@ -69,7 +69,7 @@
     "concurrently": "^8.2.2",
     "cross-env": "^10.1.0",
     "electron": "40.1.0",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.7.0",
     "eslint": "^8.0.0",
     "globals": "^13.24.0",
     "tailwindcss": "^4",

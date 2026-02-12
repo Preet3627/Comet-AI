@@ -1,9 +1,3 @@
-// ⚠️ EXPERIMENTAL FEATURE - TEMPORARILY DISABLED
-// This feature requires audio packages that are currently disabled for iOS build compatibility
-// Packages needed: just_audio, audio_service, on_audio_query
-// See: IOS_BUILD_FIX.md for re-enabling instructions
-
-/* DISABLED FOR iOS BUILD FIX
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:on_audio_query/on_audio_query.dart';
@@ -37,7 +31,7 @@ class MusicService extends BaseAudioHandler with QueueHandler, SeekHandler {
           ],
           systemActions: const {MediaAction.seek},
           androidCompactActionIndices: const [0, 1, 2],
-          processingState: const {
+          processingState: {
             ProcessingState.idle: AudioProcessingState.idle,
             ProcessingState.loading: AudioProcessingState.loading,
             ProcessingState.buffering: AudioProcessingState.buffering,
@@ -147,28 +141,5 @@ class MusicService extends BaseAudioHandler with QueueHandler, SeekHandler {
       await _player.seek(Duration.zero, index: index);
       play();
     }
-  }
-}
-END OF DISABLED CODE */
-
-// Stub class to prevent compilation errors
-class MusicService {
-  // Placeholder - music features temporarily disabled
-  static const bool isAvailable = false;
-
-  void play() {
-    print('⚠️ Music service is temporarily disabled. See IOS_BUILD_FIX.md');
-  }
-
-  void pause() {
-    print('⚠️ Music service is temporarily disabled. See IOS_BUILD_FIX.md');
-  }
-
-  void skipToNext() {
-    print('⚠️ Music service is temporarily disabled. See IOS_BUILD_FIX.md');
-  }
-
-  void skipToPrevious() {
-    print('⚠️ Music service is temporarily disabled. See IOS_BUILD_FIX.md');
   }
 }

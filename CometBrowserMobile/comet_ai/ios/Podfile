@@ -58,10 +58,10 @@ post_install do |installer|
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       
       # Additional flags to reduce memory pressure during linking
-      config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
-      if config.name == 'Release'
-        config.build_settings['OTHER_LDFLAGS'] << '-Xlinker' << '-no_deduplicate'
-      end
+      # config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
+      # if config.name == 'Release'
+      #   config.build_settings['OTHER_LDFLAGS'] << '-Xlinker' << '-no_deduplicate'
+      # end
     end
   end
 end

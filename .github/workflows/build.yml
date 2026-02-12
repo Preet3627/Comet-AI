@@ -32,7 +32,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: CometBrowserMobile/comet_ai
-        run: flutter pub get
+        run: |
+          flutter precache --ios
+          flutter pub get
 
       - name: Build Android APK
         if: matrix.target == 'android'
@@ -78,7 +80,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: comet-browser/package-lock.json
 
@@ -90,18 +92,14 @@ jobs:
 
       - name: Install dependencies (Browser)
         working-directory: comet-browser
-        run: npm install
+        run: npm install --legacy-peer-deps
 
-      - name: Rebuild native modules (robotjs)
-        working-directory: comet-browser
-        run: npm rebuild robotjs --build-from-source
-        continue-on-error: true
 
       - name: Build Desktop App
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
-          NEXT_PUBLIC_APP_VERSION: 0.1.6
+          NEXT_PUBLIC_APP_VERSION: 0.1.7
         run: ${{ matrix.build_cmd }}
 
       - name: Upload Desktop Artifact

@@ -8,7 +8,7 @@ import 'visualizer.dart';
 import 'features_overlay.dart';
 
 import 'package:provider/provider.dart';
-// import 'services/music_service.dart'; // Disabled for iOS build fix
+import 'services/music_service.dart';
 import 'pages/settings_page.dart';
 import 'sync_service.dart';
 
@@ -180,11 +180,15 @@ class _BrowserPageState extends State<BrowserPage> {
                       _buildGlassButton(
                         icon: LucideIcons.settings,
                         onTap: () {
+                          final musicService = Provider.of<MusicService>(
+                            context,
+                            listen: false,
+                          );
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const SettingsPage(),
-                              // musicService disabled for iOS build fix
+                              builder: (context) =>
+                                  SettingsPage(musicService: musicService),
                             ),
                           );
                         },

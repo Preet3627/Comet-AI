@@ -5,10 +5,10 @@ pluginManagement {
         new File("local.properties").withInputStream { properties.load(it) }
         flutterSdkPath = properties.getProperty("flutter.sdk")
         if (flutterSdkPath == null) {
-            throw new GradleException("flutter.sdk not set in local.properties")
+            throw new RuntimeException("flutter.sdk not set in local.properties")
         }
     } catch (Exception e) {
-        throw new GradleException("Unable to read flutter.sdk from local.properties", e)
+        throw new RuntimeException("Unable to read flutter.sdk from local.properties", e)
     }
 
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")

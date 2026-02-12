@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-// import 'package:audio_service/audio_service.dart'; // DISABLED FOR iOS BUILD FIX
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 
 import 'browser_page.dart';
 import 'sync_service.dart';
 import 'services/ai_service.dart';
-// import 'services/music_service.dart'; // DISABLED FOR iOS BUILD FIX
+import 'services/music_service.dart';
 import 'widgets/dynamic_island.dart';
-
-// Global Services
-// Global Services
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,30 +27,22 @@ void main() async {
   // Init AI Service
   await AIService().loadKeys();
 
-  // Init Notifications - TEMPORARILY COMMENTED OUT FOR BUILD FIX
-  // final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  // const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-  // const initSettings = InitializationSettings(android: androidSettings);
-  // await flutterLocalNotificationsPlugin.initialize(
-  //   settings: initSettings,
-  //   onDidReceiveNotificationResponse: (NotificationResponse response) {
-  //     // Handle notification response
-  //     debugPrint('Notification received: ${response.payload}');
-  //   },
-  // );
-
-  // Init Audio Service - TEMPORARILY DISABLED FOR iOS BUILD FIX
-  // See: IOS_BUILD_FIX.md for re-enabling instructions
-  // final musicService = MusicService();
+  // Init Audio Service
+  final musicService = await AudioService.init(
+    builder: () => MusicService(),
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.comet.browser.audio',
+      androidNotificationChannelName: 'Comet Music Playback',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
+    ),
+  );
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SyncService()),
-
-        // DISABLED FOR iOS BUILD FIX
-        // Provide stub MusicService (audio features temporarily disabled)
-        // Provider<MusicService>.value(value: musicService),
+        Provider<MusicService>.value(value: musicService),
       ],
       child: const CometApp(),
     ),
@@ -91,14 +79,7 @@ class CometApp extends StatelessWidget {
         useMaterial3: true,
       ),
       builder: (context, child) {
-        // Overlay Dynamic Island
-        return Stack(
-          children: [
-            child!,
-            const DynamicIsland(),
-            // musicService disabled for iOS build fix
-          ],
-        );
+        return Stack(children: [child!, const DynamicIsland()]);
       },
       home: const BrowserPage(),
     );
