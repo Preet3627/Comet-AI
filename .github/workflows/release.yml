@@ -103,19 +103,23 @@ jobs:
         run: flutter pub get
 
       - name: Decode Keystore
-        if: secrets.ANDROID_KEYSTORE_BASE64 != ''
+        continue-on-error: true
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > flutter_browser_app/android/app/upload-keystore.jks
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > flutter_browser_app/android/app/upload-keystore.jks
+          fi
 
       - name: Create key.properties
-        if: secrets.ANDROID_KEYSTORE_BASE64 != ''
+        continue-on-error: true
         run: |
-          cat > flutter_browser_app/android/key.properties << EOF
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            cat > flutter_browser_app/android/key.properties << EOF
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           storeFile=app/upload-keystore.jks
           EOF
+          fi
 
       - name: Build APK
         working-directory: flutter_browser_app
