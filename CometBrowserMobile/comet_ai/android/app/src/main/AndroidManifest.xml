@@ -20,7 +20,7 @@
     </queries>
 
     <application
-        android:label="comet_browser_mobile"
+        android:label="Comet-AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

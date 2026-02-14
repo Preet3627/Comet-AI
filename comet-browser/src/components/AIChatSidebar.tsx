@@ -464,8 +464,11 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
           ? `\nIMPORTANT: Respond ONLY in ${langName}. The user prefers this language. Always translate your findings to ${langName}.`
           : "";
 
+        const platform = window.electronAPI ? window.electronAPI.getPlatform() : 'unknown';
+        const platformInstructions = `\n[SYSTEM INFO]\nUser Platform: ${platform} (Use appropriate shell commands for this OS).`;
+
         const messageHistory: ChatMessage[] = [
-          { role: 'system', content: SYSTEM_INSTRUCTIONS + languageInstructions },
+          { role: 'system', content: SYSTEM_INSTRUCTIONS + languageInstructions + platformInstructions },
           ...(store.additionalAIInstructions ? [{ role: 'system', content: store.additionalAIInstructions }] : []), // Add additional instructions
           ...messages.map(m => ({ role: m.role, content: m.content })),
           {

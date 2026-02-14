@@ -600,7 +600,15 @@ export const useAppStore = create<BrowserState>()(
                     }
                 };
 
-                const finalUrl = url || state.defaultUrl || getSearchEngineUrl();
+                // Ensure we never default to 'about:blank' or empty unless explicitly requested
+                let finalUrl = url;
+                if (!finalUrl) {
+                    if (state.defaultUrl && state.defaultUrl !== 'about:blank') {
+                        finalUrl = state.defaultUrl;
+                    } else {
+                        finalUrl = getSearchEngineUrl();
+                    }
+                }
                 const id = `tab-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
                 if (window.electronAPI) {

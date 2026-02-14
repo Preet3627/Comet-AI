@@ -101,7 +101,7 @@ class _SettingsPageState extends State<SettingsPage>
         const SizedBox(height: 10),
         DropdownButtonFormField<AIProvider>(
           dropdownColor: const Color(0xFF1A1A2E),
-          value: AIProvider.gemini, // Should fetch from service
+          initialValue: AIProvider.gemini, // Should fetch from service
           items: AIProvider.values
               .map(
                 (p) => DropdownMenuItem(
@@ -142,7 +142,7 @@ class _SettingsPageState extends State<SettingsPage>
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             dropdownColor: const Color(0xFF1A1A2E),
-            value: _aiService.getModel(AIProvider.gemini),
+            initialValue: _aiService.getModel(AIProvider.gemini),
             items: const [
               DropdownMenuItem(
                 value: "gemini-3-pro",
@@ -177,7 +177,7 @@ class _SettingsPageState extends State<SettingsPage>
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           dropdownColor: const Color(0xFF1A1A2E),
-          value: _aiService.getModel(AIProvider.openai),
+          initialValue: _aiService.getModel(AIProvider.openai),
           items: const [
             DropdownMenuItem(
               value: "gpt-4o",

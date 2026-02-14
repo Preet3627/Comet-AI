@@ -4,6 +4,7 @@ const path = require('path');
 contextBridge.exposeInMainWorld('electronAPI', {
   // BrowserView related APIs
   getIsOnline: () => ipcRenderer.invoke('get-is-online'),
+  getPlatform: () => process.platform, // Expose platform info
   onAddNewTab: (callback) => {
     const subscription = (event, url) => callback(url);
     ipcRenderer.on('add-new-tab', subscription);

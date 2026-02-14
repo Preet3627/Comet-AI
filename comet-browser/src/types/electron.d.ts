@@ -6,6 +6,7 @@ declare global {
         electronAPI: {
             // BrowserView related APIs
             getIsOnline: () => Promise<boolean>;
+            getPlatform: () => string;
             onAiQueryDetected: (callback: (query: string) => void) => () => void;
             createView: (args: { tabId: string; url: string }) => void;
             activateView: (args: { tabId: string; bounds: { x: number; y: number; width: number; height: number } }) => void;

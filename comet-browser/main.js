@@ -511,9 +511,7 @@ async function createWindow() {
     }
   });
 
-  console.log('[Main] Initializing Tesseract.js worker...');
-  tesseractWorker = await createWorker('eng');
-  console.log('[Main] Tesseract.js worker initialized.');
+  // Tesseract initialization is now lazy-loaded in 'find-and-click-text' handler to improve startup time
 
   // Handle load failures
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
@@ -1415,8 +1413,15 @@ ipcMain.handle('find-and-click-text', async (event, targetText) => {
     }
 
     if (!tesseractWorker) {
-      try { fs.unlinkSync(tempPath); } catch (e) { }
-      return { success: false, error: 'OCR worker not initialized.' };
+      console.log('[Main] Initializing Tesseract.js worker on-demand...');
+      try {
+        tesseractWorker = await createWorker('eng');
+        console.log('[Main] Tesseract.js worker initialized.');
+      } catch (e) {
+        console.error('[Main] Failed to initialize Tesseract worker:', e);
+        try { fs.unlinkSync(tempPath); } catch (e) { }
+        return { success: false, error: 'OCR worker initialization failed.' };
+      }
     }
 
     const captureRegion = { x: 0, y: 0, width: thumbnailSize.width, height: thumbnailSize.height };
@@ -2303,11 +2308,17 @@ function createPopupWindow(type, options = {}) {
   if (isDev) {
     url = `${baseUrl}${route}`;
   } else {
-    // For static export, Next.js creates folder/index.html
-    const routePath = route === '/' ? '/index.html' : `${route}/index.html`;
-    const fullPath = path.join(__dirname, 'out', routePath);
-    if (fs.existsSync(fullPath)) {
-      url = `file://${fullPath}`;
+    // Check for both folder/index.html and folder.html (Next.js export behavior)
+    const routePathIndex = route === '/' ? '/index.html' : `${route}/index.html`;
+    const routePathHtml = route === '/' ? '/index.html' : `${route}.html`;
+
+    const fullPathIndex = path.join(__dirname, 'out', routePathIndex);
+    const fullPathHtml = path.join(__dirname, 'out', routePathHtml);
+
+    if (fs.existsSync(fullPathIndex)) {
+      url = `file://${fullPathIndex}`;
+    } else if (fs.existsSync(fullPathHtml)) {
+      url = `file://${fullPathHtml}`;
     } else {
       // Fallback to hash routing if file doesn't exist
       url = `file://${path.join(__dirname, 'out', 'index.html')}#${route}`;
@@ -2495,6 +2506,8 @@ ipcMain.handle('translate-text', async (event, { text, from, to }) => {
   }
 });
 
+// Remove existing handler if present to prevent "second handler" error
+ipcMain.removeHandler('click-element');
 ipcMain.handle('click-element', async (event, selector) => {
   const view = tabViews.get(activeTabId);
   if (!view) return { success: false, error: 'No active view' };
