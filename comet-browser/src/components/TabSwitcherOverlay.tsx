@@ -26,9 +26,22 @@ export const TabSwitcherOverlay = ({ visible }: { visible: boolean }) => {
             }
         };
 
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Alt') {
+                const selectedTab = store.tabs[selectedIndex];
+                if (selectedTab && selectedTab.id !== store.activeTabId) {
+                    store.setActiveTabId(selectedTab.id);
+                }
+            }
+        };
+
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [visible, store.tabs.length]);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
+    }, [visible, store.tabs, selectedIndex, store.activeTabId]);
 
     if (!visible) return null;
 

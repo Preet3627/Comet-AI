@@ -37,6 +37,15 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
   const [containerWidth, setContainerWidth] = useState(0);
   const store = useAppStore();
 
+  const lastSwitchTime = useRef(0);
+
+  const handleTabClick = (tabId: string) => {
+    const now = Date.now();
+    if (now - lastSwitchTime.current < 300) return;
+    lastSwitchTime.current = now;
+    onTabClick(tabId);
+  };
+
   return (
     <>
       <style>{`
@@ -69,7 +78,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
         {tabs.map((tab) => (
           <div
             key={tab.id}
-            onClick={() => onTabClick(tab.id)}
+            onClick={() => handleTabClick(tab.id)}
             className={`group flex items-center h-8 px-4 rounded-t-xl min-w-[140px] max-w-[200px] cursor-pointer transition-all border-t border-x ${activeTabId === tab.id
               ? 'bg-white/5 border-white/10 text-white shadow-[0_-2px_10px_rgba(56,189,248,0.1)]'
               : 'bg-transparent border-transparent text-slate-400 hover:bg-white/[0.02]'

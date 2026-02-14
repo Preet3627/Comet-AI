@@ -409,22 +409,24 @@ export const useAppStore = create<BrowserState>()(
             setCurrentUrl: (url) => set({ currentUrl: url }),
 
             // Tabs
-            setActiveTabId: (id) => set((state) => {
-                const newTab = state.tabs.find(t => t.id === id);
-                return {
-                    activeTabId: id,
-                    currentUrl: newTab?.url || state.currentUrl,
-                    tabs: state.tabs.map(t => t.id === id ? { ...t, lastAccessed: Date.now(), isSuspended: false } : t)
-                };
-            }),
-            setActiveTab: (id) => set((state) => {
-                const newTab = state.tabs.find(t => t.id === id);
-                return {
-                    activeTabId: id,
-                    currentUrl: newTab?.url || state.currentUrl,
-                    tabs: state.tabs.map(t => t.id === id ? { ...t, lastAccessed: Date.now(), isSuspended: false } : t)
-                };
-            }),
+            setActiveTabId: (id) => {
+                const state = get();
+                if (id === state.activeTabId) return;
+
+                const now = Date.now();
+                const lastAccessed = state.tabs.find(t => t.id === id)?.lastAccessed || 0;
+                if (now - lastAccessed < 300) return;
+
+                set((state) => {
+                    const newTab = state.tabs.find(t => t.id === id);
+                    return {
+                        activeTabId: id,
+                        currentUrl: newTab?.url || state.currentUrl,
+                        tabs: state.tabs.map(t => t.id === id ? { ...t, lastAccessed: now, isSuspended: false } : t)
+                    };
+                });
+            },
+            setActiveTab: (id) => get().setActiveTabId(id),
             updateTab: (id, updates) => set((state) => ({
                 tabs: state.tabs.map(tab =>
                     tab.id === id ? { ...tab, ...updates } : tab
