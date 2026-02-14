@@ -102,6 +102,21 @@ jobs:
         working-directory: flutter_browser_app
         run: flutter pub get
 
+      - name: Decode Keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > flutter_browser_app/android/app/upload-keystore.jks
+
+      - name: Create key.properties
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          cat > flutter_browser_app/android/key.properties << EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=app/upload-keystore.jks
+          EOF
+
       - name: Build APK
         working-directory: flutter_browser_app
         run: flutter build apk --release
@@ -127,6 +142,14 @@ jobs:
       - name: Install dependencies
         working-directory: flutter_browser_app
         run: flutter pub get
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: flutter_browser_app/ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('flutter_browser_app/ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
 
       - name: Build iOS
         working-directory: flutter_browser_app
@@ -184,6 +207,14 @@ jobs:
       - name: Install Dependencies
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
+
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: comet-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-
 
       - name: Build App
         working-directory: comet-browser
