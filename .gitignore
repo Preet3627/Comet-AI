@@ -63,3 +63,4 @@ ios/Pods/
 # Temporary
 tmp/
 temp/
+*.plist
