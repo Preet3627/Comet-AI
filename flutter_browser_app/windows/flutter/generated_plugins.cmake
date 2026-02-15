@@ -4,7 +4,9 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
+  firebase_core
   flutter_inappwebview_windows
+  flutter_webrtc
   permission_handler_windows
   screen_retriever_windows
   share_plus

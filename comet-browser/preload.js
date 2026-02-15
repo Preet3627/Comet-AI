@@ -256,6 +256,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('p2p-ice-candidate', subscription);
     return () => ipcRenderer.removeListener('p2p-ice-candidate', subscription);
   },
+  onP2PLocalDeviceId: (callback) => {
+    const subscription = (event, deviceId) => callback(deviceId);
+    ipcRenderer.on('p2p-local-device-id', subscription);
+    return () => ipcRenderer.removeListener('p2p-local-device-id', subscription);
+  },
+  onP2PMessage: (callback) => {
+    const subscription = (event, message) => callback(message);
+    ipcRenderer.on('p2p-message', subscription);
+    return () => ipcRenderer.removeListener('p2p-message', subscription);
+  },
+  getP2PLocalDeviceId: () => ipcRenderer.invoke('p2p-get-device-id'),
   on: (channel, callback) => {
     const subscription = (event, ...args) => callback(...args);
     ipcRenderer.on(channel, subscription);
@@ -327,7 +338,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   captureScreenRegion: (region) => ipcRenderer.invoke('capture-screen-region', region),
   searchApplications: (query) => ipcRenderer.invoke('search-applications', query),
   openExternalApp: (appPath) => ipcRenderer.invoke('open-external-app', appPath),
-  performCrossAppClick: (coords) => ipcRenderer.invoke('perform-cross-app-click', coords),
+  performCrossAppClick: (coords) => ipcRenderer.invoke('perform-click', coords), // Use improved backend
+  performClick: (options) => ipcRenderer.invoke('perform-click', options), // New API
+  performOCR: (options) => ipcRenderer.invoke('perform-ocr', options),
+  getWindowInfo: () => ipcRenderer.invoke('get-window-info'),
 
   // Unified Search Event Listener
   onOpenUnifiedSearch: (callback) => {

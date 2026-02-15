@@ -26,7 +26,7 @@ class Browser extends StatefulWidget {
 
 class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
   static const platform =
-      MethodChannel('com.pichillilorenzo.comet_ai.intent_data');
+      MethodChannel('com.comet_ai_com.comet_ai.intent_data');
 
   var _isRestored = false;
 

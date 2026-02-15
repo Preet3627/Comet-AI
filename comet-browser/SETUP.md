@@ -18,6 +18,10 @@ Comet uses Firebase for Authentication and secondary state synchronization.
     NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
     ```
 4.  **Security Note:** Firebase initialization in `src/lib/firebase.config.ts` uses these environment variables. Ensure they are set in your hosting environment (e.g., Vercel).
+5.  **Admin SDK (Desktop Backend):** If you are using administrative features in the Electron main process:
+    -   Download your service account JSON from Firebase Console.
+    -   Save it as `comet-browser/config/firebase-admin.json`.
+    -   **NEVER** commit this file to GitHub. It is already added to `.gitignore`.
 
 ## 🗄️ MySQL Master Sync
 
@@ -64,6 +68,24 @@ Load local Chrome extensions by placing them in your OS UserData directory:
 3. Drop your extension folder (with `manifest.json`) inside.
 4. Restart Comet.
 
+## 📱 Mobile (Flutter) Configuration
+
+To enable P2P synchronization on Android and iOS:
+
+1.  **Add Android App:**
+    -   Use Package Name: `com.comet_ai_com.comet_ai`.
+    -   Register the app in Firebase Console.
+    -   Download `google-services.json` and place it in `flutter_browser_app/android/app/`.
+
+2.  **Add iOS App:**
+    -   Use Bundle ID: `com.comet_ai_com.comet_ai`.
+    -   Download `GoogleService-Info.plist` and place it in `flutter_browser_app/ios/Runner/`.
+
+3.  **Realtime Database:** Ensure **Realtime Database** is enabled in your Firebase project (required for P2P signaling).
+
+4.  **Google Auth (Android):** Add your SHA-1 fingerprint to the Firebase console to enable Google Sign-in.
+    -   To get debug SHA-1: `cd android && ./gradlew signingReport`.
+
 ---
 
-*Version: 0.1.7-stable*
+*Version: 0.2.0-stable (Sync Update)*

@@ -31,6 +31,12 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Secrets & Config
+config/*.json
+!config/*.example.json
+*-firebase-adminsdk-*.json
+service-account.json
+
 # Database
 *.db
 *.sqlite

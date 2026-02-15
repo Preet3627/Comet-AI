@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:async';
+import 'package:flutter/services.dart';
 
 import 'package:context_menus/context_menus.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +19,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager_plus/window_manager_plus.dart';
 import 'package:path/path.dart' as p;
+import 'package:firebase_core/firebase_core.dart';
+import 'sync_service.dart';
 
 import 'browser.dart';
 
@@ -114,6 +118,22 @@ void main(List<String> args) async {
     await Permission.camera.request();
     await Permission.microphone.request();
     await Permission.storage.request();
+  }
+
+  try {
+    // Attempt Firebase init (will use native config if present, or error out)
+    await Firebase.initializeApp();
+    await SyncService().initialize('comet-default-user');
+
+    // Start clipboard monitoring
+    Timer.periodic(const Duration(seconds: 3), (timer) async {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (data?.text != null) {
+        SyncService().sendClipboard(data!.text!);
+      }
+    });
+  } catch (e) {
+    print('[Sync] Firebase/Sync initialization error: $e');
   }
 
   runApp(

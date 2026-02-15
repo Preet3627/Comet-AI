@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/window_model.dart';
 import '../../project_info_popup.dart';
+import '../../sync_service.dart';
 
 class CrossPlatformSettings extends StatefulWidget {
   const CrossPlatformSettings({super.key});
@@ -23,11 +24,14 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
       TextEditingController();
   final TextEditingController _customUserAgentController =
       TextEditingController();
+  final TextEditingController _remoteDeviceIdController =
+      TextEditingController();
 
   @override
   void dispose() {
     _customHomePageController.dispose();
     _customUserAgentController.dispose();
+    _remoteDeviceIdController.dispose();
     super.dispose();
   }
 
@@ -53,6 +57,17 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
       const ListTile(
         title: Text("General Settings"),
         enabled: false,
+      ),
+      ListTile(
+        title: const Text("Cross-Device P2P Sync"),
+        subtitle: Text(SyncService().isConnected
+            ? "Connected to Peer"
+            : (SyncService().deviceId != null
+                ? "Local ID: ${SyncService().deviceId!.substring(0, 8)}..."
+                : "Not Initialized")),
+        leading: Icon(Icons.sync,
+            color: SyncService().isConnected ? Colors.green : Colors.grey),
+        onTap: () => _showSyncDialog(context),
       ),
       ListTile(
         title: const Text("Search Engine"),
@@ -514,5 +529,53 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
     ];
 
     return widgets;
+  }
+
+  void _showSyncDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("P2P Sync Setup"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelectableText(
+                "Local Device ID:\n${SyncService().deviceId ?? 'Loading...'}",
+                style:
+                    const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _remoteDeviceIdController,
+                decoration: const InputDecoration(
+                  labelText: "Remote Device ID",
+                  hintText: "Enter Electron App Device ID",
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (_remoteDeviceIdController.text.isNotEmpty) {
+                  SyncService().connect(_remoteDeviceIdController.text);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text("Sync connection initiated...")),
+                  );
+                }
+              },
+              child: const Text("Connect"),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

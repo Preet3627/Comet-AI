@@ -8,6 +8,11 @@ const { spawn, exec } = require('child_process');
 const Store = require('electron-store');
 const store = new Store();
 const { createWorker } = require('tesseract.js');
+const screenshot = require('screenshot-desktop');
+const Jimp = require('jimp');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
 let robot = null;
 try {
   robot = require('robotjs');
@@ -628,6 +633,10 @@ async function createWindow() {
       console.log("[Main] Clipboard changed:", currentText.substring(0, 30));
       if (mainWindow) {
         mainWindow.webContents.send('clipboard-changed', currentText);
+      }
+      // Send to P2P peers if connected
+      if (p2pSyncService && p2pSyncService.getStatus().connected) {
+        p2pSyncService.sendMessage({ type: 'clipboard-sync', text: currentText });
       }
     }
   }, 3000);
@@ -1938,7 +1947,21 @@ app.whenReady().then(() => {
     console.log(`MCP Server running on port ${mcpServerPort}`);
   });
 
-  p2pSyncService = getP2PSync('main-process-device');
+  // Load or generate local device ID for P2P sync
+  const p2pDeviceIdPath = path.join(app.getPath('userData'), 'p2p_device_id.txt');
+  let localP2PDeviceId;
+  try {
+    if (fs.existsSync(p2pDeviceIdPath)) {
+      localP2PDeviceId = fs.readFileSync(p2pDeviceIdPath, 'utf8').trim();
+    } else {
+      localP2PDeviceId = `desktop-${Math.random().toString(36).substring(2, 10)}`;
+      fs.writeFileSync(p2pDeviceIdPath, localP2PDeviceId);
+    }
+  } catch (e) {
+    localP2PDeviceId = 'main-process-device';
+  }
+
+  p2pSyncService = getP2PSync(localP2PDeviceId);
 
   // Forward P2P service events to the renderer
   p2pSyncService.on('connected', () => {
@@ -1948,7 +1971,10 @@ app.whenReady().then(() => {
     if (mainWindow) mainWindow.webContents.send('p2p-disconnected');
   });
   p2pSyncService.on('firebase-ready', (userId) => {
-    if (mainWindow) mainWindow.webContents.send('p2p-firebase-ready', userId);
+    if (mainWindow) {
+      mainWindow.webContents.send('p2p-firebase-ready', userId);
+      mainWindow.webContents.send('p2p-local-device-id', p2pSyncService.getStatus().deviceId);
+    }
   });
   p2pSyncService.on('offer-created', ({ offer, remoteDeviceId }) => {
     if (mainWindow) mainWindow.webContents.send('p2p-offer-created', { offer, remoteDeviceId });
@@ -1958,6 +1984,23 @@ app.whenReady().then(() => {
   });
   p2pSyncService.on('ice-candidate', ({ candidate, remoteDeviceId }) => {
     if (mainWindow) mainWindow.webContents.send('p2p-ice-candidate', { candidate, remoteDeviceId });
+  });
+
+  // Listen for sync messages from peers
+  p2pSyncService.on('message', (message) => {
+    console.log(`[P2P] Received message of type: ${message.type}`);
+    if (message.type === 'clipboard-sync') {
+      clipboard.writeText(message.text);
+      if (mainWindow) {
+        mainWindow.webContents.send('clipboard-changed', message.text);
+        mainWindow.webContents.send('notification', { title: 'Sync', body: 'Clipboard synced from remote device' });
+      }
+    } else if (message.type === 'history-sync') {
+      appendToMemory({ action: 'remote-history', ...message.data });
+      if (mainWindow) {
+        mainWindow.webContents.send('notification', { title: 'Sync', body: 'Browsing history synced' });
+      }
+    }
   });
 
   // Handle file downloads
@@ -2149,6 +2192,18 @@ ipcMain.handle('connect-to-remote-device', async (event, remoteDeviceId) => {
     return false;
   }
   return await p2pSyncService.connectToRemoteDevice(remoteDeviceId);
+});
+
+ipcMain.handle('p2p-sync-history', async (event, data) => {
+  if (p2pSyncService && p2pSyncService.getStatus().connected) {
+    p2pSyncService.sendMessage({ type: 'history-sync', data });
+    return { success: true };
+  }
+  return { success: false, error: 'Not connected to peer' };
+});
+
+ipcMain.handle('p2p-get-device-id', async () => {
+  return p2pSyncService ? p2pSyncService.getStatus().deviceId : null;
 });
 
 ipcMain.on('send-p2p-signal', (event, { signal, remoteDeviceId }) => {
@@ -2874,35 +2929,211 @@ ipcMain.handle('search-applications', async (event, query) => {
 
 
 // ============================================================================
-// CROSS-APP CLICKING - Click anywhere on screen using robotjs
+// AUTOMATION & OCR - Integrated handlers
 // ============================================================================
-ipcMain.handle('perform-cross-app-click', async (event, { x, y }) => {
-  console.log('[Click] Performing click at:', { x, y });
 
-  if (!robot) {
-    return {
-      success: false,
-      error: 'robotjs not available'
-    };
+// Helper: Capture Screen Region
+async function captureScreenRegion(bounds, outputPath) {
+  try {
+    if (robot && bounds) {
+      // Use robotjs for specific region if available (fastest)
+      const bmp = robot.screen.capture(bounds.x, bounds.y, bounds.width, bounds.height);
+
+      // Create new Jimp image (v0.x API)
+      const jimpImage = new Jimp(bmp.width, bmp.height);
+
+      let pos = 0;
+      // Convert raw BGRA to RGBA for Jimp
+      jimpImage.scan(0, 0, jimpImage.bitmap.width, jimpImage.bitmap.height, (x, y, idx) => {
+        jimpImage.bitmap.data[idx + 2] = bmp.image.readUInt8(pos++); // B -> R
+        jimpImage.bitmap.data[idx + 1] = bmp.image.readUInt8(pos++); // G
+        jimpImage.bitmap.data[idx + 0] = bmp.image.readUInt8(pos++); // R -> B
+        jimpImage.bitmap.data[idx + 3] = bmp.image.readUInt8(pos++); // A
+      });
+
+      await jimpImage.writeAsync(outputPath);
+      return outputPath;
+    } else {
+      // Fallback to screenshot-desktop (full screen)
+      const imgBuffer = await screenshot({ format: 'png' });
+      const jimpImage = await Jimp.read(imgBuffer);
+
+      if (bounds) {
+        jimpImage.crop(bounds.x, bounds.y, bounds.width, bounds.height);
+      }
+
+      await jimpImage.writeAsync(outputPath);
+      return outputPath;
+    }
+  } catch (error) {
+    console.error('Capture failed:', error);
+    throw error;
+  }
+}
+
+// Handler: Perform OCR
+ipcMain.handle('perform-ocr', async (event, options) => {
+  const { useNative = true, bounds, language = 'eng', imagePath } = options || {};
+  let tempFile = imagePath;
+  let shouldDelete = false;
+
+  if (!tempFile) {
+    tempFile = path.join(os.tmpdir(), `ocr_${Date.now()}.png`);
+    shouldDelete = true;
   }
 
   try {
-    // Move mouse to position
-    robot.moveMouse(x, y);
+    if (shouldDelete) {
+      await captureScreenRegion(bounds, tempFile);
+    }
 
-    // Small delay for visual feedback
-    await new Promise(resolve => setTimeout(resolve, 100));
+    if (useNative) {
+      try {
+        if (process.platform === 'darwin') {
+          const script = `
+      use framework "Vision"
+      use framework "AppKit"
+      use scripting additions
+      
+      set imagePath to "${tempFile}"
+      set imageURL to current application's NSURL's fileURLWithPath:imagePath
+      set requestHandler to current application's VNImageRequestHandler's alloc()'s initWithURL:imageURL options:(missing value)
+      
+      set textRequest to current application's VNRecognizeTextRequest's alloc()'s init()
+      textRequest's setRecognitionLevel:(current application's VNRequestTextRecognitionLevelAccurate)
+      
+      requestHandler's performRequests:{textRequest} |error|:(missing value)
+      
+      set observations to textRequest's results()
+      set resultText to ""
+      repeat with observation in observations
+          set resultText to resultText & (observation's text() as text) & linefeed
+      end repeat
+      
+      return resultText
+          `;
+          const { stdout } = await execPromise(`osascript -l JavaScript -e '${script.replace(/'/g, "\\'")}'`);
+          return { text: stdout.trim(), confidence: 0.95 };
+        } else if (process.platform === 'win32') {
+          const psScript = `
+      Add-Type -AssemblyName System.Runtime.WindowsRuntime
+      [Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime] | Out-Null
+      [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime] | Out-Null
+      [Windows.Graphics.Imaging.BitmapDecoder,Windows.Graphics,ContentType=WindowsRuntime] | Out-Null
+      
+      $file = [Windows.Storage.StorageFile]::GetFileFromPathAsync("${tempFile}").GetAwaiter().GetResult()
+      $stream = $file.OpenAsync([Windows.Storage.FileAccessMode]::Read).GetAwaiter().GetResult()
+      $decoder = [Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream).GetAwaiter().GetResult()
+      $bitmap = $decoder.GetSoftwareBitmapAsync().GetAwaiter().GetResult()
+      
+      $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+      $result = $engine.RecognizeAsync($bitmap).GetAwaiter().GetResult()
+      
+      $result.Text
+          `;
+          const { stdout } = await execPromise(`powershell -Command "${psScript.replace(/"/g, '\\"')}"`);
+          return { text: stdout.trim(), confidence: 0.90 };
+        }
+      } catch (nativeErr) {
+        console.warn('Native OCR failed (fallback to Tesseract):', nativeErr.message);
+      }
+    }
 
-    // Perform click
-    robot.mouseClick();
+    // Fallback to Tesseract
+    if (!tesseractWorker) {
+      tesseractWorker = await createWorker(language);
+    }
+    const { data } = await tesseractWorker.recognize(tempFile);
+    return {
+      text: data.text,
+      confidence: data.confidence / 100,
+      words: data.words.map(w => ({ text: w.text, bbox: w.bbox, confidence: w.confidence / 100 }))
+    };
 
+  } catch (error) {
+    console.error('OCR Error:', error);
+    return { error: error.message };
+  } finally {
+    if (shouldDelete) {
+      try { fs.unlinkSync(tempFile); } catch (e) { }
+    }
+  }
+});
+
+// Handler: Perform Click (Comprehensive)
+const performClickHandler = async (event, args) => {
+  const { x, y, button = 'left', doubleClick = false } = args;
+
+  if (!robot) return { success: false, error: 'robotjs not available' };
+
+  try {
+    robot.moveMouseSmooth(x, y);
+    if (doubleClick) {
+      robot.mouseClick(button, true);
+    } else {
+      robot.mouseClick(button);
+    }
     return { success: true };
   } catch (error) {
-    console.error('[Click] Error:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error('Click Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+ipcMain.handle('perform-click', performClickHandler);
+ipcMain.handle('perform-cross-app-click', performClickHandler); // Alias for backward compatibility
+
+// Handler: Get Window Info
+ipcMain.handle('get-window-info', async () => {
+  try {
+    if (process.platform === 'darwin') {
+      const script = `
+        tell application "System Events"
+          set frontApp to name of first application process whose frontmost is true
+          set frontWindow to name of front window of application process frontApp
+          return {frontApp, frontWindow}
+        end tell
+      `;
+      const { stdout } = await execPromise(`osascript -e '${script}'`);
+      return { window: stdout.trim() }; // Simplified parsing
+    } else if (process.platform === 'win32') {
+      const script = `
+        Add-Type @"
+          using System;
+          using System.Runtime.InteropServices;
+          using System.Text;
+          public class Win32 {
+              [DllImport("user32.dll")]
+              public static extern IntPtr GetForegroundWindow();
+              [DllImport("user32.dll")]
+              public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+          }
+"@
+        $handle = [Win32]::GetForegroundWindow()
+        $title = New-Object System.Text.StringBuilder 256
+        [void][Win32]::GetWindowText($handle, $title, 256)
+        $title.ToString()
+      `;
+      const { stdout } = await execPromise(`powershell -Command "${script}"`);
+      return { window: stdout.trim() };
+    }
+    return null;
+  } catch (error) {
+    console.error('Get Window Info Error:', error);
+    return { error: error.message };
+  }
+});
+
+// Handler: Capture Screen Region (Direct)
+ipcMain.handle('capture-screen-region', async (event, bounds) => {
+  const tempFile = path.join(os.tmpdir(), `capture_${Date.now()}.png`);
+  try {
+    await captureScreenRegion(bounds, tempFile);
+    const imageBuffer = fs.readFileSync(tempFile);
+    const base64Image = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+    return { success: true, path: tempFile, image: base64Image };
+  } catch (e) {
+    return { success: false, error: e.message };
   }
 });
 

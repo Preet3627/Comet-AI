@@ -4,17 +4,20 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Cloud, Wifi, WifiOff, HardDrive, Key, UploadCloud, DownloadCloud, AlertTriangle, CheckCircle, RefreshCw, Info } from 'lucide-react';
 
-interface SyncSettingsProps {}
+interface SyncSettingsProps { }
 
 const SyncSettings: React.FC<SyncSettingsProps> = () => {
     const store = useAppStore();
     const [remoteDeviceId, setRemoteDeviceId] = useState('');
+    const [localDeviceId, setLocalDeviceId] = useState('');
     const [p2pConnected, setP2PConnected] = useState(false);
     const [firebaseReady, setFirebaseReady] = useState(false);
     const [firebaseUserId, setFirebaseUserId] = useState<string | null>(null);
     const [encryptionKey, setEncryptionKey] = useState(store.syncPassphrase || '');
     const [encryptionKeyConfirmed, setEncryptionKeyConfirmed] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
+    const [clipboardSyncEnabled, setClipboardSyncEnabled] = useState(true);
+    const [historySyncEnabled, setHistorySyncEnabled] = useState(true);
 
     useEffect(() => {
         if (!window.electronAPI) {
@@ -35,14 +38,25 @@ const SyncSettings: React.FC<SyncSettingsProps> = () => {
             setFirebaseUserId(userId);
             setStatusMessage(`Firebase ready. User ID: ${userId}`);
         });
+        const cleanupLocalId = window.electronAPI.onP2PLocalDeviceId((deviceId) => {
+            setLocalDeviceId(deviceId);
+        });
 
-        // TODO: Add listeners for signaling events (offer/answer/candidate) if needed in renderer
-        // For now, P2PFileSyncService handles these internally in main process
+        // Fetch initial device ID
+        window.electronAPI.getP2PLocalDeviceId().then((id: string) => {
+            if (id) setLocalDeviceId(id);
+        });
+
+        // Request current status
+        window.electronAPI.onP2PMessage((message: any) => {
+            // Generic message handler if needed
+        });
 
         return () => {
             if (typeof cleanupConnected === 'function') cleanupConnected();
             if (typeof cleanupDisconnected === 'function') cleanupDisconnected();
             if (typeof cleanupFirebaseReady === 'function') cleanupFirebaseReady();
+            if (typeof cleanupLocalId === 'function') cleanupLocalId();
         };
     }, []);
 
@@ -86,9 +100,17 @@ const SyncSettings: React.FC<SyncSettingsProps> = () => {
     return (
         <div className="space-y-8">
             <div className="p-8 rounded-[2rem] bg-white/[0.03] border border-white/5 space-y-8">
-                <div>
-                    <h3 className="text-lg font-bold text-white mb-2">P2P & Cloud Sync Status</h3>
-                    <p className="text-xs text-white/30">Monitor and manage your cross-device synchronization.</p>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h3 className="text-lg font-bold text-white mb-2">P2P & Cloud Sync Status</h3>
+                        <p className="text-xs text-white/30">Monitor and manage your cross-device synchronization.</p>
+                    </div>
+                    {localDeviceId && (
+                        <div className="text-right">
+                            <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Local Device ID</p>
+                            <p className="text-xs font-mono text-deep-space-accent-neon bg-deep-space-accent-neon/5 px-3 py-1 rounded-lg border border-deep-space-accent-neon/20">{localDeviceId}</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -100,6 +122,29 @@ const SyncSettings: React.FC<SyncSettingsProps> = () => {
                         <Cloud size={12} />
                         <span className="text-[10px] font-black uppercase tracking-widest">{firebaseReady ? `Cloud Ready (${firebaseUserId ? firebaseUserId.substring(0, 6) + '...' : 'Guest'})` : 'Cloud Not Ready'}</span>
                     </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <button
+                        onClick={() => setClipboardSyncEnabled(!clipboardSyncEnabled)}
+                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${clipboardSyncEnabled ? 'bg-deep-space-accent-neon/5 border-deep-space-accent-neon/20' : 'bg-white/5 border-white/5 opacity-50'}`}
+                    >
+                        <div className="flex items-center gap-3 text-white">
+                            <Wifi size={16} />
+                            <span className="text-sm font-bold">Clipboard Sync</span>
+                        </div>
+                        <div className={`w-2 h-2 rounded-full ${clipboardSyncEnabled ? 'bg-deep-space-accent-neon shadow-[0_0_8px_cyan]' : 'bg-white/20'}`} />
+                    </button>
+                    <button
+                        onClick={() => setHistorySyncEnabled(!historySyncEnabled)}
+                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${historySyncEnabled ? 'bg-deep-space-accent-neon/5 border-deep-space-accent-neon/20' : 'bg-white/5 border-white/5 opacity-50'}`}
+                    >
+                        <div className="flex items-center gap-3 text-white">
+                            <RefreshCw size={16} />
+                            <span className="text-sm font-bold">History Sync</span>
+                        </div>
+                        <div className={`w-2 h-2 rounded-full ${historySyncEnabled ? 'bg-deep-space-accent-neon shadow-[0_0_8px_cyan]' : 'bg-white/20'}`} />
+                    </button>
                 </div>
 
                 {statusMessage && (

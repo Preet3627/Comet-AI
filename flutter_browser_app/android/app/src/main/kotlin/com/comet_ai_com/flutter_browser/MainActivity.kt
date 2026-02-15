@@ -1,4 +1,4 @@
-package com.pichillilorenzo.flutter_browser
+package com.comet_ai_com.flutter_browser
 
 import android.app.SearchManager
 import android.content.Intent
@@ -17,7 +17,7 @@ class MainActivity: FlutterActivity() {
 
     private var url: String? = null;
     //private var headers: Map<String, String>? = null;
-    private val CHANNEL = "com.pichillilorenzo.comet_ai.intent_data"
+    private val CHANNEL = "com.comet_ai_com.comet_ai.intent_data"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -11,6 +11,36 @@ permissions:
 
 jobs:
   # ============================================================================
+  # HELPER JOBS
+  # ============================================================================
+  signing-report:
+    name: Get Android SHA-1 (Signing Report)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        working-directory: flutter_browser_app
+        run: flutter pub get
+
+      - name: Run Signing Report
+        working-directory: flutter_browser_app/android
+        run: ./gradlew signingReport
+
+  # ============================================================================
   # PREVIOUS MOBILE JOBS (DEPRECATED)
   # ============================================================================
   # build-android:
@@ -102,6 +132,13 @@ jobs:
         working-directory: flutter_browser_app
         run: flutter pub get
 
+      - name: Create google-services.json
+        continue-on-error: true
+        run: |
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > flutter_browser_app/android/app/google-services.json
+          fi
+
       - name: Decode Keystore
         continue-on-error: true
         run: |
@@ -146,6 +183,13 @@ jobs:
       - name: Install dependencies
         working-directory: flutter_browser_app
         run: flutter pub get
+
+      - name: Create GoogleService-Info.plist
+        continue-on-error: true
+        run: |
+          if [ -n "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > flutter_browser_app/ios/Runner/GoogleService-Info.plist
+          fi
 
       - name: Cache CocoaPods
         uses: actions/cache@v4
@@ -211,6 +255,27 @@ jobs:
       - name: Install Dependencies
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
+
+      - name: Create Firebase Admin Key
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        run: |
+          mkdir -p comet-browser/config
+          if [ -n "${{ secrets.FIREBASE_ADMIN_SDK_JSON }}" ]; then
+            echo "${{ secrets.FIREBASE_ADMIN_SDK_JSON }}" > comet-browser/config/firebase-admin.json
+          fi
+
+      - name: Create Firebase Admin Key (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path comet-browser/config
+          if ($env:FIREBASE_ADMIN_SDK_JSON) {
+            $env:FIREBASE_ADMIN_SDK_JSON | Out-File -FilePath comet-browser/config/firebase-admin.json -Encoding utf8
+          }
+        env:
+          FIREBASE_ADMIN_SDK_JSON: ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
 
       - name: Cache Next.js build
         uses: actions/cache@v4

@@ -77,6 +77,12 @@ CHAINED EXECUTION:
 You can provide MULTIPLE commands in a single response for multi-step tasks.
 Example: "[NAVIGATE: https://google.com] [SEARCH: AI news] [OPEN_VIEW: browser]"
 
+FORMATTING & STYLE:
+- Use Markdown TABLES for all data comparison, feature lists, or structured information.
+- Use **BOLD** and *ITALIC* for emphasis and clear hierarchy.
+- Use EMOJIS (integrated naturally) to make the conversation engaging and futuristic 🚀.
+- Be concise but extremely helpful and proactive.
+
 COGNITIVE CAPABILITIES:
 - HYBRID RAG: You have access to Local Memory (History) AND Online Search Results. **Prioritize the 'LOCAL KNOWLEDGE BASE (RAG)' for answers when relevant context is provided.**
 - VISION: You can see the page via [SCREENSHOT_AND_ANALYZE].
@@ -879,185 +885,185 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
           if (store.currentUrl.includes('youtube.com') && response.text.toLowerCase().includes('not available')) {
             console.log('[YouTube] Content unavailable detected, triggering web search fallback');
             const videoTopic = store.currentUrl.match(/[?&]v=([^&]+)/)?.[1] || 'video';
-            const searchQuery = `${ videoTopic } video alternative`;
-            setMessages(prev => [...prev, { role: 'model', content: `\n\n⚠️ YouTube content unavailable.Searching for alternatives...[SEARCH: ${ searchQuery }]` }]);
+            const searchQuery = `${videoTopic} video alternative`;
+            setMessages(prev => [...prev, { role: 'model', content: `\n\n⚠️ YouTube content unavailable.Searching for alternatives...[SEARCH: ${searchQuery}]` }]);
 
             // Execute search automatically after a short delay
             await delay(2000); // Wait for the message to be displayed
             const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-store.setCurrentUrl(searchUrl);
-if (window.electronAPI) {
-  await window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url: searchUrl });
-}
+            store.setCurrentUrl(searchUrl);
+            if (window.electronAPI) {
+              await window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url: searchUrl });
+            }
           }
 
-// Trigger Mermaid re-render if diagrams found
-if (response.text.includes('mermaid') || response.text.includes('[GENERATE_DIAGRAM:')) {
-  setTimeout(() => {
-    (window as any).mermaid?.contentLoaded();
-  }, 500);
-}
+          // Trigger Mermaid re-render if diagrams found
+          if (response.text.includes('mermaid') || response.text.includes('[GENERATE_DIAGRAM:')) {
+            setTimeout(() => {
+              (window as any).mermaid?.contentLoaded();
+            }, 500);
+          }
         }
       } else {
-  setError("AI Engine not connected. Use the Comet Desktop App for full AI features.");
-}
+        setError("AI Engine not connected. Use the Comet Desktop App for full AI features.");
+      }
     } catch (err: any) {
-  setError(`Response Error: ${err.message}`);
-} finally {
-  setIsLoading(false);
-}
+      setError(`Response Error: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-const handleExportTxt = async () => {
-  if (messages.length === 0) return;
-  const success = await window.electronAPI.exportChatAsTxt(messages);
-  if (success) alert('Exported as TXT');
-};
+  const handleExportTxt = async () => {
+    if (messages.length === 0) return;
+    const success = await window.electronAPI.exportChatAsTxt(messages);
+    if (success) alert('Exported as TXT');
+  };
 
-const handleExportPdf = async () => {
-  if (messages.length === 0) return;
-  const success = await window.electronAPI.exportChatAsPdf(messages);
-  if (success) alert('Exported as PDF');
-};
+  const handleExportPdf = async () => {
+    if (messages.length === 0) return;
+    const success = await window.electronAPI.exportChatAsPdf(messages);
+    if (success) alert('Exported as PDF');
+  };
 
-const handleExportDiagram = async (mermaidCode: string, resolution: number = 1080) => {
-  try {
-    if (!isMermaidLoaded || !(window as any).mermaid) {
-      setError("Mermaid.js is not loaded.");
-      return;
+  const handleExportDiagram = async (mermaidCode: string, resolution: number = 1080) => {
+    try {
+      if (!isMermaidLoaded || !(window as any).mermaid) {
+        setError("Mermaid.js is not loaded.");
+        return;
+      }
+
+      // Render the Mermaid code to an SVG string
+      const { svg } = await (window as any).mermaid.render('diagram-id', mermaidCode);
+
+      // Create a temporary SVG element to get dimensions
+      const svgElement = document.createElement('div');
+      svgElement.innerHTML = svg;
+      document.body.appendChild(svgElement); // Temporarily add to DOM to calculate dimensions
+      const svgSvgElement = svgElement.querySelector('svg');
+
+      if (!svgSvgElement) {
+        setError("Failed to render Mermaid to SVG.");
+        document.body.removeChild(svgElement);
+        return;
+      }
+
+      const svgWidth = svgSvgElement.clientWidth || 800; // Default width
+      const svgHeight = svgSvgElement.clientHeight || 600; // Default height
+      document.body.removeChild(svgElement); // Remove temporary element
+
+      const scale = resolution / svgHeight; // Calculate scale to match desired height
+      const targetWidth = svgWidth * scale;
+      const targetHeight = svgHeight * scale;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        setError("Failed to get canvas context.");
+        return;
+      }
+
+      // Create an image from SVG
+      const img = new Image();
+      const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = async () => {
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+        URL.revokeObjectURL(url);
+
+        canvas.toBlob(async (blob) => {
+          if (blob && window.electronAPI) {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              const base64data = reader.result as string; // Data URL format
+              const filename = `mermaid-diagram-${Date.now()}.png`;
+
+              // Trigger download via main process
+              const success = await window.electronAPI.triggerDownload(base64data, filename);
+              if (success) {
+                alert(`Diagram exported as ${filename} at ${resolution}p.`);
+              } else {
+                setError("Failed to trigger diagram download.");
+              }
+            };
+            reader.readAsDataURL(blob);
+          } else {
+            setError("Failed to convert canvas to blob or Electron API not available.");
+          }
+        }, 'image/png', 1); // Quality 1 for PNG
+      };
+      img.onerror = (err) => {
+        setError("Failed to load SVG into image for canvas.");
+        console.error("SVG to image conversion error:", err);
+      };
+      img.src = url;
+
+    } catch (err: any) {
+      console.error("Error exporting diagram:", err);
+      setError(`Failed to export diagram: ${err.message}`);
     }
+  };
 
-    // Render the Mermaid code to an SVG string
-    const { svg } = await (window as any).mermaid.render('diagram-id', mermaidCode);
-
-    // Create a temporary SVG element to get dimensions
-    const svgElement = document.createElement('div');
-    svgElement.innerHTML = svg;
-    document.body.appendChild(svgElement); // Temporarily add to DOM to calculate dimensions
-    const svgSvgElement = svgElement.querySelector('svg');
-
-    if (!svgSvgElement) {
-      setError("Failed to render Mermaid to SVG.");
-      document.body.removeChild(svgElement);
-      return;
-    }
-
-    const svgWidth = svgSvgElement.clientWidth || 800; // Default width
-    const svgHeight = svgSvgElement.clientHeight || 600; // Default height
-    document.body.removeChild(svgElement); // Remove temporary element
-
-    const scale = resolution / svgHeight; // Calculate scale to match desired height
-    const targetWidth = svgWidth * scale;
-    const targetHeight = svgHeight * scale;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      setError("Failed to get canvas context.");
-      return;
-    }
-
-    // Create an image from SVG
-    const img = new Image();
-    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
-
-    img.onload = async () => {
-      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-      URL.revokeObjectURL(url);
-
-      canvas.toBlob(async (blob) => {
-        if (blob && window.electronAPI) {
-          const reader = new FileReader();
-          reader.onloadend = async () => {
-            const base64data = reader.result as string; // Data URL format
-            const filename = `mermaid-diagram-${Date.now()}.png`;
-
-            // Trigger download via main process
-            const success = await window.electronAPI.triggerDownload(base64data, filename);
-            if (success) {
-              alert(`Diagram exported as ${filename} at ${resolution}p.`);
-            } else {
-              setError("Failed to trigger diagram download.");
-            }
-          };
-          reader.readAsDataURL(blob);
-        } else {
-          setError("Failed to convert canvas to blob or Electron API not available.");
-        }
-      }, 'image/png', 1); // Quality 1 for PNG
-    };
-    img.onerror = (err) => {
-      setError("Failed to load SVG into image for canvas.");
-      console.error("SVG to image conversion error:", err);
-    };
-    img.src = url;
-
-  } catch (err: any) {
-    console.error("Error exporting diagram:", err);
-    setError(`Failed to export diagram: ${err.message}`);
+  if (props.isCollapsed) {
+    return (
+      <div className="flex flex-col items-center h-full py-4 space-y-6">
+        <button onClick={props.toggleCollapse} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/40">
+          {props.side === 'right' ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+        </button>
+      </div>
+    );
   }
-};
 
-if (props.isCollapsed) {
   return (
-    <div className="flex flex-col items-center h-full py-4 space-y-6">
-      <button onClick={props.toggleCollapse} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/40">
-        {props.side === 'right' ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-      </button>
-    </div>
-  );
-}
-
-return (
-  <div
-    className={`flex flex-col h-full gap-4 p-4 bg-black/60 border-r border-transparent transition-all duration-500 z-[100] ${isFullScreen ? 'fixed inset-0 z-[9999] bg-[#020205] shadow-2xl overflow-hidden' : ''}
+    <div
+      className={`flex flex-col h-full gap-4 p-4 bg-black/60 border-r border-transparent transition-all duration-500 z-[100] ${isFullScreen ? 'fixed inset-0 z-[9999] bg-[#020205] shadow-2xl overflow-hidden' : ''}
           ${isDragOver ? 'border-accent/50 bg-accent/5' : ''}
         `}
-    style={{
-      // GPU-accelerated background with reduced backdrop-filter to prevent compositing issues
-      backdropFilter: isFullScreen ? 'none' : 'blur(20px)',
-      WebkitBackdropFilter: isFullScreen ? 'none' : 'blur(20px)',
-      // Ensure hardware acceleration
-      transform: 'translateZ(0)',
-      willChange: 'transform'
-    }}
-    onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-    onDragLeave={() => setIsDragOver(false)}
-    onDrop={handleDrop}
-  >
-    {/* Resize Handle */}
-    {!isFullScreen && !props.isCollapsed && (
-      <div
-        className={`absolute top-0 ${props.side === 'right' ? 'left-0' : 'right-0'} w-1 h-full cursor-col-resize hover:bg-deep-space-accent-neon/50 transition-colors z-[110]`}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          const startX = e.clientX;
-          const startWidth = store.sidebarWidth;
-          const handleMouseMove = (moveEvent: MouseEvent) => {
-            const delta = props.side === 'right' ? startX - moveEvent.clientX : moveEvent.clientX - startX;
-            let newWidth = startWidth + delta;
-            if (newWidth < 300) newWidth = 300;
-            if (newWidth > 800) newWidth = 800;
-            store.setSidebarWidth(newWidth);
-            if (window.electronAPI) {
-              // Trigger a resize event to update BrowserView bounds if needed
-              window.dispatchEvent(new Event('resize'));
-            }
-          };
-          const handleMouseUp = () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-          };
-          document.addEventListener('mousemove', handleMouseMove);
-          document.addEventListener('mouseup', handleMouseUp);
-        }}
-      />
-    )}
-    <style>{`
+      style={{
+        // GPU-accelerated background with reduced backdrop-filter to prevent compositing issues
+        backdropFilter: isFullScreen ? 'none' : 'blur(20px)',
+        WebkitBackdropFilter: isFullScreen ? 'none' : 'blur(20px)',
+        // Ensure hardware acceleration
+        transform: 'translateZ(0)',
+        willChange: 'transform'
+      }}
+      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handleDrop}
+    >
+      {/* Resize Handle */}
+      {!isFullScreen && !props.isCollapsed && (
+        <div
+          className={`absolute top-0 ${props.side === 'right' ? 'left-0' : 'right-0'} w-1 h-full cursor-col-resize hover:bg-deep-space-accent-neon/50 transition-colors z-[110]`}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startWidth = store.sidebarWidth;
+            const handleMouseMove = (moveEvent: MouseEvent) => {
+              const delta = props.side === 'right' ? startX - moveEvent.clientX : moveEvent.clientX - startX;
+              let newWidth = startWidth + delta;
+              if (newWidth < 300) newWidth = 300;
+              if (newWidth > 800) newWidth = 800;
+              store.setSidebarWidth(newWidth);
+              if (window.electronAPI) {
+                // Trigger a resize event to update BrowserView bounds if needed
+                window.dispatchEvent(new Event('resize'));
+              }
+            };
+            const handleMouseUp = () => {
+              document.removeEventListener('mousemove', handleMouseMove);
+              document.removeEventListener('mouseup', handleMouseUp);
+            };
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+          }}
+        />
+      )}
+      <style>{`
           .modern-scrollbar::-webkit-scrollbar {
             width: 6px;
           }
@@ -1073,263 +1079,263 @@ return (
             background-color: rgba(var(--color-primary-text), 0.2);
           }
         `}</style>
-    <header className="flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center">
-          <img src="icon.png" alt="Comet AI Icon" className="w-full h-full object-contain" />
-        </div>
-        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white text-neon">Comet AI</h2>
-        {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}
-      </div>
-      <div className="flex items-center gap-2">
-        <button onClick={() => setShowLLMProviderSettings(!showLLMProviderSettings)} className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 transition-all no-drag-region" title="LLM Provider Settings">
-          <MoreVertical size={18} />
-        </button>
-        <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
-          {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-        </button>
-        <button onClick={props.toggleCollapse} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
-          <X size={16} />
-        </button>
-      </div>
-    </header>
-    <div className="flex-1 overflow-y-auto modern-scrollbar space-y-4 relative pr-2">
-      {/* Antigravity RAG Panel */}
-      <AnimatePresence>
-        {showRagPanel && ragContextItems.length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="mx-2 mb-2 rounded-xl bg-deep-space-accent-neon/5 overflow-hidden"
-          >
-            <div
-              className="px-3 py-2 flex items-center justify-between cursor-pointer bg-deep-space-accent-neon/10"
-              onClick={() => setShowRagPanel(!showRagPanel)}
-            >
-              <div className="flex items-center gap-2">
-                <Sparkles size={12} className="text-deep-space-accent-neon animate-pulse" />
-                <span className="text-[9px] font-black uppercase tracking-widest text-deep-space-accent-neon">Neural Context Active ({ragContextItems.length})</span>
-              </div>
-              <ChevronDown size={12} className="text-deep-space-accent-neon opacity-50" />
-            </div>
-            <div className="p-3 space-y-2">
-              {ragContextItems.map((item, i) => (
-                <div key={i} className="text-[10px] text-white/50 leading-tight pl-2 border-l-2 border-deep-space-accent-neon/20">
-                  {item.text.substring(0, 120)}...
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {messages.map((msg, i) => (
-        <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-          <div className={`max-w-[85%] p-4 rounded-3xl text-sm leading-[1.6] ${msg.role === 'user' ? 'bg-sky-500/10 text-white border border-sky-500/20 shadow-[0_0_20px_rgba(56,189,248,0.1)]' : 'bg-white/[0.03] text-slate-200 border border-white/5'}`}>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[rehypeKatex]}
-              components={{
-                code({ node, className, children, ...props }) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const codeString = String(children).replace(/\n$/, '');
-
-                  if (match && match[1] === 'mermaid' && isMermaidLoaded) {
-                    return (
-                      <div className="relative group bg-black/40 p-4 rounded-xl my-4 text-center" onClick={e => e.stopPropagation()}>
-                        <div className="mermaid">{codeString}</div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleExportDiagram(codeString);
-                          }}
-                          className="absolute top-2 right-2 p-1 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                          title="Export Diagram"
-                        >
-                          <Download size={14} />
-                        </button>
-                      </div>
-                    );
-                  }
-
-                  return node && !node.properties.inline && match ? (
-                    <SyntaxHighlighter
-                      style={dracula as any}
-                      language={match[1]}
-                      PreTag="div"
-                    >
-                      {codeString}
-                    </SyntaxHighlighter>
-                  ) : (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-                // Add custom rendering for math if needed, e.g., using <MathJax> or <KaTeX> components
-                // This example uses rehype-katex to process math within markdown directly
-              }}
-            >
-              {msg.content}
-            </ReactMarkdown>
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center">
+            <img src="icon.png" alt="Comet AI Icon" className="w-full h-full object-contain" />
           </div>
-          {msg.role === 'model' && i === messages.length - 1 && groqSpeed && (
-            <div className="mt-1 ml-2 flex items-center gap-1 text-[9px] font-bold text-deep-space-accent-neon opacity-60">
-              <Zap size={10} /> {groqSpeed}
-            </div>
-          )}
-        </motion.div>
-      ))}
-      {isLoading && <ThinkingIndicator />}
-      {error && <div className="text-[10px] text-red-400 bg-red-400/10 p-2 rounded-lg border border-red-500/20">⚠️ {error}</div>}
-      <div ref={messagesEndRef} />
-    </div>
-
-    {/* LLM Provider Settings */}
-    <LLMProviderSettings
-      {...props}
-      ollamaModels={ollamaModels}
-      setOllamaModels={setOllamaModels}
-      setError={setError}
-      showSettings={showLLMProviderSettings} // Pass new state
-      setShowSettings={setShowLLMProviderSettings} // Pass new setter
-    />
-
-    <footer className="space-y-4">
-      <textarea
-        value={inputMessage}
-        onChange={(e) => setInputMessage(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-        placeholder="Neural prompt..."
-        className="w-full neural-prompt rounded-2xl p-4 text-xs text-white focus:outline-none h-24"
-      />
-      <div className="flex items-center justify-between">
+          <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white text-neon">Comet AI</h2>
+          {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-orange-400" />}
+        </div>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <button
-              onClick={() => setShowActionsMenu(!showActionsMenu)}
-              className="p-2 rounded-lg bg-white/5 text-white/40 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-all"
-              title="Actions"
+          <button onClick={() => setShowLLMProviderSettings(!showLLMProviderSettings)} className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 transition-all no-drag-region" title="LLM Provider Settings">
+            <MoreVertical size={18} />
+          </button>
+          <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
+            {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+          <button onClick={props.toggleCollapse} className="p-2 text-secondary-text hover:text-primary-text transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+      </header>
+      <div className="flex-1 overflow-y-auto modern-scrollbar space-y-4 relative pr-2">
+        {/* Antigravity RAG Panel */}
+        <AnimatePresence>
+          {showRagPanel && ragContextItems.length > 0 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="mx-2 mb-2 rounded-xl bg-deep-space-accent-neon/5 overflow-hidden"
             >
-              <MoreVertical size={14} />
-            </button>
-            {showActionsMenu && (
-              <div className="absolute bottom-full mb-2 w-48 bg-black/80 backdrop-blur-md border border-white/10 rounded-lg shadow-lg">
-                <button
-                  onClick={() => { fileInputRef.current?.click(); setShowActionsMenu(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  📎
-                  <span>Attach File</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const lastMessage = messages.filter((m) => m.role === 'model').pop();
-                    if (lastMessage) {
-                      navigator.clipboard.writeText(lastMessage.content);
+              <div
+                className="px-3 py-2 flex items-center justify-between cursor-pointer bg-deep-space-accent-neon/10"
+                onClick={() => setShowRagPanel(!showRagPanel)}
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles size={12} className="text-deep-space-accent-neon animate-pulse" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-deep-space-accent-neon">Neural Context Active ({ragContextItems.length})</span>
+                </div>
+                <ChevronDown size={12} className="text-deep-space-accent-neon opacity-50" />
+              </div>
+              <div className="p-3 space-y-2">
+                {ragContextItems.map((item, i) => (
+                  <div key={i} className="text-[10px] text-white/50 leading-tight pl-2 border-l-2 border-deep-space-accent-neon/20">
+                    {item.text.substring(0, 120)}...
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {messages.map((msg, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <div className={`max-w-[85%] p-4 rounded-3xl text-sm leading-[1.6] ${msg.role === 'user' ? 'bg-sky-500/10 text-white border border-sky-500/20 shadow-[0_0_20px_rgba(56,189,248,0.1)]' : 'bg-white/[0.03] text-slate-200 border border-white/5'}`}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  code({ node, className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const codeString = String(children).replace(/\n$/, '');
+
+                    if (match && match[1] === 'mermaid' && isMermaidLoaded) {
+                      return (
+                        <div className="relative group bg-black/40 p-4 rounded-xl my-4 text-center" onClick={e => e.stopPropagation()}>
+                          <div className="mermaid">{codeString}</div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExportDiagram(codeString);
+                            }}
+                            className="absolute top-2 right-2 p-1 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                            title="Export Diagram"
+                          >
+                            <Download size={14} />
+                          </button>
+                        </div>
+                      );
                     }
-                    setShowActionsMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  <CopyIcon size={14} />
-                  <span>Copy Last Response</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const lastMessage = messages.filter((m) => m.role === 'model').pop();
-                    if (lastMessage && navigator.share) {
-                      navigator.share({
-                        title: 'Comet AI Response',
-                        text: lastMessage.content,
-                      });
-                    }
-                    setShowActionsMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  <Share2 size={14} />
-                  <span>Share Last Response</span>
-                </button>
-                <button
-                  onClick={() => {
-                    handleSendMessage('[FIND_AND_CLICK: ]'); // Prompt AI to ask for text
-                    setShowActionsMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  <ScanLine size={14} />
-                  <span>Find & Click Text (OCR)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const lastMessage = messages.filter((m) => m.role === 'model').pop();
-                    if (lastMessage && window.electronAPI) {
-                      window.electronAPI.saveAiResponse(lastMessage.content);
-                    }
-                    setShowActionsMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  <Download size={14} />
-                  <span>Save Last Response</span>
-                </button>
-                <div className="h-[1px] bg-white/10 my-1" />
-                <button
-                  onClick={() => { handleExportTxt(); setShowActionsMenu(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  <FileText size={14} />
-                  <span>Export as Text</span>
-                </button>
-                <button
-                  onClick={() => { handleExportPdf(); setShowActionsMenu(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  <FileText size={14} />
-                  <span>Export as PDF</span>
-                </button>
-                <div className="h-[1px] bg-white/10 my-1" />
-                <button
-                  onClick={() => {
-                    setShowActionsMenu(false);
-                    if (window.electronAPI?.findAndClickText) {
-                      const text = window.prompt('Enter text to find and click on screen (e.g. Submit, Sign in):');
-                      if (text?.trim()) {
-                        window.electronAPI.findAndClickText(text.trim()).then((r: { success?: boolean; error?: string }) => {
-                          if (r.success) setMessages(prev => [...prev, { role: 'model', content: '✅ **Find & Click:** Clicked successfully.' }]);
-                          else setMessages(prev => [...prev, { role: 'model', content: `⚠️ **Find & Click:** ${r.error || 'Failed'}` }]);
-                        });
-                      }
-                    }
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
-                >
-                  <ScanLine size={14} />
-                  <span>Find & Click (OCR)</span>
-                </button>
+
+                    return node && !node.properties.inline && match ? (
+                      <SyntaxHighlighter
+                        style={dracula as any}
+                        language={match[1]}
+                        PreTag="div"
+                      >
+                        {codeString}
+                      </SyntaxHighlighter>
+                    ) : (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                  // Add custom rendering for math if needed, e.g., using <MathJax> or <KaTeX> components
+                  // This example uses rehype-katex to process math within markdown directly
+                }}
+              >
+                {msg.content}
+              </ReactMarkdown>
+            </div>
+            {msg.role === 'model' && i === messages.length - 1 && groqSpeed && (
+              <div className="mt-1 ml-2 flex items-center gap-1 text-[9px] font-bold text-deep-space-accent-neon opacity-60">
+                <Zap size={10} /> {groqSpeed}
               </div>
             )}
-          </div>
-        </div>
-        <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple />
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); handleSendMessage(); }}
-          disabled={!inputMessage.trim() || isLoading}
-          className="group relative px-5 py-2.5 rounded-full bg-gradient-to-r from-deep-space-accent-neon to-accent overflow-hidden transition-all hover:shadow-[0_0_30px_rgba(0,255,255,0.6)] disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
-          <div className="relative flex items-center gap-2 text-black font-bold text-[10px] uppercase tracking-wider">
-            <Send size={12} className="group-hover:rotate-12 transition-transform" />
-            <span>Launch</span>
-          </div>
-        </button>
+          </motion.div>
+        ))}
+        {isLoading && <ThinkingIndicator />}
+        {error && <div className="text-[10px] text-red-400 bg-red-400/10 p-2 rounded-lg border border-red-500/20">⚠️ {error}</div>}
+        <div ref={messagesEndRef} />
       </div>
-    </footer>
-  </div>
-);
+
+      {/* LLM Provider Settings */}
+      <LLMProviderSettings
+        {...props}
+        ollamaModels={ollamaModels}
+        setOllamaModels={setOllamaModels}
+        setError={setError}
+        showSettings={showLLMProviderSettings} // Pass new state
+        setShowSettings={setShowLLMProviderSettings} // Pass new setter
+      />
+
+      <footer className="space-y-4">
+        <textarea
+          value={inputMessage}
+          onChange={(e) => setInputMessage(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+          placeholder="Neural prompt..."
+          className="w-full neural-prompt rounded-2xl p-4 text-xs text-white focus:outline-none h-24"
+        />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setShowActionsMenu(!showActionsMenu)}
+                className="p-2 rounded-lg bg-white/5 text-white/40 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-all"
+                title="Actions"
+              >
+                <MoreVertical size={14} />
+              </button>
+              {showActionsMenu && (
+                <div className="absolute bottom-full mb-2 w-48 bg-black/80 backdrop-blur-md border border-white/10 rounded-lg shadow-lg">
+                  <button
+                    onClick={() => { fileInputRef.current?.click(); setShowActionsMenu(false); }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    📎
+                    <span>Attach File</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const lastMessage = messages.filter((m) => m.role === 'model').pop();
+                      if (lastMessage) {
+                        navigator.clipboard.writeText(lastMessage.content);
+                      }
+                      setShowActionsMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <CopyIcon size={14} />
+                    <span>Copy Last Response</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const lastMessage = messages.filter((m) => m.role === 'model').pop();
+                      if (lastMessage && navigator.share) {
+                        navigator.share({
+                          title: 'Comet AI Response',
+                          text: lastMessage.content,
+                        });
+                      }
+                      setShowActionsMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <Share2 size={14} />
+                    <span>Share Last Response</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleSendMessage('[FIND_AND_CLICK: ]'); // Prompt AI to ask for text
+                      setShowActionsMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <ScanLine size={14} />
+                    <span>Find & Click Text (OCR)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const lastMessage = messages.filter((m) => m.role === 'model').pop();
+                      if (lastMessage && window.electronAPI) {
+                        window.electronAPI.saveAiResponse(lastMessage.content);
+                      }
+                      setShowActionsMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <Download size={14} />
+                    <span>Save Last Response</span>
+                  </button>
+                  <div className="h-[1px] bg-white/10 my-1" />
+                  <button
+                    onClick={() => { handleExportTxt(); setShowActionsMenu(false); }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <FileText size={14} />
+                    <span>Export as Text</span>
+                  </button>
+                  <button
+                    onClick={() => { handleExportPdf(); setShowActionsMenu(false); }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <FileText size={14} />
+                    <span>Export as PDF</span>
+                  </button>
+                  <div className="h-[1px] bg-white/10 my-1" />
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      if (window.electronAPI?.findAndClickText) {
+                        const text = window.prompt('Enter text to find and click on screen (e.g. Submit, Sign in):');
+                        if (text?.trim()) {
+                          window.electronAPI.findAndClickText(text.trim()).then((r: { success?: boolean; error?: string }) => {
+                            if (r.success) setMessages(prev => [...prev, { role: 'model', content: '✅ **Find & Click:** Clicked successfully.' }]);
+                            else setMessages(prev => [...prev, { role: 'model', content: `⚠️ **Find & Click:** ${r.error || 'Failed'}` }]);
+                          });
+                        }
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-left text-white/80 hover:bg-white/10"
+                  >
+                    <ScanLine size={14} />
+                    <span>Find & Click (OCR)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple />
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); handleSendMessage(); }}
+            disabled={!inputMessage.trim() || isLoading}
+            className="group relative px-5 py-2.5 rounded-full bg-gradient-to-r from-deep-space-accent-neon to-accent overflow-hidden transition-all hover:shadow-[0_0_30px_rgba(0,255,255,0.6)] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+            <div className="relative flex items-center gap-2 text-black font-bold text-[10px] uppercase tracking-wider">
+              <Send size={12} className="group-hover:rotate-12 transition-transform" />
+              <span>Launch</span>
+            </div>
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
 };
 
 export default AIChatSidebar;
