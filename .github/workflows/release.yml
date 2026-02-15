@@ -11,40 +11,7 @@ permissions:
 
 jobs:
   # ============================================================================
-  # HELPER JOBS
-  # ============================================================================
-  signing-report:
-    name: Get Android SHA-1 (Signing Report)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-          cache: 'gradle'
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
-
-      - name: Install dependencies
-        working-directory: flutter_browser_app
-        run: flutter pub get
-
-      - name: Run Signing Report
-        working-directory: flutter_browser_app/android
-        run: |
-          ls -la
-          chmod +x ./gradlew
-          ./gradlew signingReport
-
-  # ============================================================================
-  # PREVIOUS MOBILE JOBS (DEPRECATED)
+  # MOBILE JOBS (flutter_browser_app)
   # ============================================================================
   # build-android:
   #   name: Build Android APK

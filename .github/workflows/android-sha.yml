@@ -1,0 +1,57 @@
+name: Get Android SHA Keys
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-sha-keys:
+    name: Generate SHA Fingerprints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        working-directory: flutter_browser_app
+        run: flutter pub get
+
+      - name: Decode Keystore
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > flutter_browser_app/android/app/upload-keystore.jks
+          else
+            echo "Error: ANDROID_KEYSTORE_BASE64 secret is missing"
+            exit 1
+          fi
+
+      - name: Create key.properties
+        run: |
+          cat > flutter_browser_app/android/key.properties << EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Run Signing Report
+        working-directory: flutter_browser_app/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew signingReport
+
+      - name: instructions
+        run: |
+          echo "Look at the output of the 'Run Signing Report' step above."
+          echo "Find the 'Variant: release' section to get your Production SHA-1 and SHA-256 keys."
