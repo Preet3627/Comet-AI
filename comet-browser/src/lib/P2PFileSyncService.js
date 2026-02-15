@@ -277,15 +277,83 @@ var P2PFileSyncService = /** @class */ (function (_super) {
     /**
      * Scan folder and get file metadata
      */
+    /**
+     * Scan folder and get file metadata
+     */
     P2PFileSyncService.prototype.scanFolder = function (folderPath, types) {
         return __awaiter(this, void 0, void 0, function () {
+            var fs, path, results, scanRecursive, e_1;
+            var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         if (!(typeof window !== 'undefined' && window.electronAPI)) return [3 /*break*/, 2];
                         return [4 /*yield*/, window.electronAPI.scanFolder(folderPath, types)];
                     case 1: return [2 /*return*/, _a.sent()];
-                    case 2: return [2 /*return*/, []];
+                    case 2:
+                        fs = require('fs');
+                        path = require('path');
+                        results = [];
+                        scanRecursive = function (currentPath) { return __awaiter(_this, void 0, void 0, function () {
+                            var entries, _i, entries_1, entry, fullPath, ext, match, stats;
+                            return __generator(this, function (_a) {
+                                switch (_a.label) {
+                                    case 0:
+                                        entries = fs.readdirSync(currentPath, { withFileTypes: true });
+                                        _i = 0, entries_1 = entries;
+                                        _a.label = 1;
+                                    case 1:
+                                        if (!(_i < entries_1.length)) return [3 /*break*/, 5];
+                                        entry = entries_1[_i];
+                                        fullPath = path.join(currentPath, entry.name);
+                                        if (!entry.isDirectory()) return [3 /*break*/, 3];
+                                        return [4 /*yield*/, scanRecursive(fullPath)];
+                                    case 2:
+                                        _a.sent();
+                                        return [3 /*break*/, 4];
+                                    case 3:
+                                        ext = path.extname(entry.name).toLowerCase();
+                                        match = false;
+                                        if (types.includes('all'))
+                                            match = true;
+                                        else if (types.includes('images') && ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext))
+                                            match = true;
+                                        else if (types.includes('pdfs') && ext === '.pdf')
+                                            match = true;
+                                        else if (types.includes('documents') && ['.doc', '.docx', '.txt', '.md', '.rtf'].includes(ext))
+                                            match = true;
+                                        if (match) {
+                                            stats = fs.statSync(fullPath);
+                                            results.push({
+                                                id: "file-".concat(Date.now(), "-").concat(Math.random().toString(36).substring(2, 7)),
+                                                name: entry.name,
+                                                path: fullPath,
+                                                size: stats.size,
+                                                type: ext.substring(1),
+                                                hash: '',
+                                                modifiedTime: stats.mtimeMs
+                                            });
+                                        }
+                                        _a.label = 4;
+                                    case 4:
+                                        _i++;
+                                        return [3 /*break*/, 1];
+                                    case 5: return [2 /*return*/];
+                                }
+                            });
+                        }); };
+                        _a.label = 3;
+                    case 3:
+                        _a.trys.push([3, 5, , 6]);
+                        return [4 /*yield*/, scanRecursive(folderPath)];
+                    case 4:
+                        _a.sent();
+                        return [3 /*break*/, 6];
+                    case 5:
+                        e_1 = _a.sent();
+                        console.error('[P2P] Scan error:', e_1);
+                        return [3 /*break*/, 6];
+                    case 6: return [2 /*return*/, results];
                 }
             });
         });
@@ -364,7 +432,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
      */
     P2PFileSyncService.prototype.syncViaRelay = function (folderId) {
         return __awaiter(this, void 0, void 0, function () {
-            var folder, localFiles, filesQueued, passphrase, _i, localFiles_2, file, fileData, encryptResult, encryptedData, iv, authTag, salt, storagePath, fileRef, downloadURL, fileRelayMetadata, e_1;
+            var folder, localFiles, filesQueued, passphrase, _i, localFiles_2, file, fileData, encryptResult, encryptedData, iv, authTag, salt, storagePath, fileRef, downloadURL, fileRelayMetadata, e_2;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -390,7 +458,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                         return [4 /*yield*/, this.readFileData(file.path)];
                     case 4:
                         fileData = _a.sent();
-                        return [4 /*yield*/, window.electronAPI.encryptData(fileData, passphrase)];
+                        return [4 /*yield*/, this.encryptData(fileData, passphrase)];
                     case 5:
                         encryptResult = _a.sent();
                         if (isErrorResult(encryptResult)) {
@@ -420,8 +488,8 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                         this.emit('relay-queued', { folderId: folderId, count: filesQueued });
                         return [2 /*return*/, { success: true, filesSynced: filesQueued }];
                     case 11:
-                        e_1 = _a.sent();
-                        console.error('[Relay] Offline queue failed:', e_1);
+                        e_2 = _a.sent();
+                        console.error('[Relay] Offline queue failed:', e_2);
                         return [2 /*return*/, { success: false, filesSynced: 0 }];
                     case 12: return [2 /*return*/];
                 }
@@ -434,7 +502,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
             return;
         var relayRef = (0, database_1.ref)(this.db, "p2p_relay_metadata/".concat(this.deviceId));
         this._relayListenerOff = (0, database_1.onValue)(relayRef, function (snapshot) { return __awaiter(_this, void 0, void 0, function () {
-            var filesToProcess, _a, _b, _c, _i, fileId, fileMetadata, fileRef, arrayBuffer, passphrase, decryptResult, decryptedData, e_2;
+            var filesToProcess, _a, _b, _c, _i, fileId, fileMetadata, fileRef, arrayBuffer, passphrase, decryptResult, decryptedData, e_3;
             return __generator(this, function (_d) {
                 switch (_d.label) {
                     case 0:
@@ -463,7 +531,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                     case 4:
                         arrayBuffer = _d.sent();
                         passphrase = 'temp-key';
-                        return [4 /*yield*/, window.electronAPI.decryptData(arrayBuffer, passphrase, Buffer.from(fileMetadata.iv, 'base64').buffer, Buffer.from(fileMetadata.authTag, 'base64').buffer, Buffer.from(fileMetadata.salt, 'base64').buffer)];
+                        return [4 /*yield*/, this.decryptData(arrayBuffer, passphrase, Buffer.from(fileMetadata.iv, 'base64').buffer, Buffer.from(fileMetadata.authTag, 'base64').buffer, Buffer.from(fileMetadata.salt, 'base64').buffer)];
                     case 5:
                         decryptResult = _d.sent();
                         if (isErrorResult(decryptResult)) {
@@ -485,8 +553,8 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                         this.emit('file-relayed', __assign(__assign({}, fileMetadata), { decryptedData: decryptedData }));
                         return [3 /*break*/, 9];
                     case 8:
-                        e_2 = _d.sent();
-                        console.error("[Relay] Error processing relayed file ".concat(fileMetadata.name, ":"), e_2);
+                        e_3 = _d.sent();
+                        console.error("[Relay] Error processing relayed file ".concat(fileMetadata.name, ":"), e_3);
                         return [3 /*break*/, 9];
                     case 9:
                         _i++;
@@ -554,13 +622,95 @@ var P2PFileSyncService = /** @class */ (function (_super) {
     };
     P2PFileSyncService.prototype.readFileData = function (filePath) {
         return __awaiter(this, void 0, void 0, function () {
+            var fs, buffer;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         if (!(typeof window !== 'undefined' && window.electronAPI)) return [3 /*break*/, 2];
                         return [4 /*yield*/, window.electronAPI.readFileBuffer(filePath)];
                     case 1: return [2 /*return*/, _a.sent()];
-                    case 2: return [2 /*return*/, new ArrayBuffer(0)];
+                    case 2:
+                        fs = require('fs');
+                        try {
+                            buffer = fs.readFileSync(filePath);
+                            return [2 /*return*/, buffer.buffer];
+                        }
+                        catch (e) {
+                            console.error('[P2P] Read file error:', e);
+                            return [2 /*return*/, new ArrayBuffer(0)];
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    P2PFileSyncService.prototype.encryptData = function (data, key) {
+        return __awaiter(this, void 0, void 0, function () {
+            var crypto;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(typeof window !== 'undefined' && window.electronAPI)) return [3 /*break*/, 2];
+                        return [4 /*yield*/, window.electronAPI.encryptData(data, key)];
+                    case 1: return [2 /*return*/, _a.sent()];
+                    case 2:
+                        crypto = require('crypto');
+                        return [2 /*return*/, new Promise(function (resolve) {
+                                try {
+                                    var salt_1 = crypto.randomBytes(16);
+                                    crypto.pbkdf2(key, salt_1, 100000, 32, 'sha512', function (err, derivedKey) {
+                                        if (err) {
+                                            resolve({ error: err.message });
+                                            return;
+                                        }
+                                        var iv = crypto.randomBytes(16);
+                                        var cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
+                                        var encrypted = Buffer.concat([cipher.update(Buffer.from(data)), cipher.final()]);
+                                        var authTag = cipher.getAuthTag();
+                                        resolve({
+                                            encryptedData: encrypted.buffer,
+                                            iv: iv.buffer,
+                                            authTag: authTag.buffer,
+                                            salt: salt_1.buffer
+                                        });
+                                    });
+                                }
+                                catch (e) {
+                                    resolve({ error: e.message });
+                                }
+                            })];
+                }
+            });
+        });
+    };
+    P2PFileSyncService.prototype.decryptData = function (encryptedData, key, iv, authTag, salt) {
+        return __awaiter(this, void 0, void 0, function () {
+            var crypto;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(typeof window !== 'undefined' && window.electronAPI)) return [3 /*break*/, 2];
+                        return [4 /*yield*/, window.electronAPI.decryptData(encryptedData, key, iv, authTag, salt)];
+                    case 1: return [2 /*return*/, _a.sent()];
+                    case 2:
+                        crypto = require('crypto');
+                        return [2 /*return*/, new Promise(function (resolve) {
+                                try {
+                                    crypto.pbkdf2(key, Buffer.from(salt), 100000, 32, 'sha512', function (err, derivedKey) {
+                                        if (err) {
+                                            resolve({ error: err.message });
+                                            return;
+                                        }
+                                        var decipher = crypto.createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(iv));
+                                        decipher.setAuthTag(Buffer.from(authTag));
+                                        var decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedData)), decipher.final()]);
+                                        resolve({ decryptedData: decrypted.buffer });
+                                    });
+                                }
+                                catch (e) {
+                                    resolve({ error: e.message });
+                                }
+                            })];
                 }
             });
         });

@@ -1989,6 +1989,9 @@ app.whenReady().then(() => {
   // Listen for sync messages from peers
   p2pSyncService.on('message', (message) => {
     console.log(`[P2P] Received message of type: ${message.type}`);
+    if (mainWindow) {
+      mainWindow.webContents.send('p2p-message', message);
+    }
     if (message.type === 'clipboard-sync') {
       clipboard.writeText(message.text);
       if (mainWindow) {

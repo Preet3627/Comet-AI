@@ -164,6 +164,7 @@ declare global {
             uninstallExtension: (id: string) => Promise<boolean>;
             openExtensionDir: () => void;
             getExtensionPath: () => Promise<string>;
+            getIconPath: () => Promise<string>;
             connectToRemoteDevice: (remoteDeviceId: string) => Promise<boolean>;
             sendP2PSignal: (signal: any, remoteDeviceId: string) => void;
             onP2PConnected: (callback: () => void) => () => void;
@@ -172,8 +173,13 @@ declare global {
             onP2POfferCreated: (callback: (data: { offer: any; remoteDeviceId: string }) => void) => () => void;
             onP2PAnswerCreated: (callback: (data: { answer: any; remoteDeviceId: string }) => void) => () => void;
             onP2PIceCandidate: (callback: (data: { candidate: any; remoteDeviceId: string }) => void) => () => void;
+            onP2PLocalDeviceId: (callback: (deviceId: string) => void) => () => void;
+            getP2PLocalDeviceId: () => Promise<string>;
+            onP2PMessage: (callback: (message: any) => void) => () => void;
             encryptData: (data: ArrayBuffer, key: string) => Promise<{ encryptedData: ArrayBuffer; iv: ArrayBuffer; authTag: ArrayBuffer; salt: ArrayBuffer; } | { error: string }>;
             decryptData: (encryptedData: ArrayBuffer, key: string, iv: ArrayBuffer, authTag: ArrayBuffer, salt: ArrayBuffer) => Promise<{ decryptedData: ArrayBuffer; } | { error: string }>;
+            scanFolder: (path: string, types: string[]) => Promise<any[]>;
+            readFileBuffer: (path: string) => Promise<ArrayBuffer>;
 
             // Persistent Storage
             savePersistentData: (key: string, data: any) => Promise<{ success: boolean; error?: string }>;

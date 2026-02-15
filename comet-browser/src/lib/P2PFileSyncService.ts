@@ -243,13 +243,55 @@ export class P2PFileSyncService extends EventEmitter {
     /**
      * Scan folder and get file metadata
      */
+    /**
+     * Scan folder and get file metadata
+     */
     async scanFolder(folderPath: string, types: string[]): Promise<FileMetadata[]> {
-        // This would be implemented in the Electron main process
-        // Here's the interface
         if (typeof window !== 'undefined' && window.electronAPI) {
             return await window.electronAPI.scanFolder(folderPath, types);
         }
-        return [];
+
+        // Main process implementation
+        const fs = require('fs');
+        const path = require('path');
+        const results: FileMetadata[] = [];
+
+        const scanRecursive = async (currentPath: string) => {
+            const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = path.join(currentPath, entry.name);
+                if (entry.isDirectory()) {
+                    await scanRecursive(fullPath);
+                } else {
+                    const ext = path.extname(entry.name).toLowerCase();
+                    let match = false;
+                    if (types.includes('all')) match = true;
+                    else if (types.includes('images') && ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) match = true;
+                    else if (types.includes('pdfs') && ext === '.pdf') match = true;
+                    else if (types.includes('documents') && ['.doc', '.docx', '.txt', '.md', '.rtf'].includes(ext)) match = true;
+
+                    if (match) {
+                        const stats = fs.statSync(fullPath);
+                        results.push({
+                            id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                            name: entry.name,
+                            path: fullPath,
+                            size: stats.size,
+                            type: ext.substring(1),
+                            hash: '',
+                            modifiedTime: stats.mtimeMs
+                        });
+                    }
+                }
+            }
+        };
+
+        try {
+            await scanRecursive(folderPath);
+        } catch (e) {
+            console.error('[P2P] Scan error:', e);
+        }
+        return results;
     }
 
     /**
@@ -325,7 +367,7 @@ export class P2PFileSyncService extends EventEmitter {
 
             for (const file of localFiles) {
                 const fileData = await this.readFileData(file.path);
-                const encryptResult: EncryptResult = await window.electronAPI.encryptData(fileData, passphrase);
+                const encryptResult: EncryptResult = await this.encryptData(fileData, passphrase);
 
                 if (isErrorResult(encryptResult)) {
                     console.error('[Relay] Encryption failed:', encryptResult.error);
@@ -381,9 +423,9 @@ export class P2PFileSyncService extends EventEmitter {
                     // Download from Firebase Storage
                     const fileRef = storageRef(this.storage!, fileMetadata.storagePath!);
                     const arrayBuffer = await (await fetch(fileMetadata.downloadURL!)).arrayBuffer();
-                    
+
                     const passphrase = 'temp-key'; // TODO: Get actual passphrase from useAppStore
-                    const decryptResult: DecryptResult = await window.electronAPI.decryptData(
+                    const decryptResult: DecryptResult = await this.decryptData(
                         arrayBuffer,
                         passphrase,
                         Buffer.from(fileMetadata.iv!, 'base64').buffer,
@@ -396,10 +438,10 @@ export class P2PFileSyncService extends EventEmitter {
                         continue;
                     }
                     const { decryptedData } = decryptResult;
-                    
+
                     // TODO: Save file locally (Electron main process will handle this via IPC)
                     console.log(`[Relay] Decrypted ${fileMetadata.name}. Ready to save locally.`);
-                    
+
                     // Delete metadata and file from Firebase after successful processing
                     await set(ref(this.db!, `p2p_relay_metadata/${this.deviceId}/${fileId}`), null);
                     await deleteObject(fileRef);
@@ -460,7 +502,73 @@ export class P2PFileSyncService extends EventEmitter {
         if (typeof window !== 'undefined' && window.electronAPI) {
             return await window.electronAPI.readFileBuffer(filePath);
         }
-        return new ArrayBuffer(0);
+
+        // Main process implementation
+        const fs = require('fs');
+        try {
+            const buffer = fs.readFileSync(filePath);
+            return buffer.buffer;
+        } catch (e) {
+            console.error('[P2P] Read file error:', e);
+            return new ArrayBuffer(0);
+        }
+    }
+
+    private async encryptData(data: ArrayBuffer, key: string): Promise<EncryptResult> {
+        if (typeof window !== 'undefined' && window.electronAPI) {
+            return await window.electronAPI.encryptData(data, key);
+        }
+
+        // Node implementation
+        const crypto = require('crypto');
+        return new Promise((resolve) => {
+            try {
+                const salt = crypto.randomBytes(16);
+                crypto.pbkdf2(key, salt, 100000, 32, 'sha512', (err: any, derivedKey: any) => {
+                    if (err) {
+                        resolve({ error: err.message });
+                        return;
+                    }
+                    const iv = crypto.randomBytes(16);
+                    const cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
+                    const encrypted = Buffer.concat([cipher.update(Buffer.from(data)), cipher.final()]);
+                    const authTag = cipher.getAuthTag();
+                    resolve({
+                        encryptedData: encrypted.buffer,
+                        iv: iv.buffer,
+                        authTag: authTag.buffer,
+                        salt: salt.buffer
+                    });
+                });
+            } catch (e: any) {
+                resolve({ error: e.message });
+            }
+        });
+    }
+
+    private async decryptData(encryptedData: ArrayBuffer, key: string, iv: ArrayBuffer, authTag: ArrayBuffer, salt: ArrayBuffer): Promise<DecryptResult> {
+        if (typeof window !== 'undefined' && window.electronAPI) {
+            return await window.electronAPI.decryptData(encryptedData, key, iv, authTag, salt);
+        }
+
+        // Node implementation
+        const crypto = require('crypto');
+        return new Promise((resolve) => {
+            try {
+                crypto.pbkdf2(key, Buffer.from(salt), 100000, 32, 'sha512', (err: any, derivedKey: any) => {
+                    if (err) {
+                        resolve({ error: err.message });
+                        return;
+                    }
+                    const decipher = crypto.createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(iv));
+                    decipher.setAuthTag(Buffer.from(authTag));
+                    const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedData)), decipher.final()]);
+                    resolve({ decryptedData: decrypted.buffer });
+                });
+            } catch (e: any) {
+                resolve({ error: e.message });
+            }
+        });
     }
 
     private sendMessage(message: any) {
