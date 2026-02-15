@@ -13,72 +13,6 @@ jobs:
   # ============================================================================
   # MOBILE JOBS (flutter_browser_app)
   # ============================================================================
-  # build-android:
-  #   name: Build Android APK
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Setup Java
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'zulu'
-  #         java-version: '17'
-  #
-  #     - name: Setup Flutter
-  #       uses: subosito/flutter-action@v2
-  #       with:
-  #         channel: 'stable'
-  #
-  #     - name: Install dependencies
-  #       working-directory: CometBrowserMobile/comet_ai
-  #       run: flutter pub get
-  #
-  #     - name: Build APK
-  #       working-directory: CometBrowserMobile/comet_ai
-  #       run: flutter build apk --release
-  #
-  #     - name: Upload APK
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: app-release-apk
-  #         path: CometBrowserMobile/comet_ai/build/app/outputs/flutter-apk/app-release.apk
-  #
-  # build-ios:
-  #   name: Build iOS IPA
-  #   runs-on: macos-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Setup Flutter
-  #       uses: subosito/flutter-action@v2
-  #       with:
-  #         channel: 'stable'
-  #
-  #     - name: Install dependencies
-  #       working-directory: CometBrowserMobile/comet_ai
-  #       run: flutter pub get
-  #
-  #     - name: Build iOS
-  #       working-directory: CometBrowserMobile/comet_ai
-  #       run: flutter build ios --release --no-codesign
-  #
-  #     - name: Create Payload and Zip
-  #       working-directory: CometBrowserMobile/comet_ai
-  #       run: |
-  #         mkdir Payload
-  #         cp -r build/ios/iphoneos/Runner.app Payload/
-  #         zip -r CometBrowser.ipa Payload
-  #
-  #     - name: Upload IPA
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: app-release-ios
-  #         path: CometBrowserMobile/comet_ai/CometBrowser.ipa
-
-  # ============================================================================
-  # NEW MOBILE JOBS (flutter_browser_app)
-  # ============================================================================
   build-flutter-android:
     name: Build Flutter Browser Android
     runs-on: ubuntu-latest
@@ -120,12 +54,12 @@ jobs:
         continue-on-error: true
         run: |
           if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
-            cat > flutter_browser_app/android/key.properties << EOF
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=upload-keystore.jks
-          EOF
+          cat > flutter_browser_app/android/key.properties << EOF
+storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+storeFile=upload-keystore.jks
+EOF
           fi
 
       - name: Build APK
