@@ -31,7 +31,7 @@ jobs:
       - name: Decode Keystore
         run: |
           if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > flutter_browser_app/android/app/upload-keystore.jks
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | sed 's/-----BEGIN CERTIFICATE-----//g' | sed 's/-----END CERTIFICATE-----//g' | tr -d '\n\r' | base64 -d > flutter_browser_app/android/app/upload-keystore.jks
           else
             echo "Error: ANDROID_KEYSTORE_BASE64 secret is missing in Production environment"
             exit 1
