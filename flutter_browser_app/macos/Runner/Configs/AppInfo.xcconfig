@@ -8,7 +8,7 @@
 PRODUCT_NAME = flutter_browser_app
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.comet_ai_com.flutterBrowserApp
+PRODUCT_BUNDLE_IDENTIFIER = com.comet-ai-com.flutterBrowserApp
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2024 com.comet-ai.com. All rights reserved.

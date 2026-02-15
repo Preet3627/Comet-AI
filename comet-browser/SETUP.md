@@ -78,7 +78,7 @@ To enable P2P synchronization on Android and iOS:
     -   Download `google-services.json` and place it in `flutter_browser_app/android/app/`.
 
 2.  **Add iOS App:**
-    -   Use Bundle ID: `com.comet_ai_com.comet_ai`.
+    -   Use Bundle ID: `com.comet-ai-com.comet-ai`.
     -   Download `GoogleService-Info.plist` and place it in `flutter_browser_app/ios/Runner/`.
 
 3.  **Realtime Database:** Ensure **Realtime Database** is enabled in your Firebase project (required for P2P signaling).
