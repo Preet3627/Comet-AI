@@ -5,6 +5,13 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.17)'
+        required: false
+      release_name:
+        description: 'Release Name'
+        required: false
 
 permissions:
   contents: write
@@ -236,7 +243,7 @@ jobs:
           artifacts: "release-artifacts/*"
           draft: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_type == 'tag' && github.ref_name || format('v0.1.{0}', github.run_number) }}
-          name: ${{ github.ref_type == 'tag' && github.ref_name || format('Release v0.1.{0}', github.run_number) }}
-          body: "Automatic build for version ${{ github.ref_name }} (Build #${{ github.run_number }})"
+          tag: ${{ github.event.inputs.version || (github.ref_type == 'tag' && github.ref_name) || format('v0.1.{0}', github.run_number) }}
+          name: ${{ github.event.inputs.release_name || (github.ref_type == 'tag' && github.ref_name) || format('Release v0.1.{0}', github.run_number) }}
+          body: "Automatic build for version ${{ github.event.inputs.version || github.ref_name }} (Build #${{ github.run_number }})"
           allowUpdates: true
