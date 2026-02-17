@@ -55,6 +55,10 @@ We've been hard at work refining the Comet experience. Here are the latest impro
 - **AI/LLM Optimization**: Added `robots.txt`, `sitemap.xml`, and `LLM.md` for better indexing by AI crawlers and bots.
 - **Improved New Tab**: Fixed the "about:blank" issue; new tabs now redirect correctly to the default engine.
 - **Performance Boost**: Lazy-loaded OCR (Tesseract.js) to eliminate startup freezes.
+- **Cross-Platform**: Now building for **iOS** (Beta) alongside Android, Windows, macOS, and Linux.
+- **Branding**: Officially rebranded to **Comet-AI**.
+- **Enhanced AI Chat**: Improved "Find and Click" capabilities and fixed variable declaration issues in chat logic.
+- **Build Pipeline**: Robust CI/CD with secure secret handling for all platforms.
 
 ---
 

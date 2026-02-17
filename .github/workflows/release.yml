@@ -40,15 +40,26 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Cache Flutter Pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ~/.flutter
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
       - name: Install dependencies
         working-directory: flutter_browser_app
         run: flutter pub get
 
       - name: Create google-services.json
-        continue-on-error: true
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > flutter_browser_app/android/app/google-services.json
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" > flutter_browser_app/android/app/google-services.json
           fi
 
       - name: Decode Keystore
@@ -81,6 +92,7 @@ jobs:
   build-flutter-ios:
     name: Build Flutter Browser iOS
     runs-on: macos-latest
+    environment: Production
     steps:
       - uses: actions/checkout@v4
 
@@ -96,9 +108,11 @@ jobs:
 
       - name: Create GoogleService-Info.plist
         continue-on-error: true
+        env:
+          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
         run: |
-          if [ -n "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" ]; then
-            echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > flutter_browser_app/ios/Runner/GoogleService-Info.plist
+          if [ -n "$GOOGLE_SERVICE_INFO_PLIST" ]; then
+            echo "$GOOGLE_SERVICE_INFO_PLIST" > flutter_browser_app/ios/Runner/GoogleService-Info.plist
           fi
 
       - name: Cache CocoaPods
@@ -128,6 +142,7 @@ jobs:
 
   build-desktop:
     name: Build Desktop (${{ matrix.target }})
+    environment: Production
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -174,10 +189,12 @@ jobs:
       - name: Create Firebase Admin Key
         if: runner.os != 'Windows'
         continue-on-error: true
+        env:
+          FIREBASE_ADMIN_SDK_JSON: ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
         run: |
           mkdir -p comet-browser/config
-          if [ -n "${{ secrets.FIREBASE_ADMIN_SDK_JSON }}" ]; then
-            echo "${{ secrets.FIREBASE_ADMIN_SDK_JSON }}" > comet-browser/config/firebase-admin.json
+          if [ -n "$FIREBASE_ADMIN_SDK_JSON" ]; then
+            echo "$FIREBASE_ADMIN_SDK_JSON" > comet-browser/config/firebase-admin.json
           fi
 
       - name: Create Firebase Admin Key (Windows)
