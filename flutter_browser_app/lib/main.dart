@@ -65,23 +65,28 @@ void main(List<String> args) async {
     databaseFactory = databaseFactoryFfi;
   }
   db = await databaseFactory.openDatabase(
-      p.join(appDocumentsDir.path, "databases", "myDb.db"),
-      options: OpenDatabaseOptions(
-          version: 1,
-          singleInstance: false,
-          onCreate: (Database db, int version) async {
-            await db.execute(
-                'CREATE TABLE browser (id INTEGER PRIMARY KEY, json TEXT)');
-            await db.execute(
-                'CREATE TABLE windows (id TEXT PRIMARY KEY, json TEXT)');
-          }));
+    p.join(appDocumentsDir.path, "databases", "myDb.db"),
+    options: OpenDatabaseOptions(
+      version: 1,
+      singleInstance: false,
+      onCreate: (Database db, int version) async {
+        await db.execute(
+          'CREATE TABLE browser (id INTEGER PRIMARY KEY, json TEXT)',
+        );
+        await db.execute(
+          'CREATE TABLE windows (id TEXT PRIMARY KEY, json TEXT)',
+        );
+      },
+    ),
+  );
 
   if (Util.isDesktop()) {
     WindowOptions windowOptions = WindowOptions(
       center: true,
       backgroundColor: Colors.transparent,
-      titleBarStyle:
-          Util.isWindows() ? TitleBarStyle.normal : TitleBarStyle.hidden,
+      titleBarStyle: Util.isWindows()
+          ? TitleBarStyle.normal
+          : TitleBarStyle.hidden,
       minimumSize: const Size(1280, 720),
       size: const Size(1280, 720),
     );
@@ -103,11 +108,14 @@ void main(List<String> args) async {
 
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
     final availableVersion = await WebViewEnvironment.getAvailableVersion();
-    assert(availableVersion != null,
-        'Failed to find an installed WebView2 Runtime or non-stable Microsoft Edge installation.');
+    assert(
+      availableVersion != null,
+      'Failed to find an installed WebView2 Runtime or non-stable Microsoft Edge installation.',
+    );
 
     webViewEnvironment = await WebViewEnvironment.create(
-        settings: WebViewEnvironmentSettings(userDataFolder: 'comet_ai'));
+      settings: WebViewEnvironmentSettings(userDataFolder: 'comet_ai'),
+    );
   }
 
   if (Util.isMobile()) {
@@ -139,12 +147,8 @@ void main(List<String> args) async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (context) => BrowserModel(),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => WebViewModel(),
-        ),
+        ChangeNotifierProvider(create: (context) => BrowserModel()),
+        ChangeNotifierProvider(create: (context) => WebViewModel()),
         ChangeNotifierProxyProvider<WebViewModel, WindowModel>(
           update: (context, webViewModel, windowModel) {
             windowModel!.setCurrentWebViewModel(webViewModel);
@@ -172,13 +176,16 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
   @override
   void initState() {
     super.initState();
-    WindowManagerPlus.current.addListener(this);
 
-    // https://github.com/pichillilorenzo/window_manager_plus/issues/5
-    if (WindowManagerPlus.current.id > 0 && Platform.isMacOS) {
-      _appLifecycleListener = AppLifecycleListener(
-        onStateChange: _handleStateChange,
-      );
+    if (Util.isDesktop()) {
+      WindowManagerPlus.current.addListener(this);
+
+      // https://github.com/pichillilorenzo/window_manager_plus/issues/5
+      if (WindowManagerPlus.current.id > 0 && Platform.isMacOS) {
+        _appLifecycleListener = AppLifecycleListener(
+          onStateChange: _handleStateChange,
+        );
+      }
     }
   }
 
@@ -187,14 +194,17 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
     if (WindowManagerPlus.current.id > 0 &&
         Platform.isMacOS &&
         state == AppLifecycleState.hidden) {
-      SchedulerBinding.instance
-          .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      SchedulerBinding.instance.handleAppLifecycleStateChanged(
+        AppLifecycleState.inactive,
+      );
     }
   }
 
   @override
   void dispose() {
-    WindowManagerPlus.current.removeListener(this);
+    if (Util.isDesktop()) {
+      WindowManagerPlus.current.removeListener(this);
+    }
     _appLifecycleListener?.dispose();
     super.dispose();
   }
@@ -208,8 +218,9 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
       darkTheme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor:
-            const Color(0xFF0A0E21), // Deep vibrant dark blue
+        scaffoldBackgroundColor: const Color(
+          0xFF0A0E21,
+        ), // Deep vibrant dark blue
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF29B6F6), // Light Blue 400
           secondary: Color(0xFFD500F9), // Purple A400
@@ -221,33 +232,27 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
           elevation: 0,
         ),
       ),
-      theme: ThemeData(
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
+      theme: ThemeData(visualDensity: VisualDensity.adaptivePlatformDensity),
       initialRoute: '/',
-      routes: {
-        '/': (context) => const Browser(),
-      },
+      routes: {'/': (context) => const Browser()},
     );
 
     return Util.isMobile()
         ? materialApp
-        : ContextMenuOverlay(
-            child: materialApp,
-          );
+        : ContextMenuOverlay(child: materialApp);
   }
 
   @override
   void onWindowFocus([int? windowId]) {
     setState(() {});
-    if (!Util.isWindows()) {
+    if (Util.isDesktop() && !Util.isWindows()) {
       WindowManagerPlus.current.setMovable(false);
     }
   }
 
   @override
   void onWindowBlur([int? windowId]) {
-    if (!Util.isWindows()) {
+    if (Util.isDesktop() && !Util.isWindows()) {
       WindowManagerPlus.current.setMovable(true);
     }
   }
