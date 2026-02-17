@@ -34,9 +34,12 @@ jobs:
         run: flutter pub get
 
       - name: Create google-services.json
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > flutter_browser_app/android/app/google-services.json
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" > flutter_browser_app/android/app/google-services.json
             echo "google-services.json created."
           else
             echo "::warning::GOOGLE_SERVICES_JSON secret is empty or not set!"
@@ -46,11 +49,19 @@ jobs:
         working-directory: flutter_browser_app/android/app
         run: |
           if [ -f "google-services.json" ]; then
-             echo "File exists. Checking content (masked)..."
-             # Blindly checking valid JSON using python to avoid exposing secrets
-             python3 -c "import json, sys; json.load(open('google-services.json')); print('JSON is valid')" || echo "JSON is INVALID"
+             echo "File exists. Size: $(wc -c < google-services.json) bytes"
+             echo "Checking for valid JSON..."
+             if python3 -c "import json, sys; json.load(open('google-services.json')); print('JSON is valid')"; then
+               echo "JSON Check Passed."
+             else
+               echo "::error::JSON is INVALID!"
+               echo "First 50 chars: $(head -c 50 google-services.json)..."
+               echo "Last 50 chars: ...$(tail -c 50 google-services.json)"
+               exit 1
+             fi
           else
-             echo "File does not exist."
+             echo "::error::google-services.json does NOT exist."
+             exit 1
           fi
 
       - name: Decode Keystore
