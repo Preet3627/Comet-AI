@@ -12,8 +12,8 @@ import 'package:flutter_browser/webview_tab.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
+import 'pages/comet_home_page.dart';
 import 'app_bar/tab_viewer_app_bar.dart';
-import 'empty_tab.dart';
 import 'models/browser_model.dart';
 import 'models/window_model.dart';
 
@@ -146,7 +146,27 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
     final windowModel = Provider.of<WindowModel>(context, listen: true);
 
     if (windowModel.webViewTabs.isEmpty) {
-      return const EmptyTab();
+      return CometHomePage(
+        onSearch: (value) {
+          final windowModel = Provider.of<WindowModel>(context, listen: false);
+          final browserModel =
+              Provider.of<BrowserModel>(context, listen: false);
+          final settings = browserModel.getSettings();
+
+          var url = WebUri(value.trim());
+          if (Util.isLocalizedContent(url) ||
+              (url.isValidUri && url.toString().split(".").length > 1)) {
+            url = url.scheme.isEmpty ? WebUri("https://$url") : url;
+          } else {
+            url = WebUri(settings.searchEngine.searchUrl + value);
+          }
+
+          windowModel.addTab(WebViewTab(
+            key: GlobalKey(),
+            webViewModel: WebViewModel(url: url),
+          ));
+        },
+      );
     }
 
     for (final webViewTab in windowModel.webViewTabs) {
@@ -190,6 +210,9 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
                   height: 4.0,
                   child: LinearProgressIndicator(
                     value: progress,
+                    backgroundColor: Colors.white.withOpacity(0.1),
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Color(0xFFD500F9)),
                   )));
         });
   }

@@ -10,7 +10,6 @@ import 'package:provider/provider.dart';
 
 import '../../models/window_model.dart';
 import '../../webview_tab.dart';
-import '../../project_info_popup.dart';
 import '../../sync_service.dart';
 import 'package:flutter_font_icons/flutter_font_icons.dart';
 
@@ -28,12 +27,15 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
       TextEditingController();
   final TextEditingController _remoteDeviceIdController =
       TextEditingController();
+  final TextEditingController _welcomeMessageController =
+      TextEditingController();
 
   @override
   void dispose() {
     _customHomePageController.dispose();
     _customUserAgentController.dispose();
     _remoteDeviceIdController.dispose();
+    _welcomeMessageController.dispose();
     super.dispose();
   }
 
@@ -61,8 +63,8 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
           SyncService().isConnected
               ? "Connected to Peer"
               : (SyncService().deviceId != null
-                    ? "Local ID: ${SyncService().deviceId!.substring(0, 8)}..."
-                    : "Not Initialized"),
+                  ? "Local ID: ${SyncService().deviceId!.substring(0, 8)}..."
+                  : "Not Initialized"),
         ),
         leading: Icon(
           Icons.sync,
@@ -97,8 +99,8 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         subtitle: Text(
           settings.homePageEnabled
               ? (settings.customUrlHomePage.isEmpty
-                    ? "ON"
-                    : settings.customUrlHomePage)
+                  ? "ON"
+                  : settings.customUrlHomePage)
               : "OFF",
         ),
         onTap: () {
@@ -230,9 +232,9 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         leading: const Icon(Icons.api, color: Color(0xFF00E5FF)),
         onTap: () =>
             _showApiKeyDialog(context, "Gemini", settings.geminiApiKey, (val) {
-              settings.geminiApiKey = val;
-              browserModel.updateSettings(settings);
-            }),
+          settings.geminiApiKey = val;
+          browserModel.updateSettings(settings);
+        }),
       ),
       ListTile(
         title: const Text("OpenAI API Key"),
@@ -240,9 +242,9 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         leading: const Icon(Icons.auto_awesome, color: Color(0xFF00FF88)),
         onTap: () =>
             _showApiKeyDialog(context, "OpenAI", settings.openaiApiKey, (val) {
-              settings.openaiApiKey = val;
-              browserModel.updateSettings(settings);
-            }),
+          settings.openaiApiKey = val;
+          browserModel.updateSettings(settings);
+        }),
       ),
       ListTile(
         title: const Text("Claude API Key"),
@@ -250,9 +252,9 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         leading: const Icon(Icons.psychology, color: Color(0xFFFF8800)),
         onTap: () =>
             _showApiKeyDialog(context, "Claude", settings.claudeApiKey, (val) {
-              settings.claudeApiKey = val;
-              browserModel.updateSettings(settings);
-            }),
+          settings.claudeApiKey = val;
+          browserModel.updateSettings(settings);
+        }),
       ),
       ListTile(
         title: const Text("OpenRouter API Key"),
@@ -279,6 +281,240 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
           settings.ollamaModel = model;
           browserModel.updateSettings(settings);
         }),
+      ),
+      const Divider(),
+      const ListTile(title: Text("Homepage Customization"), enabled: false),
+      ListTile(
+        title: const Text("Welcome Message"),
+        subtitle: Text(settings.homePageWelcomeMessage),
+        leading: const Icon(Icons.edit_note, color: Colors.amber),
+        onTap: () {
+          _welcomeMessageController.text = settings.homePageWelcomeMessage;
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text("Set Welcome Message"),
+              content: TextField(
+                controller: _welcomeMessageController,
+                decoration: const InputDecoration(hintText: "Enter message"),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      settings.homePageWelcomeMessage =
+                          _welcomeMessageController.text;
+                      browserModel.updateSettings(settings);
+                      browserModel.save();
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      SwitchListTile(
+        title: const Text("Show Quick Actions"),
+        subtitle: const Text("Toggle AI quick action buttons on homepage"),
+        value: settings.showQuickActions,
+        onChanged: (value) {
+          setState(() {
+            settings.showQuickActions = value;
+            browserModel.updateSettings(settings);
+            browserModel.save();
+          });
+        },
+      ),
+      SwitchListTile(
+        title: const Text("Show Social Shortcuts"),
+        subtitle: const Text("Toggle social media shortcuts on homepage"),
+        value: settings.showSocialShortcuts,
+        onChanged: (value) {
+          setState(() {
+            settings.showSocialShortcuts = value;
+            browserModel.updateSettings(settings);
+            browserModel.save();
+          });
+        },
+      ),
+      const Divider(),
+      const ListTile(title: Text("Visuals & Branding"), enabled: false),
+      ListTile(
+        title: const Text("App Name / Logo Name"),
+        subtitle: Text(settings.logoName),
+        leading: const Icon(Icons.title, color: Colors.blue),
+        onTap: () {
+          final controller = TextEditingController(text: settings.logoName);
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text("Set App Name"),
+              content: TextField(controller: controller),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Cancel")),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      settings.logoName = controller.text;
+                      browserModel.updateSettings(settings);
+                      browserModel.save();
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      ListTile(
+        title: const Text("Custom Logo URL"),
+        subtitle: Text(settings.logoUrl.isEmpty ? "Default" : settings.logoUrl),
+        leading: const Icon(Icons.image, color: Colors.purple),
+        onTap: () {
+          final controller = TextEditingController(text: settings.logoUrl);
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text("Set Logo URL"),
+              content: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(hintText: "https://...")),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Cancel")),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      settings.logoUrl = controller.text;
+                      browserModel.updateSettings(settings);
+                      browserModel.save();
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      ListTile(
+        title: const Text("Theme"),
+        subtitle: Text(settings.theme),
+        leading: const Icon(Icons.style, color: Colors.cyan),
+        trailing: DropdownButton<String>(
+          value: settings.theme,
+          items: ["Dark", "Vibrant", "Glass", "Minimal"]
+              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+              .toList(),
+          onChanged: (val) {
+            setState(() {
+              if (val != null) settings.theme = val;
+              browserModel.updateSettings(settings);
+              browserModel.save();
+            });
+          },
+        ),
+      ),
+      ListTile(
+        title: const Text("Layout"),
+        subtitle: Text(settings.layout),
+        leading: const Icon(Icons.dashboard, color: Colors.green),
+        trailing: DropdownButton<String>(
+          value: settings.layout,
+          items: ["Default", "Compact", "Sidebar"]
+              .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+              .toList(),
+          onChanged: (val) {
+            setState(() {
+              if (val != null) settings.layout = val;
+              browserModel.updateSettings(settings);
+              browserModel.save();
+            });
+          },
+        ),
+      ),
+      ListTile(
+        title: const Text("Background Color"),
+        subtitle: Text(settings.homePageBgColor),
+        leading: Icon(
+          Icons.color_lens,
+          color: Color(int.tryParse(settings.homePageBgColor) ?? 0xFF000000),
+        ),
+        onTap: () {
+          _showColorPickerDialog(context, settings, (color) {
+            setState(() {
+              settings.homePageBgColor =
+                  '0x${color.value.toRadixString(16).padLeft(8, '0').toUpperCase()}';
+              browserModel.updateSettings(settings);
+              browserModel.save();
+            });
+          });
+        },
+      ),
+      const Divider(),
+      const ListTile(title: Text("Security & Privacy"), enabled: false),
+      SwitchListTile(
+        title: const Text("Safe Browsing"),
+        subtitle: const Text("Protect against malicious sites and downloads"),
+        value: settings.safeBrowsingEnabled,
+        onChanged: (value) {
+          setState(() {
+            settings.safeBrowsingEnabled = value;
+            browserModel.updateSettings(settings);
+            browserModel.save();
+          });
+        },
+      ),
+      SwitchListTile(
+        title: const Text("Tracking Prevention"),
+        subtitle: const Text("Block trackers from following your web activity"),
+        value: settings.trackingPreventionEnabled,
+        onChanged: (value) {
+          setState(() {
+            settings.trackingPreventionEnabled = value;
+            browserModel.updateSettings(settings);
+            browserModel.save();
+          });
+        },
+      ),
+      SwitchListTile(
+        title: const Text("Ad-blocking"),
+        subtitle: const Text("Remove intrusive ads for a cleaner experience"),
+        value: settings.adBlockingEnabled,
+        onChanged: (value) {
+          setState(() {
+            settings.adBlockingEnabled = value;
+            browserModel.updateSettings(settings);
+            browserModel.save();
+          });
+        },
+      ),
+      const Divider(),
+      const ListTile(title: Text("Performance"), enabled: false),
+      SwitchListTile(
+        title: const Text("Performance Mode"),
+        subtitle: const Text("Optimize resource usage for speed"),
+        value: settings.performanceModeEnabled,
+        onChanged: (value) {
+          setState(() {
+            settings.performanceModeEnabled = value;
+            browserModel.updateSettings(settings);
+            browserModel.save();
+          });
+        },
       ),
       const Divider(),
       ListTile(
@@ -430,8 +666,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
                                     currentWebViewModel.settings?.userAgent =
                                         value;
                                     webViewController?.setSettings(
-                                      settings:
-                                          currentWebViewModel.settings ??
+                                      settings: currentWebViewModel.settings ??
                                           InAppWebViewSettings(),
                                     );
                                     currentWebViewModel.settings =
@@ -483,8 +718,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         subtitle: const Text(
           "Sets whether the WebView should prevent HTML5 audio or video from autoplaying.",
         ),
-        value:
-            currentWebViewModel.settings?.mediaPlaybackRequiresUserGesture ??
+        value: currentWebViewModel.settings?.mediaPlaybackRequiresUserGesture ??
             true,
         onChanged: (value) async {
           currentWebViewModel.settings?.mediaPlaybackRequiresUserGesture =
@@ -583,8 +817,8 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         trailing: SizedBox(
           width: 50.0,
           child: TextFormField(
-            initialValue: currentWebViewModel.settings?.minimumFontSize
-                .toString(),
+            initialValue:
+                currentWebViewModel.settings?.minimumFontSize.toString(),
             keyboardType: const TextInputType.numberWithOptions(),
             onFieldSubmitted: (value) async {
               currentWebViewModel.settings?.minimumFontSize = int.parse(value);
@@ -592,8 +826,8 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
                 settings:
                     currentWebViewModel.settings ?? InAppWebViewSettings(),
               );
-              currentWebViewModel.settings = await webViewController
-                  ?.getSettings();
+              currentWebViewModel.settings =
+                  await webViewController?.getSettings();
               windowModel.saveInfo();
               setState(() {});
             },
@@ -622,8 +856,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         subtitle: const Text(
           "Sets whether JavaScript running in the context of a file scheme URL should be allowed to access content from any origin.",
         ),
-        value:
-            currentWebViewModel.settings?.allowUniversalAccessFromFileURLs ??
+        value: currentWebViewModel.settings?.allowUniversalAccessFromFileURLs ??
             false,
         onChanged: (value) async {
           currentWebViewModel.settings?.allowUniversalAccessFromFileURLs =
@@ -777,6 +1010,48 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
           ],
         );
       },
+    );
+  }
+
+  void _showColorPickerDialog(
+    BuildContext context,
+    BrowserSettings settings,
+    Function(Color) onSelected,
+  ) {
+    final colors = [
+      Colors.black,
+      const Color(0xFF1A1A1A),
+      const Color(0xFF0D1117),
+      const Color(0xFF121212),
+      const Color(0xFF1E1E2E),
+      const Color(0xFF000510),
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Choose Background Color"),
+        content: Wrap(
+          spacing: 10,
+          children: colors.map((color) {
+            return GestureDetector(
+              onTap: () {
+                onSelected(color);
+                Navigator.pop(context);
+              },
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
     );
   }
 }

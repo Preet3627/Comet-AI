@@ -10,7 +10,7 @@ import {
   RotateCw, AlertTriangle, ShieldCheck, DownloadCloud, ShoppingCart, Copy as CopyIcon,
   Terminal, Settings as GhostSettings, FolderOpen, Sparkles, ScanLine, Search, X,
   Puzzle, Code2, Briefcase, Image as ImageIcon, User as UserIcon, Maximize2, Minimize2, RefreshCcw, Download as DownloadIcon,
-  Layout, MoreVertical, CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves
+  Layout, MoreVertical, CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves, Presentation
 } from 'lucide-react';
 import AIChatSidebar from '@/components/AIChatSidebar';
 import LandingPage from '@/components/LandingPage';
@@ -26,6 +26,7 @@ import UnifiedCartPanel from '@/components/UnifiedCartPanel';
 import WorkspaceDashboard from '@/components/WorkspaceDashboard';
 import MediaStudio from '@/components/MediaStudio';
 import Documentation from '@/components/Documentation';
+import PresentonStudio from '@/components/PresentonStudio';
 import PasswordManager from '@/components/PasswordManager';
 import ProxyFirewallManager from '@/components/ProxyFirewallManager';
 import P2PSyncManager from '@/components/P2PSyncManager';
@@ -156,6 +157,7 @@ export default function Home() {
     { icon: <FileText size={20} />, label: 'PDF Tools', view: 'pdf' },
     { icon: <Code2 size={20} />, label: 'Coding', view: 'coding' },
     { icon: <ImageIcon size={20} />, label: 'Media Studio', view: 'media' },
+    { icon: <Presentation size={20} />, label: 'Presenton', view: 'presenton' },
     { icon: <Lock size={20} />, label: 'Passwords', manager: 'password' },
     { icon: <Shield size={20} />, label: 'Firewall', manager: 'firewall' },
     { icon: <Share2 size={20} />, label: 'P2P Sync', manager: 'p2p' },
@@ -1345,6 +1347,12 @@ export default function Home() {
               {store.activeView === 'documentation' && (
                 <motion.div key="documentation" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="absolute inset-0 z-[100] bg-[#020205] overflow-auto custom-scrollbar">
                   <Documentation />
+                </motion.div>
+              )}
+
+              {store.activeView === 'presenton' && (
+                <motion.div key="presenton" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[60] bg-[#020205]">
+                  <PresentonStudio />
                 </motion.div>
               )}
             </AnimatePresence>

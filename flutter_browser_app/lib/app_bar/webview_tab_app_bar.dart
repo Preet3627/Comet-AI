@@ -21,6 +21,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../pages/ai_chat_page.dart';
+import '../pages/comet_home_page.dart';
+import '../url_predictor.dart';
 import '../pages/connect_desktop_page.dart';
 import '../animated_flutter_browser_logo.dart';
 import '../custom_popup_dialog.dart';
@@ -43,6 +46,9 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     with SingleTickerProviderStateMixin {
   TextEditingController? _searchController = TextEditingController();
   FocusNode? _focusNode;
+  List<String> _suggestions = [];
+  OverlayEntry? _overlayEntry;
+  final LayerLink _layerLink = LayerLink();
 
   GlobalKey tabInkWellKey = GlobalKey();
 
@@ -63,6 +69,12 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     super.initState();
     _focusNode = FocusNode();
     _focusNode?.addListener(() async {
+      if (_focusNode != null && _focusNode!.hasFocus) {
+        _showSuggestionsOverlay();
+      } else {
+        _hideSuggestionsOverlay();
+      }
+
       if (_focusNode != null &&
           !_focusNode!.hasFocus &&
           _searchController != null &&
@@ -232,88 +244,61 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
 
     final webViewModel = Provider.of<WebViewModel>(context, listen: true);
 
-    return SizedBox(
-      height: 40.0,
-      child: Stack(
-        children: <Widget>[
-          TextField(
-            onSubmitted: (value) {
-              var url = WebUri(value.trim());
-              if (Util.isLocalizedContent(url) ||
-                  (url.isValidUri && url.toString().split(".").length > 1)) {
-                url = url.scheme.isEmpty ? WebUri("https://$url") : url;
-              } else {
-                url = WebUri(settings.searchEngine.searchUrl + value);
-              }
-
-              if (webViewModel.webViewController != null) {
-                webViewModel.webViewController?.loadUrl(
-                  urlRequest: URLRequest(url: url),
-                );
-              } else {
-                addNewTab(url: url);
-                webViewModel.url = url;
-              }
-            },
-            onTap: () {
-              if (!shouldSelectText ||
-                  _searchController == null ||
-                  _searchController!.text.isEmpty) return;
-              shouldSelectText = false;
-              _searchController!.selection = TextSelection(
-                baseOffset: 0,
-                extentOffset: _searchController!.text.length,
-              );
-            },
-            onTapOutside: (event) {
-              shouldSelectText = true;
-            },
-            keyboardType: TextInputType.url,
-            focusNode: _focusNode,
-            autofocus: false,
-            controller: _searchController,
-            textInputAction: TextInputAction.go,
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.only(
-                left: 45.0,
-                top: 10.0,
-                right: 10.0,
-                bottom: 10.0,
-              ),
-              filled: true,
-              fillColor: Colors.white,
-              border: outlineBorder,
-              focusedBorder: outlineBorder,
-              enabledBorder: outlineBorder,
-              hintText: "Search for or type a web address",
-              hintStyle: const TextStyle(color: Colors.black54, fontSize: 16.0),
-            ),
-            style: const TextStyle(color: Colors.black, fontSize: 16.0),
-          ),
-          IconButton(
-            icon: Selector<WebViewModel, bool>(
-              selector: (context, webViewModel) => webViewModel.isSecure,
-              builder: (context, isSecure, child) {
-                var icon = Icons.info_outline;
-                if (webViewModel.isIncognitoMode) {
-                  icon = MaterialCommunityIcons.incognito;
-                } else if (isSecure) {
-                  if (webViewModel.url != null &&
-                      webViewModel.url!.scheme == "file") {
-                    icon = Icons.offline_pin;
-                  } else {
-                    icon = Icons.lock;
-                  }
-                }
-
-                return Icon(icon, color: isSecure ? Colors.green : Colors.grey);
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: SizedBox(
+        height: 40.0,
+        child: Stack(
+          children: <Widget>[
+            TextField(
+              onChanged: (value) {
+                setState(() {
+                  _suggestions = URLPredictor.getPredictions(value);
+                });
+                _updateOverlay();
               },
+              onSubmitted: (value) {
+                _onSubmitted(value);
+              },
+              onTap: () {
+                if (!shouldSelectText ||
+                    _searchController == null ||
+                    _searchController!.text.isEmpty) return;
+                shouldSelectText = false;
+                _searchController!.selection = TextSelection(
+                  baseOffset: 0,
+                  extentOffset: _searchController!.text.length,
+                );
+              },
+              onTapOutside: (event) {
+                shouldSelectText = true;
+              },
+              keyboardType: TextInputType.url,
+              focusNode: _focusNode,
+              autofocus: false,
+              controller: _searchController,
+              textInputAction: TextInputAction.go,
+              decoration: InputDecoration(
+                contentPadding: const EdgeInsets.only(
+                  left: 20.0,
+                  top: 10.0,
+                  right: 10.0,
+                  bottom: 10.0,
+                ),
+                filled: true,
+                fillColor: const Color(0xFF1E1E1E),
+                border: outlineBorder,
+                focusedBorder: outlineBorder,
+                enabledBorder: outlineBorder,
+                hintText: "Search or type a web address",
+                hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.4), fontSize: 16.0),
+              ),
+              style: const TextStyle(color: Colors.white, fontSize: 16.0),
             ),
-            onPressed: () {
-              showUrlInfo();
-            },
-          ),
-        ],
+            /* Info icon removed as requested */
+          ],
+        ),
       ),
     );
   }
@@ -1541,6 +1526,111 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ConnectDesktopPage()),
+    );
+  }
+
+  void _onSubmitted(String value) {
+    if (value.isEmpty) return;
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final settings = browserModel.getSettings();
+    final webViewModel = Provider.of<WebViewModel>(context, listen: false);
+
+    var url = WebUri(value.trim());
+    if (Util.isLocalizedContent(url) ||
+        (url.isValidUri && url.toString().split(".").length > 1)) {
+      url = url.scheme.isEmpty ? WebUri("https://$url") : url;
+    } else {
+      url = WebUri(settings.searchEngine.searchUrl + value);
+    }
+
+    if (webViewModel.webViewController != null) {
+      if (value.startsWith('>')) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FullScreenAIChat(initialMessage: value),
+          ),
+        );
+      } else {
+        webViewModel.webViewController?.loadUrl(
+          urlRequest: URLRequest(url: url),
+        );
+      }
+    } else {
+      addNewTab(url: url);
+      webViewModel.url = url;
+    }
+    _hideSuggestionsOverlay();
+    _focusNode?.unfocus();
+  }
+
+  void _showSuggestionsOverlay() {
+    _overlayEntry = _createOverlayEntry();
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _hideSuggestionsOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _updateOverlay() {
+    _overlayEntry?.markNeedsBuild();
+  }
+
+  OverlayEntry _createOverlayEntry() {
+    RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    var size = renderBox?.size ?? Size.zero;
+
+    return OverlayEntry(
+      builder: (context) => Positioned(
+        width: size.width - 100,
+        child: CompositedTransformFollower(
+          link: _layerLink,
+          showWhenUnlinked: false,
+          offset: const Offset(40.0, 42.0),
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(12),
+            color: const Color(0xFF1E1E1E),
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 250),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: const Color(0xFF00E5FF).withOpacity(0.3)),
+              ),
+              child: _suggestions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(10.0),
+                      child: Text("No suggestions",
+                          style:
+                              TextStyle(color: Colors.white38, fontSize: 12)),
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: _suggestions.length,
+                      itemBuilder: (context, index) {
+                        final suggestion = _suggestions[index];
+                        return ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.link,
+                              color: Color(0xFF00E5FF), size: 18),
+                          title: Text(suggestion,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14)),
+                          onTap: () {
+                            _searchController?.text = suggestion;
+                            _onSubmitted(suggestion);
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

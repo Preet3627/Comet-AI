@@ -25,6 +25,19 @@ class BrowserSettings {
   String openRouterApiKey;
   String ollamaBaseUrl;
   String ollamaModel;
+  bool showQuickActions;
+  bool showSocialShortcuts;
+  String homePageWelcomeMessage;
+  String homePageBgColor;
+  String logoUrl;
+  String logoName;
+  String theme;
+  String layout;
+  List<Map<String, String>> homePageShortcuts;
+  bool safeBrowsingEnabled;
+  bool trackingPreventionEnabled;
+  bool adBlockingEnabled;
+  bool performanceModeEnabled;
 
   BrowserSettings({
     this.searchEngine = GoogleSearchEngine,
@@ -37,6 +50,19 @@ class BrowserSettings {
     this.openRouterApiKey = "",
     this.ollamaBaseUrl = "http://localhost:11434",
     this.ollamaModel = "llama3.3",
+    this.showQuickActions = true,
+    this.showSocialShortcuts = true,
+    this.homePageWelcomeMessage = "Comet-AI Browser",
+    this.homePageBgColor = "0xFF000000",
+    this.logoUrl = "",
+    this.logoName = "Comet-AI",
+    this.theme = "Dark",
+    this.layout = "Default",
+    this.homePageShortcuts = const [],
+    this.safeBrowsingEnabled = true,
+    this.trackingPreventionEnabled = true,
+    this.adBlockingEnabled = true,
+    this.performanceModeEnabled = false,
   });
 
   BrowserSettings copy() {
@@ -51,6 +77,19 @@ class BrowserSettings {
       openRouterApiKey: openRouterApiKey,
       ollamaBaseUrl: ollamaBaseUrl,
       ollamaModel: ollamaModel,
+      showQuickActions: showQuickActions,
+      showSocialShortcuts: showSocialShortcuts,
+      homePageWelcomeMessage: homePageWelcomeMessage,
+      homePageBgColor: homePageBgColor,
+      logoUrl: logoUrl,
+      logoName: logoName,
+      theme: theme,
+      layout: layout,
+      homePageShortcuts: List<Map<String, String>>.from(homePageShortcuts),
+      safeBrowsingEnabled: safeBrowsingEnabled,
+      trackingPreventionEnabled: trackingPreventionEnabled,
+      adBlockingEnabled: adBlockingEnabled,
+      performanceModeEnabled: performanceModeEnabled,
     );
   }
 
@@ -67,6 +106,23 @@ class BrowserSettings {
             openRouterApiKey: map["openRouterApiKey"] ?? "",
             ollamaBaseUrl: map["ollamaBaseUrl"] ?? "http://localhost:11434",
             ollamaModel: map["ollamaModel"] ?? "llama3.3",
+            showQuickActions: map["showQuickActions"] ?? true,
+            showSocialShortcuts: map["showSocialShortcuts"] ?? true,
+            homePageWelcomeMessage:
+                map["homePageWelcomeMessage"] ?? "Comet-AI Browser",
+            homePageBgColor: map["homePageBgColor"] ?? "0xFF000000",
+            logoUrl: map["logoUrl"] ?? "",
+            logoName: map["logoName"] ?? "Comet-AI",
+            theme: map["theme"] ?? "Dark",
+            layout: map["layout"] ?? "Default",
+            homePageShortcuts: (map["homePageShortcuts"] as List?)
+                    ?.map((e) => Map<String, String>.from(e as Map))
+                    .toList() ??
+                [],
+            safeBrowsingEnabled: map["safeBrowsingEnabled"] ?? true,
+            trackingPreventionEnabled: map["trackingPreventionEnabled"] ?? true,
+            adBlockingEnabled: map["adBlockingEnabled"] ?? true,
+            performanceModeEnabled: map["performanceModeEnabled"] ?? false,
           )
         : null;
   }
@@ -83,6 +139,19 @@ class BrowserSettings {
       "openRouterApiKey": openRouterApiKey,
       "ollamaBaseUrl": ollamaBaseUrl,
       "ollamaModel": ollamaModel,
+      "showQuickActions": showQuickActions,
+      "showSocialShortcuts": showSocialShortcuts,
+      "homePageWelcomeMessage": homePageWelcomeMessage,
+      "homePageBgColor": homePageBgColor,
+      "logoUrl": logoUrl,
+      "logoName": logoName,
+      "theme": theme,
+      "layout": layout,
+      "homePageShortcuts": homePageShortcuts,
+      "safeBrowsingEnabled": safeBrowsingEnabled,
+      "trackingPreventionEnabled": trackingPreventionEnabled,
+      "adBlockingEnabled": adBlockingEnabled,
+      "performanceModeEnabled": performanceModeEnabled,
     };
   }
 
@@ -308,9 +377,8 @@ class BrowserModel extends ChangeNotifier {
 
       List<Map<String, dynamic>> favoritesList =
           browserData["favorites"]?.cast<Map<String, dynamic>>() ?? [];
-      List<FavoriteModel> favorites = favoritesList
-          .map((e) => FavoriteModel.fromMap(e)!)
-          .toList();
+      List<FavoriteModel> favorites =
+          favoritesList.map((e) => FavoriteModel.fromMap(e)!).toList();
 
       Map<String, dynamic> webArchivesMap =
           browserData["webArchives"]?.cast<String, dynamic>() ?? {};
@@ -321,8 +389,7 @@ class BrowserModel extends ChangeNotifier {
         ),
       );
 
-      BrowserSettings settings =
-          BrowserSettings.fromMap(
+      BrowserSettings settings = BrowserSettings.fromMap(
             browserData["settings"]?.cast<String, dynamic>(),
           ) ??
           BrowserSettings();

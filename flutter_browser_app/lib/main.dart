@@ -24,6 +24,7 @@ import 'sync_service.dart';
 
 import 'browser.dart';
 import 'pages/comet_home_page.dart';
+import 'pages/splash_screen.dart';
 import 'pages/connect_desktop_page.dart';
 import 'pages/settings/main.dart';
 import 'pages/bookmarks_page.dart';
@@ -89,9 +90,8 @@ void main(List<String> args) async {
     WindowOptions windowOptions = WindowOptions(
       center: true,
       backgroundColor: Colors.transparent,
-      titleBarStyle: Util.isWindows()
-          ? TitleBarStyle.normal
-          : TitleBarStyle.hidden,
+      titleBarStyle:
+          Util.isWindows() ? TitleBarStyle.normal : TitleBarStyle.hidden,
       minimumSize: const Size(1280, 720),
       size: const Size(1280, 720),
     );
@@ -242,7 +242,8 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const CometHomePage(),
+        '/': (context) => const SplashScreen(),
+        '/home': (context) => const CometHomePage(),
         '/connect-desktop': (context) => const ConnectDesktopPage(),
         '/browser': (context) => const Browser(),
         '/settings': (context) => const SettingsPage(),

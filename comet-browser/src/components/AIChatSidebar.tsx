@@ -71,6 +71,7 @@ ACTION COMMANDS:
 - [GMAIL_ADD_LABEL: messageId | labelName] : Adds a label to a Gmail message.
 - [WAIT: duration_ms] : Pauses AI execution for a specified duration in milliseconds.
 - [GUIDE_CLICK: description | x,y,width,height] : Provides guidance for the user to click a specific area on the OS screen.
+- [OPEN_PRESENTON: prompt] : Opens the Presentation (Presenton AI) view and automatically starts a project with the given prompt.
 - [EXPLAIN_CAPABILITIES] : Provides a detailed, step-by-step explanation of AI capabilities with human-readable delays.
 
 CHAINED EXECUTION:
@@ -633,6 +634,28 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
           case 'EXPLAIN_CAPABILITIES':
             result = 'Capabilities explained';
+            break;
+
+          case 'GENERATE_PDF':
+            if (window.electronAPI) {
+              const [title, content] = cmd.value.split('|').map(s => s.trim());
+              const res = await window.electronAPI.generatePDF(title, content);
+              if (res.success) {
+                result = `Generated PDF: ${title}`;
+                setMessages(prev => [...prev, { role: 'model', content: `✅ [PDF_GENERATED]: Document "${title}" has been created and saved.` }]);
+              } else throw new Error(res.error || 'Failed to generate PDF');
+            }
+            break;
+
+          case 'OPEN_PRESENTON':
+            store.setActiveView('presenton');
+            if (window.electronAPI) {
+              // We can pass the prompt to local storage or IPC so PresentonStudio picked it up
+              localStorage.setItem('presenton_auto_prompt', cmd.value);
+              // Trigger a custom event if needed or just let the component handle it on mount
+              window.dispatchEvent(new CustomEvent('comet-launch-presenton', { detail: { prompt: cmd.value } }));
+            }
+            result = `Launching Presenton with prompt: ${cmd.value}`;
             break;
 
           default:

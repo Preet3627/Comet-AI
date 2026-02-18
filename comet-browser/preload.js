@@ -139,6 +139,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   shareDeviceFolder: () => ipcRenderer.invoke('share-device-folder'),
   capturePageHtml: () => ipcRenderer.invoke('capture-page-html'),
   saveOfflinePage: (data) => ipcRenderer.invoke('save-offline-page', data),
+  generatePDF: (title, content) => ipcRenderer.invoke('generate-pdf', title, content),
 
   // Utils
   setUserId: (userId) => ipcRenderer.send('set-user-id', userId),

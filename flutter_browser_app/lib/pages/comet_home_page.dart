@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
+import '../models/browser_model.dart';
 import '../models/window_model.dart';
 import '../models/webview_model.dart';
 import '../webview_tab.dart';
+import 'ai_chat_page.dart';
+import 'agent_chat_page.dart';
+import '../url_predictor.dart';
 import 'dart:ui';
 
 /// Custom Comet-AI Home Page with vibrant glassmorphism UI
@@ -21,6 +25,8 @@ class _CometHomePageState extends State<CometHomePage>
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _animationController;
   late Animation<double> _glowAnimation;
+  bool _isShortcutsDirty = false;
+  List<String> _suggestions = [];
 
   @override
   void initState() {
@@ -47,13 +53,44 @@ class _CometHomePageState extends State<CometHomePage>
       final query = _searchController.text;
       final windowModel = Provider.of<WindowModel>(context, listen: false);
 
+      if (query.startsWith('>>')) {
+        // Trigger Comet Agent (agentic AI)
+        final task = query.substring(2).trim();
+        if (task.isEmpty) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AgentChatPage(
+              initialTask: task,
+              webViewController:
+                  null, // Will be set when launched from browser tab
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (query.startsWith('>')) {
+        // Trigger Full Screen AI Chat
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FullScreenAIChat(initialMessage: query),
+          ),
+        );
+        return;
+      }
+
       // Check if it's a URL or search query
       String url = query;
       if (!query.startsWith('http://') && !query.startsWith('https://')) {
         if (query.contains('.') && !query.contains(' ')) {
           url = 'https://$query';
         } else {
-          url = 'https://www.google.com/search?q=${Uri.encodeComponent(query)}';
+          final browserModel =
+              Provider.of<BrowserModel>(context, listen: false);
+          final searchEngine = browserModel.getSettings().searchEngine;
+          url = '${searchEngine.searchUrl}${Uri.encodeComponent(query)}';
         }
       }
 
@@ -70,8 +107,12 @@ class _CometHomePageState extends State<CometHomePage>
 
   @override
   Widget build(BuildContext context) {
+    final browserModel = Provider.of<BrowserModel>(context);
+    final settings = browserModel.getSettings();
+    final bgColor = Color(int.parse(settings.homePageBgColor));
+
     return Container(
-      decoration: const BoxDecoration(color: Colors.black),
+      decoration: BoxDecoration(color: bgColor),
       child: Stack(
         children: [
           // Animated background particles/stars
@@ -87,7 +128,7 @@ class _CometHomePageState extends State<CometHomePage>
                     const SizedBox(height: 60),
 
                     // Animated Comet-AI Logo
-                    _buildAnimatedLogo(),
+                    _buildAnimatedLogo(settings),
 
                     const SizedBox(height: 20),
 
@@ -100,9 +141,10 @@ class _CometHomePageState extends State<CometHomePage>
                           Color(0xFF00E5FF),
                         ],
                       ).createShader(bounds),
-                      child: const Text(
-                        'Comet-AI Browser',
-                        style: TextStyle(
+                      child: Text(
+                        settings.homePageWelcomeMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -115,17 +157,23 @@ class _CometHomePageState extends State<CometHomePage>
                     const SizedBox(height: 30),
 
                     // Search bar with glassmorphism
-                    _buildSearchBar(),
+                    _buildSearchBar(settings),
+                    _buildSuggestions(),
 
                     const SizedBox(height: 30),
 
-                    // Quick action buttons
-                    _buildQuickActions(),
+                    // Quick action buttons removed as requested
 
                     const SizedBox(height: 30),
 
-                    // Social shortcuts
-                    _buildSocialShortcuts(),
+                    // User Defined Shortcuts
+                    _buildUserShortcuts(settings, browserModel),
+
+                    const SizedBox(height: 30),
+
+                    // Social shortcuts (kept optionally)
+                    if (settings.showSocialShortcuts)
+                      _buildSocialShortcuts(settings),
 
                     const SizedBox(height: 30),
 
@@ -172,7 +220,7 @@ class _CometHomePageState extends State<CometHomePage>
     );
   }
 
-  Widget _buildAnimatedLogo() {
+  Widget _buildAnimatedLogo(BrowserSettings settings) {
     return AnimatedBuilder(
       animation: _glowAnimation,
       builder: (context, child) {
@@ -199,15 +247,14 @@ class _CometHomePageState extends State<CometHomePage>
                 color: Colors.black,
               ),
               child: ClipOval(
-                child: Image.asset(
-                  'assets/icon/icon.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.rocket_launch,
-                    size: 70,
-                    color: Color(0xFF00E5FF),
-                  ),
-                ),
+                child: settings.logoUrl.isNotEmpty
+                    ? Image.network(
+                        settings.logoUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildDefaultLogo(settings),
+                      )
+                    : _buildDefaultLogo(settings),
               ),
             ),
           ),
@@ -216,7 +263,19 @@ class _CometHomePageState extends State<CometHomePage>
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildDefaultLogo(BrowserSettings settings) {
+    return Image.asset(
+      'assets/icon/icon.png',
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => const Icon(
+        Icons.rocket_launch,
+        size: 70,
+        color: Color(0xFF00E5FF),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(BrowserSettings settings) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(30),
       child: BackdropFilter(
@@ -258,6 +317,11 @@ class _CometHomePageState extends State<CometHomePage>
                     ),
                     border: InputBorder.none,
                   ),
+                  onChanged: (value) {
+                    setState(() {
+                      _suggestions = URLPredictor.getPredictions(value);
+                    });
+                  },
                   onSubmitted: (_) => _handleSearch(),
                 ),
               ),
@@ -272,6 +336,36 @@ class _CometHomePageState extends State<CometHomePage>
     );
   }
 
+  Widget _buildSuggestions() {
+    if (_suggestions.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 10, left: 10, right: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.2)),
+      ),
+      child: Column(
+        children: _suggestions.map((suggestion) {
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+            title: Text(suggestion,
+                style: const TextStyle(color: Colors.white70, fontSize: 14)),
+            trailing: const Icon(Icons.arrow_outward,
+                color: Colors.white24, size: 16),
+            onTap: () {
+              _searchController.text = suggestion;
+              setState(() {
+                _suggestions = [];
+              });
+              _handleSearch();
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildQuickActions() {
     return GridView.count(
       crossAxisCount: 2,
@@ -281,10 +375,14 @@ class _CometHomePageState extends State<CometHomePage>
       crossAxisSpacing: 15,
       childAspectRatio: 1.5,
       children: [
-        _buildActionButton('Generate Art', Icons.palette, [
-          Color(0xFFE91E63),
-          Color(0xFFD500F9),
-        ], () => widget.onSearch?.call('generate art')),
+        _buildActionButton(
+            'Generate Art',
+            Icons.palette,
+            [
+              Color(0xFFE91E63),
+              Color(0xFFD500F9),
+            ],
+            () => widget.onSearch?.call('generate art')),
         _buildActionButton(
           'Ask Questions',
           Icons.question_answer,
@@ -297,10 +395,14 @@ class _CometHomePageState extends State<CometHomePage>
           [Color(0xFF5C6BC0), Color(0xFF7E57C2)],
           () => widget.onSearch?.call('summarize'),
         ),
-        _buildActionButton('Write Code', Icons.code, [
-          Color(0xFF26A69A),
-          Color(0xFF00E676),
-        ], () => widget.onSearch?.call('write code')),
+        _buildActionButton(
+            'Write Code',
+            Icons.code,
+            [
+              Color(0xFF26A69A),
+              Color(0xFF00E676),
+            ],
+            () => widget.onSearch?.call('write code')),
       ],
     );
   }
@@ -353,7 +455,7 @@ class _CometHomePageState extends State<CometHomePage>
     );
   }
 
-  Widget _buildSocialShortcuts() {
+  Widget _buildSocialShortcuts(BrowserSettings settings) {
     final socials = [
       {
         'icon': 'https://www.facebook.com/favicon.ico',
@@ -424,6 +526,9 @@ class _CometHomePageState extends State<CometHomePage>
         _buildFeatureIcon(Icons.bookmark, 'Bookmarks', () {
           Navigator.pushNamed(context, '/bookmarks');
         }),
+        _buildFeatureIcon(Icons.auto_awesome, 'Agent AI', () {
+          _showAgentDialog();
+        }),
       ],
     );
   }
@@ -434,13 +539,13 @@ class _CometHomePageState extends State<CometHomePage>
       child: Column(
         children: [
           Container(
-            padding: EdgeInsets.all(15),
+            padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
                 colors: [
-                  Color(0xFF29B6F6).withOpacity(0.2),
-                  Color(0xFFD500F9).withOpacity(0.1),
+                  const Color(0xFF29B6F6).withOpacity(0.2),
+                  const Color(0xFFD500F9).withOpacity(0.1),
                 ],
               ),
               border: Border.all(
@@ -448,16 +553,259 @@ class _CometHomePageState extends State<CometHomePage>
                 width: 1,
               ),
             ),
-            child: Icon(icon, color: Color(0xFF29B6F6), size: 24),
+            child: Icon(icon, color: const Color(0xFF29B6F6), size: 24),
           ),
           const SizedBox(height: 8),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white70,
               fontSize: 12,
               fontFamily: 'Inter',
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserShortcuts(
+      BrowserSettings settings, BrowserModel browserModel) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              "Your Shortcuts",
+              style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline,
+                  color: Color(0xFF00E5FF)),
+              onPressed: () => _showAddShortcutDialog(settings, browserModel),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4,
+            mainAxisSpacing: 15,
+            crossAxisSpacing: 15,
+            childAspectRatio: 1,
+          ),
+          itemCount: settings.homePageShortcuts.length,
+          itemBuilder: (context, index) {
+            final shortcut = settings.homePageShortcuts[index];
+            return _buildShortcutItem(shortcut, index, settings, browserModel);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShortcutItem(Map<String, String> shortcut, int index,
+      BrowserSettings settings, BrowserModel browserModel) {
+    return GestureDetector(
+      onLongPress: () =>
+          _showDeleteShortcutDialog(index, settings, browserModel),
+      onTap: () => widget.onSearch?.call(shortcut['url']!),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.2)),
+            ),
+            child: const Icon(Icons.public, color: Colors.white, size: 24),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            shortcut['name']!,
+            style: const TextStyle(color: Colors.white, fontSize: 10),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddShortcutDialog(
+      BrowserSettings settings, BrowserModel browserModel) {
+    final nameController = TextEditingController();
+    final urlController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF121212),
+        title:
+            const Text("Add Shortcut", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                  labelText: "Name", labelStyle: TextStyle(color: Colors.grey)),
+            ),
+            TextField(
+              controller: urlController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                  labelText: "URL", labelStyle: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty &&
+                  urlController.text.isNotEmpty) {
+                final newShortcuts =
+                    List<Map<String, String>>.from(settings.homePageShortcuts);
+                newShortcuts.add({
+                  'name': nameController.text,
+                  'url': urlController.text.startsWith('http')
+                      ? urlController.text
+                      : 'https://${urlController.text}'
+                });
+                settings.homePageShortcuts = newShortcuts;
+                browserModel.updateSettings(settings);
+                browserModel.save();
+                Navigator.pop(context);
+                setState(() {});
+              }
+            },
+            child: const Text("Add"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteShortcutDialog(
+      int index, BrowserSettings settings, BrowserModel browserModel) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF121212),
+        title: const Text("Delete Shortcut?",
+            style: TextStyle(color: Colors.white)),
+        content: const Text("Are you sure you want to remove this shortcut?",
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text("No")),
+          TextButton(
+            onPressed: () {
+              final newShortcuts =
+                  List<Map<String, String>>.from(settings.homePageShortcuts);
+              newShortcuts.removeAt(index);
+              settings.homePageShortcuts = newShortcuts;
+              browserModel.updateSettings(settings);
+              browserModel.save();
+              Navigator.pop(context);
+              setState(() {});
+            },
+            child: const Text("Yes", style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAgentDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF020208),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: Color(0xFF00E5FF)),
+            const SizedBox(width: 10),
+            const Text("Comet Agent", style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "What should the agent do for you today?",
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white),
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: "e.g. Find the best current price for a PS5",
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                      color: const Color(0xFF00E5FF).withOpacity(0.3)),
+                ),
+              ),
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AgentChatPage(
+                        initialTask: value.trim(),
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00E5FF),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AgentChatPage(
+                      initialTask: controller.text.trim(),
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text("Launch Agent"),
           ),
         ],
       ),

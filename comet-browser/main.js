@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, BrowserView, session, shell, clipboard, dia
 const contextMenuRaw = require('electron-context-menu');
 const contextMenu = contextMenuRaw.default || contextMenuRaw;
 const fs = require('fs');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const path = require('path');
 const os = require('os');
 const { spawn, exec } = require('child_process');
@@ -2049,6 +2050,12 @@ app.whenReady().then(() => {
       clipboard.writeText(message.text);
       if (mainWindow) {
         mainWindow.webContents.send('clipboard-changed', message.text);
+        mainWindow.webContents.send('notification', { title: 'Sync', body: 'Clipboard synced from remote device' });
+      }
+    } else if (message.type === 'history-sync') {
+      appendToMemory({ action: 'remote-history', ...message.data });
+      if (mainWindow) {
+        mainWindow.webContents.send('notification', { title: 'Sync', body: 'Browsing history synced' });
       }
     }
   });
@@ -2157,721 +2164,761 @@ app.whenReady().then(() => {
   } catch (e) {
     console.error('[Main] Failed to initialize WiFi Sync Service:', e);
   }
-
   ipcMain.handle('get-wifi-sync-uri', () => {
     return wifiSyncService ? wifiSyncService.getConnectUri() : null;
   });
-  if (mainWindow) {
-    mainWindow.webContents.send('clipboard-changed', message.text);
-    mainWindow.webContents.send('notification', { title: 'Sync', body: 'Clipboard synced from remote device' });
-  }
-} else if (message.type === 'history-sync') {
-  appendToMemory({ action: 'remote-history', ...message.data });
-  if (mainWindow) {
-    mainWindow.webContents.send('notification', { title: 'Sync', body: 'Browsing history synced' });
-  }
-}
-  });
 
-// Handle file downloads
-session.defaultSession.on('will-download', (event, item, webContents) => {
-  const fileName = item.getFilename();
-  const downloadsPath = app.getPath('downloads');
-  const saveDataPath = path.join(downloadsPath, fileName);
+  // Handle file downloads
+  session.defaultSession.on('will-download', (event, item, webContents) => {
+    const fileName = item.getFilename();
+    const downloadsPath = app.getPath('downloads');
+    const saveDataPath = path.join(downloadsPath, fileName);
 
-  console.log(`[Main] Starting download: ${fileName} to ${saveDataPath}`);
+    console.log(`[Main] Starting download: ${fileName} to ${saveDataPath}`);
 
-  item.setSavePath(saveDataPath);
-  item.resume();
+    item.setSavePath(saveDataPath);
+    item.resume();
 
-  if (mainWindow) {
-    mainWindow.webContents.send('download-started', fileName);
-  }
-
-  item.on('updated', (event, state) => {
-    if (state === 'interrupted') {
-      console.log('Download is interrupted but can be resumed');
-    } else if (state === 'progressing') {
-      if (!item.isPaused()) {
-        // progress updates could be sent here
-      }
-    }
-  });
-
-  item.on('done', (event, state) => {
-    if (state === 'completed') {
-      console.log('Download successfully');
-      if (mainWindow) {
-        mainWindow.webContents.send('download-complete', item.getFilename());
-      }
-
-      // Auto-install logic for Chrome Extensions (.crx)
-      if (fileName.endsWith('.crx')) {
-        console.log(`[Main] Detected extension download: ${fileName}. Installing...`);
-        installExtensionLocally(saveDataPath);
-      }
-    } else {
-      console.log(`Download failed: ${state}`);
-      if (mainWindow) {
-        mainWindow.webContents.send('download-failed', item.getFilename());
-      }
-    }
-  });
-
-  item.resume();
-});
-
-});
-
-ipcMain.handle('get-open-tabs', async () => {
-  const tabs = [];
-  for (const [tabId, view] of tabViews.entries()) {
-    if (view && view.webContents) {
-      try {
-        const url = view.webContents.getURL();
-        const title = view.webContents.getTitle();
-        const isActive = (tabId === activeTabId);
-        tabs.push({ tabId, url, title, isActive });
-      } catch (e) {
-        console.error(`Error getting info for tabId ${tabId}:`, e);
-        tabs.push({ tabId, url: 'Error', title: 'Error', isActive: (tabId === activeTabId) });
-      }
-    }
-  }
-  return tabs;
-});
-
-ipcMain.on('hide-all-views', () => {
-  if (activeTabId && tabViews.has(activeTabId)) {
-    const view = tabViews.get(activeTabId);
-    if (view && mainWindow) {
-      mainWindow.removeBrowserView(view);
-    }
-  }
-});
-
-ipcMain.on('set-user-id', (event, userId) => {
-  // TODO: Implement what to do with the user ID
-  console.log('User ID set:', userId);
-});
-
-ipcMain.handle('get-extensions', async () => {
-  const extensions = session.defaultSession.getAllExtensions();
-  return extensions.map(ext => ({
-    id: ext.id,
-    name: ext.name,
-    version: ext.version,
-    description: ext.description,
-    path: ext.path
-  }));
-});
-
-ipcMain.handle('toggle-extension', async (event, id) => {
-  // Disabling usually requires session restart in Electron, 
-  // but we can acknowledge the request.
-  console.log(`Toggle request for extension ${id}`);
-  return true;
-});
-
-ipcMain.handle('uninstall-extension', async (event, id) => {
-  try {
-    const ext = session.defaultSession.getExtension(id);
-    if (ext) {
-      const extPath = ext.path;
-      session.defaultSession.removeExtension(id);
-      // Optional: Delete from folder? 
-      // User said: "Drop your extension folder inside. Restart Comet"
-      // So if they uninstall, we should probably delete the folder too.
-      if (extPath.startsWith(extensionsPath)) {
-        fs.rmSync(extPath, { recursive: true, force: true });
-      }
-      return true;
-    }
-  } catch (e) {
-    console.error(`Failed to uninstall extension ${id}:`, e);
-  }
-  return false;
-});
-
-ipcMain.handle('get-extension-path', async () => {
-  return extensionsPath;
-});
-
-// Helper to install extension from a file path (e.g. download .crx)
-async function installExtensionLocally(crxPath) {
-  try {
-    const fileName = path.basename(crxPath);
-    const extensionId = fileName.replace('.crx', '').split('_')[0] || `ext_${Date.now()}`;
-    const targetDir = path.join(extensionsPath, extensionId);
-
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
+    if (mainWindow) {
+      mainWindow.webContents.send('download-started', fileName);
     }
 
-    console.log(`[Main] Extracting extension to ${targetDir}...`);
-
-    // For Windows, use tar to extract. CRX files are basically ZIPs with header.
-    // We try to extract directly. If it fails due to header, we might need to strip it.
-    // However, tar often handles ZIP-like structures okay.
-    // Better yet, we use a simple command to strip the first 512 bytes if header exists, 
-    // but many CRXv3 can be opened by unzip tools directly.
-
-    exec(`tar -xf "${crxPath}" -C "${targetDir}"`, async (err) => {
-      if (err) {
-        console.error(`[Main] Extraction failed: ${err.message}. Trying alternative...`);
-        // Fallback or manual strip could go here
-      }
-
-      // Verify manifest
-      const manifestPath = path.join(targetDir, 'manifest.json');
-      if (fs.existsSync(manifestPath)) {
-        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-        console.log(`[Main] Extension ${manifest.name} extracted successfully.`);
-
-        // Check if it's a theme
-        if (manifest.theme) {
-          console.log(`[Main] Detected theme: ${manifest.name}. Applying colors...`);
-          if (mainWindow) mainWindow.webContents.send('apply-theme', manifest.theme);
-        }
-
-        // Load the extension into the session
-        try {
-          await session.defaultSession.loadExtension(targetDir);
-          if (mainWindow) mainWindow.webContents.send('extension-installed', { name: manifest.name, id: extensionId });
-        } catch (loadErr) {
-          console.error(`[Main] Failed to load extension: ${loadErr.message}`);
+    item.on('updated', (event, state) => {
+      if (state === 'interrupted') {
+        console.log('Download is interrupted but can be resumed');
+      } else if (state === 'progressing') {
+        if (!item.isPaused()) {
+          // progress updates could be sent here
         }
       }
     });
-  } catch (e) {
-    console.error(`[Main] installExtensionLocally error:`, e);
-  }
-}
 
-ipcMain.handle('get-icon-path', async () => {
-  return path.join(__dirname, 'icon.ico');
-});
+    item.on('done', (event, state) => {
+      if (state === 'completed') {
+        console.log('Download successfully');
+        if (mainWindow) {
+          mainWindow.webContents.send('download-complete', item.getFilename());
+        }
 
-ipcMain.on('open-extension-dir', () => {
-  shell.openPath(extensionsPath);
-});
+        // Auto-install logic for Chrome Extensions (.crx)
+        if (fileName.endsWith('.crx')) {
+          console.log(`[Main] Detected extension download: ${fileName}. Installing...`);
+          installExtensionLocally(saveDataPath);
+        }
+      } else {
+        console.log(`Download failed: ${state}`);
+        if (mainWindow) {
+          mainWindow.webContents.send('download-failed', item.getFilename());
+        }
+      }
+    });
 
-ipcMain.handle('connect-to-remote-device', async (event, remoteDeviceId) => {
-  if (!p2pSyncService) {
-    console.error('[Main] P2P Sync Service not initialized.');
-    return false;
-  }
-  return await p2pSyncService.connectToRemoteDevice(remoteDeviceId);
-});
+    item.resume();
 
-ipcMain.handle('p2p-sync-history', async (event, data) => {
-  if (p2pSyncService && p2pSyncService.getStatus().connected) {
-    p2pSyncService.sendMessage({ type: 'history-sync', data });
-    return { success: true };
-  }
-  return { success: false, error: 'Not connected to peer' };
-});
+  });
 
-ipcMain.handle('p2p-get-device-id', async () => {
-  return p2pSyncService ? p2pSyncService.getStatus().deviceId : null;
-});
+  ipcMain.handle('get-open-tabs', async () => {
+    const tabs = [];
+    for (const [tabId, view] of tabViews.entries()) {
+      if (view && view.webContents) {
+        try {
+          const url = view.webContents.getURL();
+          const title = view.webContents.getTitle();
+          const isActive = (tabId === activeTabId);
+          tabs.push({ tabId, url, title, isActive });
+        } catch (e) {
+          console.error(`Error getting info for tabId ${tabId}:`, e);
+          tabs.push({ tabId, url: 'Error', title: 'Error', isActive: (tabId === activeTabId) });
+        }
+      }
+    }
+    return tabs;
+  });
 
-ipcMain.on('send-p2p-signal', (event, { signal, remoteDeviceId }) => {
-  if (!p2pSyncService) {
-    console.error('[Main] P2P Sync Service not initialized.');
-    return;
-  }
-  p2pSyncService.sendSignal(signal, remoteDeviceId);
-});
+  ipcMain.on('hide-all-views', () => {
+    if (activeTabId && tabViews.has(activeTabId)) {
+      const view = tabViews.get(activeTabId);
+      if (view && mainWindow) {
+        mainWindow.removeBrowserView(view);
+      }
+    }
+  });
 
-// IPC handler to update global shortcuts
-ipcMain.on('update-shortcuts', (event, shortcuts) => {
-  // Unregister all existing shortcuts to prevent conflicts
-  globalShortcut.unregisterAll();
+  ipcMain.on('set-user-id', (event, userId) => {
+    // TODO: Implement what to do with the user ID
+    console.log('User ID set:', userId);
+  });
 
-  shortcuts.forEach(s => {
+  ipcMain.handle('get-extensions', async () => {
+    const extensions = session.defaultSession.getAllExtensions();
+    return extensions.map(ext => ({
+      id: ext.id,
+      name: ext.name,
+      version: ext.version,
+      description: ext.description,
+      path: ext.path
+    }));
+  });
+
+  ipcMain.handle('toggle-extension', async (event, id) => {
+    // Disabling usually requires session restart in Electron, 
+    // but we can acknowledge the request.
+    console.log(`Toggle request for extension ${id}`);
+    return true;
+  });
+
+  ipcMain.handle('uninstall-extension', async (event, id) => {
     try {
-      if (s.accelerator) { // Only register if an accelerator is provided
-        globalShortcut.register(s.accelerator, () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus();
-
-            // Handle zoom actions directly in main process for better responsiveness
-            if (s.action === 'zoom-in') {
-              const view = tabViews.get(activeTabId);
-              if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() + 0.1);
-            } else if (s.action === 'zoom-out') {
-              const view = tabViews.get(activeTabId);
-              if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() - 0.1);
-            } else if (s.action === 'zoom-reset') {
-              const view = tabViews.get(activeTabId);
-              if (view) view.webContents.setZoomFactor(1.0);
-            } else {
-              // Send other shortcut actions to the renderer
-              mainWindow.webContents.send('execute-shortcut', s.action);
-            }
-          }
-        });
+      const ext = session.defaultSession.getExtension(id);
+      if (ext) {
+        const extPath = ext.path;
+        session.defaultSession.removeExtension(id);
+        // Optional: Delete from folder? 
+        // User said: "Drop your extension folder inside. Restart Comet"
+        // So if they uninstall, we should probably delete the folder too.
+        if (extPath.startsWith(extensionsPath)) {
+          fs.rmSync(extPath, { recursive: true, force: true });
+        }
+        return true;
       }
     } catch (e) {
-      console.error(`Failed to register shortcut ${s.accelerator}:`, e);
+      console.error(`Failed to uninstall extension ${id}:`, e);
     }
+    return false;
   });
-});
 
-ipcMain.handle('scan-folder', async (event, folderPath, types) => {
-  return await _scanDirectoryRecursive(folderPath, types);
-});
+  ipcMain.handle('get-extension-path', async () => {
+    return extensionsPath;
+  });
 
-ipcMain.handle('read-file-buffer', async (event, filePath) => {
-  try {
-    const buffer = await fs.promises.readFile(filePath);
-    return buffer.buffer; // Return as ArrayBuffer
-  } catch (error) {
-    console.error(`[Main] Error reading file buffer for ${filePath}:`, error);
-    return new ArrayBuffer(0);
+  // Helper to install extension from a file path (e.g. download .crx)
+  async function installExtensionLocally(crxPath) {
+    try {
+      const fileName = path.basename(crxPath);
+      const extensionId = fileName.replace('.crx', '').split('_')[0] || `ext_${Date.now()}`;
+      const targetDir = path.join(extensionsPath, extensionId);
+
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      console.log(`[Main] Extracting extension to ${targetDir}...`);
+
+      // For Windows, use tar to extract. CRX files are basically ZIPs with header.
+      // We try to extract directly. If it fails due to header, we might need to strip it.
+      // However, tar often handles ZIP-like structures okay.
+      // Better yet, we use a simple command to strip the first 512 bytes if header exists, 
+      // but many CRXv3 can be opened by unzip tools directly.
+
+      exec(`tar -xf "${crxPath}" -C "${targetDir}"`, async (err) => {
+        if (err) {
+          console.error(`[Main] Extraction failed: ${err.message}. Trying alternative...`);
+          // Fallback or manual strip could go here
+        }
+
+        // Verify manifest
+        const manifestPath = path.join(targetDir, 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          console.log(`[Main] Extension ${manifest.name} extracted successfully.`);
+
+          // Check if it's a theme
+          if (manifest.theme) {
+            console.log(`[Main] Detected theme: ${manifest.name}. Applying colors...`);
+            if (mainWindow) mainWindow.webContents.send('apply-theme', manifest.theme);
+          }
+
+          // Load the extension into the session
+          try {
+            await session.defaultSession.loadExtension(targetDir);
+            if (mainWindow) mainWindow.webContents.send('extension-installed', { name: manifest.name, id: extensionId });
+          } catch (loadErr) {
+            console.error(`[Main] Failed to load extension: ${loadErr.message}`);
+          }
+        }
+      });
+    } catch (e) {
+      console.error(`[Main] installExtensionLocally error:`, e);
+    }
   }
-});
 
-const crypto = require('crypto');
+  ipcMain.handle('get-icon-path', async () => {
+    return path.join(__dirname, 'icon.ico');
+  });
 
-// Function to derive key from passphrase
-async function deriveKey(passphrase, salt) {
-  return new Promise((resolve, reject) => {
-    crypto.pbkdf2(passphrase, salt, 100000, 32, 'sha512', (err, derivedKey) => {
-      if (err) reject(err);
-      resolve(derivedKey);
+  ipcMain.on('open-extension-dir', () => {
+    shell.openPath(extensionsPath);
+  });
+
+  ipcMain.handle('connect-to-remote-device', async (event, remoteDeviceId) => {
+    if (!p2pSyncService) {
+      console.error('[Main] P2P Sync Service not initialized.');
+      return false;
+    }
+    return await p2pSyncService.connectToRemoteDevice(remoteDeviceId);
+  });
+
+  ipcMain.handle('p2p-sync-history', async (event, data) => {
+    if (p2pSyncService && p2pSyncService.getStatus().connected) {
+      p2pSyncService.sendMessage({ type: 'history-sync', data });
+      return { success: true };
+    }
+    return { success: false, error: 'Not connected to peer' };
+  });
+
+  ipcMain.handle('p2p-get-device-id', async () => {
+    return p2pSyncService ? p2pSyncService.getStatus().deviceId : null;
+  });
+
+  ipcMain.on('send-p2p-signal', (event, { signal, remoteDeviceId }) => {
+    if (!p2pSyncService) {
+      console.error('[Main] P2P Sync Service not initialized.');
+      return;
+    }
+    p2pSyncService.sendSignal(signal, remoteDeviceId);
+  });
+
+  // IPC handler to update global shortcuts
+  ipcMain.on('update-shortcuts', (event, shortcuts) => {
+    // Unregister all existing shortcuts to prevent conflicts
+    globalShortcut.unregisterAll();
+
+    shortcuts.forEach(s => {
+      try {
+        if (s.accelerator) { // Only register if an accelerator is provided
+          globalShortcut.register(s.accelerator, () => {
+            if (mainWindow) {
+              if (mainWindow.isMinimized()) mainWindow.restore();
+              mainWindow.focus();
+
+              // Handle zoom actions directly in main process for better responsiveness
+              if (s.action === 'zoom-in') {
+                const view = tabViews.get(activeTabId);
+                if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() + 0.1);
+              } else if (s.action === 'zoom-out') {
+                const view = tabViews.get(activeTabId);
+                if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() - 0.1);
+              } else if (s.action === 'zoom-reset') {
+                const view = tabViews.get(activeTabId);
+                if (view) view.webContents.setZoomFactor(1.0);
+              } else {
+                // Send other shortcut actions to the renderer
+                mainWindow.webContents.send('execute-shortcut', s.action);
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.error(`Failed to register shortcut ${s.accelerator}:`, e);
+      }
     });
   });
-}
 
-// IPC handler for encryption
-ipcMain.handle('encrypt-data', async (event, { data, key }) => {
-  try {
-    const salt = crypto.randomBytes(16);
-    const derivedKey = await deriveKey(key, salt);
-    const iv = crypto.randomBytes(16); // Initialization vector
-    const cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
+  ipcMain.handle('scan-folder', async (event, folderPath, types) => {
+    return await _scanDirectoryRecursive(folderPath, types);
+  });
 
-    const encrypted = Buffer.concat([cipher.update(Buffer.from(data)), cipher.final()]);
-    const authTag = cipher.getAuthTag();
-
-    return {
-      encryptedData: encrypted.buffer,
-      iv: iv.buffer,
-      authTag: authTag.buffer,
-      salt: salt.buffer
-    };
-  } catch (error) {
-    console.error('[Main] Encryption failed:', error);
-    return { error: error.message };
-  }
-});
-
-// IPC handler for decryption
-// Web Search RAG Helper
-ipcMain.handle('web-search-rag', async (event, query) => {
-  try {
-    console.log(`[RAG] Performing web search for: ${query}`);
-    // Use Google Search with a simple User-Agent to get snippets
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-    const response = await fetch(searchUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-    });
-    const html = await response.text();
-
-    // Simple regex to extract search snippets (approximate)
-    const snippets = [];
-    const divRegex = /<div class="VwiC3b[^>]*>([\s\S]*?)<\/div>/g;
-    let match;
-    while ((match = divRegex.exec(html)) !== null && snippets.length < 5) {
-      const cleanSnippet = match[1].replace(/<[^>]*>/g, '').trim();
-      if (cleanSnippet) snippets.push(cleanSnippet);
+  ipcMain.handle('read-file-buffer', async (event, filePath) => {
+    try {
+      const buffer = await fs.promises.readFile(filePath);
+      return buffer.buffer; // Return as ArrayBuffer
+    } catch (error) {
+      console.error(`[Main] Error reading file buffer for ${filePath}:`, error);
+      return new ArrayBuffer(0);
     }
+  });
 
-    return snippets;
-  } catch (error) {
-    console.error('[RAG] Web search failed:', error);
-    return [];
+  const crypto = require('crypto');
+
+  // Function to derive key from passphrase
+  async function deriveKey(passphrase, salt) {
+    return new Promise((resolve, reject) => {
+      crypto.pbkdf2(passphrase, salt, 100000, 32, 'sha512', (err, derivedKey) => {
+        if (err) reject(err);
+        resolve(derivedKey);
+      });
+    });
   }
-});
 
-// Website Translation IPC
-ipcMain.handle('translate-website', async (event, { targetLanguage }) => {
-  const view = tabViews.get(activeTabId);
-  if (!view) return { error: 'No active view' };
+  // IPC handler for encryption
+  ipcMain.handle('encrypt-data', async (event, { data, key }) => {
+    try {
+      const salt = crypto.randomBytes(16);
+      const derivedKey = await deriveKey(key, salt);
+      const iv = crypto.randomBytes(16); // Initialization vector
+      const cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
 
-  try {
-    // Google Translate Simple Injection
-    const code = `
+      const encrypted = Buffer.concat([cipher.update(Buffer.from(data)), cipher.final()]);
+      const authTag = cipher.getAuthTag();
+
+      return {
+        encryptedData: encrypted.buffer,
+        iv: iv.buffer,
+        authTag: authTag.buffer,
+        salt: salt.buffer
+      };
+    } catch (error) {
+      console.error('[Main] Encryption failed:', error);
+      return { error: error.message };
+    }
+  });
+
+  // IPC handler for decryption
+  // Web Search RAG Helper
+  ipcMain.handle('web-search-rag', async (event, query) => {
+    try {
+      console.log(`[RAG] Performing web search for: ${query}`);
+      // Use Google Search with a simple User-Agent to get snippets
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      const response = await fetch(searchUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+      });
+      const html = await response.text();
+
+      // Simple regex to extract search snippets (approximate)
+      const snippets = [];
+      const divRegex = /<div class="VwiC3b[^>]*>([\s\S]*?)<\/div>/g;
+      let match;
+      while ((match = divRegex.exec(html)) !== null && snippets.length < 5) {
+        const cleanSnippet = match[1].replace(/<[^>]*>/g, '').trim();
+        if (cleanSnippet) snippets.push(cleanSnippet);
+      }
+
+      return snippets;
+    } catch (error) {
+      console.error('[RAG] Web search failed:', error);
+      return [];
+    }
+  });
+
+  // Website Translation IPC
+  ipcMain.handle('translate-website', async (event, { targetLanguage }) => {
+    const view = tabViews.get(activeTabId);
+    if (!view) return { error: 'No active view' };
+
+    try {
+      const code = `
       (function() {
-        var script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
-        document.body.appendChild(script);
-        
-        window.googleTranslateElementInit = function() {
-          new google.translate.TranslateElement({
-            pageLanguage: 'auto',
-            includedLanguages: '${targetLanguage}',
-            layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
-            autoDisplay: false
-          }, 'google_translate_element');
+        if (!document.getElementById('google_translate_element')) {
+          const div = document.createElement('div');
+          div.id = 'google_translate_element';
+          div.style.display = 'none';
+          document.body.appendChild(div);
           
-          // Trigger translation automatically if possible or show the UI
-          var check = setInterval(function() {
-             var combo = document.querySelector('.goog-te-combo');
-             if(combo) {
-                combo.value = '${targetLanguage}';
-                combo.dispatchEvent(new Event('change'));
-                clearInterval(check);
-             }
-          }, 500);
-        };
-      })();
+          const script = document.createElement('script');
+          script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+          document.body.appendChild(script);
+          
+          window.googleTranslateElementInit = function() {
+            new google.translate.TranslateElement({pageLanguage: 'auto'}, 'google_translate_element');
+          };
+        }
+        
+        var check = setInterval(function() {
+          var combo = document.querySelector('.goog-te-combo');
+          if (combo) {
+            combo.value = '${targetLanguage}';
+            combo.dispatchEvent(new Event('change'));
+            clearInterval(check);
+          }
+        }, 500);
+      })()
     `;
-    await view.webContents.executeJavaScript(code);
-    return { success: true };
-  } catch (e) {
-    return { error: e.message };
-  }
-});
-
-// Setup Context Menu
-contextMenu({
-  showSaveImageAs: true,
-  showInspectElement: true,
-  showCopyImageAddress: true,
-  showSearchWithGoogle: true,
-  prepend: (defaultActions, parameters, browserWindow) => [
-    {
-      label: '🚀 Analyze with Comet AI',
-      visible: parameters.selectionText.trim().length > 0,
-      click: () => {
-        if (mainWindow) {
-          mainWindow.webContents.send('ai-query-detected', parameters.selectionText);
-        }
-      }
-    },
-    {
-      label: '📄 Summarize Page',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.webContents.send('ai-query-detected', 'Summarize this page');
-        }
-      }
-    },
-    {
-      label: '🌐 Translate this Site',
-      click: () => {
-        // This will trigger the translation IPC
-        if (mainWindow) {
-          mainWindow.webContents.send('trigger-translation-dialog');
-        }
-      }
+      await view.webContents.executeJavaScript(code);
+      return { success: true };
+    } catch (e) {
+      return { error: e.message };
     }
-  ]
-});
+  });
 
-ipcMain.handle('decrypt-data', async (event, { encryptedData, key, iv, authTag, salt }) => {
-  try {
-    const derivedKey = await deriveKey(key, Buffer.from(salt));
-    const decipher = crypto.createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(iv));
-    decipher.setAuthTag(Buffer.from(authTag));
+  // PDF Generation IPC
+  ipcMain.handle('generate-pdf', async (event, title, content) => {
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const timesRomanFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+      const page = pdfDoc.addPage();
+      const { width, height } = page.getSize();
+      const fontSize = 12;
 
-    const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedData)), decipher.final()]);
-    return { decryptedData: decrypted.buffer };
-  } catch (error) {
-    console.error('[Main] Decryption failed:', error);
-    return { error: error.message };
-  }
-});
+      page.drawText(title || "Generated Document", {
+        x: 50,
+        y: height - 100,
+        size: 24,
+        font: timesRomanFont,
+        color: rgb(0, 0, 0.5),
+      });
 
-ipcMain.handle('create-desktop-shortcut', async (event, { url, title }) => {
-  const desktopPath = path.join(os.homedir(), 'Desktop');
-  const shortcutPath = path.join(desktopPath, `${title.replace(/[^a-z0-9]/gi, '_').substring(0, 30)}.url`);
+      const text = content || "No content provided.";
+      const lines = text.split('\n');
+      let yOffset = height - 150;
 
-  const content = `[InternetShortcut]\nURL=${url}\n`;
-
-  try {
-    fs.writeFileSync(shortcutPath, content);
-    return { success: true, path: shortcutPath };
-  } catch (error) {
-    console.error('[Main] Failed to create shortcut:', error);
-    return { error: error.message };
-  }
-});
-
-ipcMain.handle('set-alarm', async (event, { time, message }) => {
-  const platform = process.platform;
-  let command = '';
-
-  const alarmTime = new Date(time);
-  if (isNaN(alarmTime.getTime())) {
-    return { success: false, error: 'Invalid alarm time format.' };
-  }
-
-  // Format time for various OS commands
-  const hour = alarmTime.getHours();
-  const minute = alarmTime.getMinutes();
-  const year = alarmTime.getFullYear();
-  const month = alarmTime.getMonth() + 1; // Month is 0-indexed
-  const day = alarmTime.getDate();
-
-  const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-  const formattedDate = `${month}/${day}/${year}`;
-
-  if (platform === 'win32') {
-    // Windows: Use PowerShell to create a scheduled task
-    // Note: Creating scheduled tasks requires Administrator privileges.
-    // This command will create a basic task that displays a message.
-    command = `powershell.exe -Command "$Action = New-ScheduledTaskAction -Execute 'msg.exe' -Argument '* ${message}'; $Trigger = New-ScheduledTaskTrigger -Once -At '${formattedTime}'; Register-ScheduledTask -TaskName 'CometAlarm_${Date.now()}' -Action $Action -Trigger $Trigger -Description '${message}'"`;
-  } else if (platform === 'darwin') {
-    // macOS: Use osascript to create a Calendar event or a reminder
-    // Creating a reminder is more straightforward for a simple alarm.
-    command = `osascript -e 'tell application "Reminders" to make new reminder with properties {name:"${message}", remind me date:"${alarmTime.toISOString()}"}'`;
-    // Alternatively, for a notification at a specific time:
-    // command = `osascript -e 'display notification "${message}" with title "Comet Alarm" subtitle "Time to Wake Up!"' -e 'delay $(((${alarmTime.getTime()} - $(date +%s%3N)) / 1000))' -e 'display dialog "${message}" buttons {"OK"} default button 1 with title "Comet Alarm"'`;
-  } else if (platform === 'linux') {
-    // Linux: Use 'at' command (requires 'at' daemon to be running)
-    // Example: echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate}
-    // `at` command format: `at [-m] TIME [DATE]`, e.g., `at 10:00 tomorrow`
-    command = `echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate}`;
-  } else {
-    return { success: false, error: `Unsupported platform for alarms: ${platform}` };
-  }
-
-  return new Promise((resolve) => {
-    exec(command, { timeout: 10000 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Set alarm error on ${platform}:`, error);
-        resolve({ success: false, error: stderr || error.message });
-      } else {
-        resolve({ success: true, message: `Alarm set for ${alarmTime.toLocaleString()}` });
+      for (const line of lines) {
+        if (yOffset < 50) {
+          pdfDoc.addPage();
+          yOffset = height - 50;
+        }
+        page.drawText(line, {
+          x: 50,
+          y: yOffset,
+          size: fontSize,
+          font: timesRomanFont,
+        });
+        yOffset -= 20;
       }
+
+      const pdfBytes = await pdfDoc.save();
+      const downloadsPath = path.join(os.homedir(), 'Downloads');
+      const fileName = `${(title || 'doc').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
+      const filePath = path.join(downloadsPath, fileName);
+
+      fs.writeFileSync(filePath, pdfBytes);
+
+      if (mainWindow) {
+        mainWindow.webContents.send('download-started', fileName);
+        mainWindow.webContents.send('notification', { title: 'PDF Generated', body: `Saved to Downloads: ${fileName}` });
+      }
+
+      return { success: true, fileName, filePath };
+    } catch (error) {
+      console.error('[PDF] Generation failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Setup Context Menu
+  contextMenu({
+    showSaveImageAs: true,
+    showInspectElement: true,
+    showCopyImageAddress: true,
+    showSearchWithGoogle: true,
+    prepend: (defaultActions, parameters, browserWindow) => [
+      {
+        label: '🚀 Analyze with Comet AI',
+        visible: parameters.selectionText.trim().length > 0,
+        click: () => {
+          if (mainWindow) {
+            mainWindow.webContents.send('ai-query-detected', parameters.selectionText);
+          }
+        }
+      },
+      {
+        label: '📄 Summarize Page',
+        click: () => {
+          if (mainWindow) {
+            mainWindow.webContents.send('ai-query-detected', 'Summarize this page');
+          }
+        }
+      },
+      {
+        label: '🌐 Translate this Site',
+        click: () => {
+          // This will trigger the translation IPC
+          if (mainWindow) {
+            mainWindow.webContents.send('trigger-translation-dialog');
+          }
+        }
+      }
+    ]
+  });
+
+  ipcMain.handle('decrypt-data', async (event, { encryptedData, key, iv, authTag, salt }) => {
+    try {
+      const derivedKey = await deriveKey(key, Buffer.from(salt));
+      const decipher = crypto.createDecipheriv('aes-256-gcm', derivedKey, Buffer.from(iv));
+      decipher.setAuthTag(Buffer.from(authTag));
+
+      const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedData)), decipher.final()]);
+      return { decryptedData: decrypted.buffer };
+    } catch (error) {
+      console.error('[Main] Decryption failed:', error);
+      return { error: error.message };
+    }
+  });
+
+  ipcMain.handle('create-desktop-shortcut', async (event, { url, title }) => {
+    const desktopPath = path.join(os.homedir(), 'Desktop');
+    const shortcutPath = path.join(desktopPath, `${title.replace(/[^a-z0-9]/gi, '_').substring(0, 30)}.url`);
+
+    const content = `[InternetShortcut]\nURL = ${url} \n`;
+
+    try {
+      fs.writeFileSync(shortcutPath, content);
+      return { success: true, path: shortcutPath };
+    } catch (error) {
+      console.error('[Main] Failed to create shortcut:', error);
+      return { error: error.message };
+    }
+  });
+
+  ipcMain.handle('set-alarm', async (event, { time, message }) => {
+    const platform = process.platform;
+    let command = '';
+
+    const alarmTime = new Date(time);
+    if (isNaN(alarmTime.getTime())) {
+      return { success: false, error: 'Invalid alarm time format.' };
+    }
+
+    // Format time for various OS commands
+    const hour = alarmTime.getHours();
+    const minute = alarmTime.getMinutes();
+    const year = alarmTime.getFullYear();
+    const month = alarmTime.getMonth() + 1; // Month is 0-indexed
+    const day = alarmTime.getDate();
+
+    const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} `;
+    const formattedDate = `${month} /${day}/${year} `;
+
+    if (platform === 'win32') {
+      // Windows: Use PowerShell to create a scheduled task
+      // Note: Creating scheduled tasks requires Administrator privileges.
+      // This command will create a basic task that displays a message.
+      command = `powershell.exe - Command "$Action = New-ScheduledTaskAction -Execute 'msg.exe' -Argument '* ${message}'; $Trigger = New-ScheduledTaskTrigger -Once -At '${formattedTime}'; Register-ScheduledTask -TaskName 'CometAlarm_${Date.now()}' -Action $Action -Trigger $Trigger -Description '${message}'"`;
+    } else if (platform === 'darwin') {
+      // macOS: Use osascript to create a Calendar event or a reminder
+      // Creating a reminder is more straightforward for a simple alarm.
+      command = `osascript - e 'tell application "Reminders" to make new reminder with properties {name:"${message}", remind me date:"${alarmTime.toISOString()}"}'`;
+      // Alternatively, for a notification at a specific time:
+      // command = `osascript - e 'display notification "${message}" with title "Comet Alarm" subtitle "Time to Wake Up!"' - e 'delay $(((${alarmTime.getTime()} - $(date +%s%3N)) / 1000))' - e 'display dialog "${message}" buttons {"OK"} default button 1 with title "Comet Alarm"'`;
+    } else if (platform === 'linux') {
+      // Linux: Use 'at' command (requires 'at' daemon to be running)
+      // Example: echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate}
+      // `at` command format: `at[-m] TIME[DATE]`, e.g., `at 10:00 tomorrow`
+      command = `echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate} `;
+    } else {
+      return { success: false, error: `Unsupported platform for alarms: ${platform} ` };
+    }
+
+    return new Promise((resolve) => {
+      exec(command, { timeout: 10000 }, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Set alarm error on ${platform}: `, error);
+          resolve({ success: false, error: stderr || error.message });
+        } else {
+          resolve({ success: true, message: `Alarm set for ${alarmTime.toLocaleString()}` });
+        }
+      });
     });
   });
-});
 
-// ============================================================================
-// POPUP WINDOW SYSTEM - Fix for panels appearing behind browser view
-// ============================================================================
-let popupWindows = new Map(); // Track all popup windows
+  // ============================================================================
+  // POPUP WINDOW SYSTEM - Fix for panels appearing behind browser view
+  // ============================================================================
+  let popupWindows = new Map(); // Track all popup windows
 
-/**
- * Creates a popup window that appears on top of the browser view
- * This solves the z-index issue where panels appear behind the webview
- */
-function createPopupWindow(type, options = {}) {
-  // Close existing popup of the same type
-  if (popupWindows.has(type)) {
-    const existing = popupWindows.get(type);
-    if (existing && !existing.isDestroyed()) {
-      existing.close();
+  /**
+   * Creates a popup window that appears on top of the browser view
+   * This solves the z-index issue where panels appear behind the webview
+   */
+  function createPopupWindow(type, options = {}) {
+    // Close existing popup of the same type
+    if (popupWindows.has(type)) {
+      const existing = popupWindows.get(type);
+      if (existing && !existing.isDestroyed()) {
+        existing.close();
+      }
+      popupWindows.delete(type);
     }
-    popupWindows.delete(type);
-  }
 
-  const defaultOptions = {
-    width: 1000,
-    height: 700,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false,
-    },
-    parent: mainWindow,
-    modal: false,
-    alwaysOnTop: true, // Critical: ensures popup appears above browser view
-    skipTaskbar: true,
-    resizable: true,
-    minimizable: false,
-    maximizable: false,
-    show: false,
-  };
+    const defaultOptions = {
+      width: 1000,
+      height: 700,
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+      },
+      parent: mainWindow,
+      modal: false,
+      alwaysOnTop: true, // Critical: ensures popup appears above browser view
+      skipTaskbar: true,
+      resizable: true,
+      minimizable: false,
+      maximizable: false,
+      show: false,
+    };
 
-  const popup = new BrowserWindow({ ...defaultOptions, ...options });
+    const popup = new BrowserWindow({ ...defaultOptions, ...options });
 
-  // Load the appropriate content
-  const baseUrl = isDev
-    ? 'http://localhost:3003'
-    : `file://${path.join(__dirname, 'out', 'index.html')}`;
+    // Load the appropriate content
+    const baseUrl = isDev
+      ? 'http://localhost:3003'
+      : `file://${path.join(__dirname, 'out', 'index.html')}`;
 
-  let route = '';
-  switch (type) {
-    case 'settings':
-      route = isDev ? '/?panel=settings' : '/settings';
-      break;
-    case 'extensions':
-    case 'plugins': // Handle 'plugins' as an alias for 'extensions'
-      route = isDev ? '/?panel=extensions' : '/extensions';
-      break;
-    case 'profile':
-      route = isDev ? '/?panel=profile' : '/profile';
-      break;
-    case 'downloads':
-      route = isDev ? '/?panel=downloads' : '/downloads';
-      break;
-    case 'clipboard':
-      route = isDev ? '/?panel=clipboard' : '/clipboard';
-      break;
-    case 'cart':
-      route = '/cart';
-      break;
-    default:
-      route = `/${type}`;
-  }
+    let route = '';
+    switch (type) {
+      case 'settings':
+        route = isDev ? '/?panel=settings' : '/settings';
+        break;
+      case 'extensions':
+      case 'plugins': // Handle 'plugins' as an alias for 'extensions'
+        route = isDev ? '/?panel=extensions' : '/extensions';
+        break;
+      case 'profile':
+        route = isDev ? '/?panel=profile' : '/profile';
+        break;
+      case 'downloads':
+        route = isDev ? '/?panel=downloads' : '/downloads';
+        break;
+      case 'clipboard':
+        route = isDev ? '/?panel=clipboard' : '/clipboard';
+        break;
+      case 'cart':
+        route = '/cart';
+        break;
+      default:
+        route = `/${type}`;
+    }
 
-  let url;
-  if (isDev) {
-    url = `${baseUrl}${route}`;
-  } else {
-    // Check for both folder/index.html and folder.html (Next.js export behavior)
-    const routePathIndex = route === '/' ? '/index.html' : `${route}/index.html`;
-    const routePathHtml = route === '/' ? '/index.html' : `${route}.html`;
-
-    const fullPathIndex = path.join(__dirname, 'out', routePathIndex);
-    const fullPathHtml = path.join(__dirname, 'out', routePathHtml);
-
-    if (fs.existsSync(fullPathIndex)) {
-      url = `file://${fullPathIndex}`;
-    } else if (fs.existsSync(fullPathHtml)) {
-      url = `file://${fullPathHtml}`;
+    let url;
+    if (isDev) {
+      url = `${baseUrl}${route}`;
     } else {
-      // Fallback to hash routing if file doesn't exist
-      url = `file://${path.join(__dirname, 'out', 'index.html')}#${route}`;
+      // Check for both folder/index.html and folder.html (Next.js export behavior)
+      const routePathIndex = route === '/' ? '/index.html' : `${route}/index.html`;
+      const routePathHtml = route === '/' ? '/index.html' : `${route}.html`;
+
+      const fullPathIndex = path.join(__dirname, 'out', routePathIndex);
+      const fullPathHtml = path.join(__dirname, 'out', routePathHtml);
+
+      if (fs.existsSync(fullPathIndex)) {
+        url = `file://${fullPathIndex}`;
+      } else if (fs.existsSync(fullPathHtml)) {
+        url = `file://${fullPathHtml}`;
+      } else {
+        // Fallback to hash routing if file doesn't exist
+        url = `file://${path.join(__dirname, 'out', 'index.html')}#${route}`;
+      }
     }
+
+    console.log(`[Main] Loading popup URL: ${url}`);
+    popup.loadURL(url);
+
+    popup.once('ready-to-show', () => {
+      popup.show();
+      popup.focus();
+    });
+
+    popup.on('closed', () => {
+      popupWindows.delete(type);
+    });
+
+    popupWindows.set(type, popup);
+    return popup;
   }
 
-  console.log(`[Main] Loading popup URL: ${url}`);
-  popup.loadURL(url);
-
-  popup.once('ready-to-show', () => {
-    popup.show();
-    popup.focus();
+  // IPC Handlers for popup windows
+  ipcMain.on('open-popup-window', (event, { type, options }) => {
+    createPopupWindow(type, options);
   });
 
-  popup.on('closed', () => {
-    popupWindows.delete(type);
-  });
-
-  popupWindows.set(type, popup);
-  return popup;
-}
-
-// IPC Handlers for popup windows
-ipcMain.on('open-popup-window', (event, { type, options }) => {
-  createPopupWindow(type, options);
-});
-
-ipcMain.on('close-popup-window', (event, type) => {
-  if (popupWindows.has(type)) {
-    const popup = popupWindows.get(type);
-    if (popup && !popup.isDestroyed()) {
-      popup.close();
-    }
-    popupWindows.delete(type);
-  }
-});
-
-ipcMain.on('close-all-popups', () => {
-  popupWindows.forEach((popup, type) => {
-    if (popup && !popup.isDestroyed()) {
-      popup.close();
+  ipcMain.on('close-popup-window', (event, type) => {
+    if (popupWindows.has(type)) {
+      const popup = popupWindows.get(type);
+      if (popup && !popup.isDestroyed()) {
+        popup.close();
+      }
+      popupWindows.delete(type);
     }
   });
-  popupWindows.clear();
-});
 
-// Specific popup handlers
-ipcMain.on('open-settings-popup', (event, section = 'profile') => {
-  createPopupWindow('settings', {
-    width: 1200,
-    height: 800,
+  ipcMain.on('close-all-popups', () => {
+    popupWindows.forEach((popup, type) => {
+      if (popup && !popup.isDestroyed()) {
+        popup.close();
+      }
+    });
+    popupWindows.clear();
   });
-  // Send the section to open after window is ready
-  setTimeout(() => {
-    const popup = popupWindows.get('settings');
-    if (popup && !popup.isDestroyed()) {
-      popup.webContents.send('set-settings-section', section);
+
+  // Specific popup handlers
+  ipcMain.on('open-settings-popup', (event, section = 'profile') => {
+    createPopupWindow('settings', {
+      width: 1200,
+      height: 800,
+    });
+    // Send the section to open after window is ready
+    setTimeout(() => {
+      const popup = popupWindows.get('settings');
+      if (popup && !popup.isDestroyed()) {
+        popup.webContents.send('set-settings-section', section);
+      }
+    }, 500);
+  });
+
+  ipcMain.on('open-profile-popup', () => {
+    createPopupWindow('profile', {
+      width: 600,
+      height: 700,
+    });
+  });
+
+  ipcMain.on('open-plugins-popup', () => {
+    createPopupWindow('plugins', {
+      width: 900,
+      height: 700,
+    });
+  });
+
+  ipcMain.on('open-downloads-popup', () => {
+    createPopupWindow('downloads', {
+      width: 400,
+      height: 600,
+    });
+  });
+
+  ipcMain.on('open-clipboard-popup', () => {
+    createPopupWindow('clipboard', {
+      width: 450,
+      height: 650,
+    });
+  });
+
+  ipcMain.on('open-cart-popup', () => {
+    createPopupWindow('cart', {
+      width: 500,
+      height: 700,
+    });
+  });
+
+  // Google login removed. Authentication redirected to ponsrischool web-auth.
+
+  // ============================================================================
+  // SHELL COMMAND EXECUTION - For AI control of system features
+  // ============================================================================
+
+  // Universal Translation using Google Translate API (Fallback for missing free-translate)
+  ipcMain.handle('translate-text', async (event, { text, from, to }) => {
+    try {
+      const sl = from || 'auto';
+      const tl = to;
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data && data[0]) {
+        const translated = data[0].map(x => x[0]).join('');
+        return { success: true, translated };
+      }
+      return { success: false, error: 'Invalid response from translation service' };
+    } catch (error) {
+      console.error('[Main] Translation failed:', error);
+      return { success: false, error: error.message };
     }
-  }, 500);
-});
-
-ipcMain.on('open-profile-popup', () => {
-  createPopupWindow('profile', {
-    width: 600,
-    height: 700,
   });
-});
 
-ipcMain.on('open-plugins-popup', () => {
-  createPopupWindow('plugins', {
-    width: 900,
-    height: 700,
-  });
-});
-
-ipcMain.on('open-downloads-popup', () => {
-  createPopupWindow('downloads', {
-    width: 400,
-    height: 600,
-  });
-});
-
-ipcMain.on('open-clipboard-popup', () => {
-  createPopupWindow('clipboard', {
-    width: 450,
-    height: 650,
-  });
-});
-
-ipcMain.on('open-cart-popup', () => {
-  createPopupWindow('cart', {
-    width: 500,
-    height: 700,
-  });
-});
-
-// Google login removed. Authentication redirected to ponsrischool web-auth.
-
-// ============================================================================
-// SHELL COMMAND EXECUTION - For AI control of system features
-// ============================================================================
-
-// Universal Translation using Google Translate API (Fallback for missing free-translate)
-ipcMain.handle('translate-text', async (event, { text, from, to }) => {
-  try {
-    const sl = from || 'auto';
-    const tl = to;
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data && data[0]) {
-      const translated = data[0].map(x => x[0]).join('');
-      return { success: true, translated };
-    }
-    return { success: false, error: 'Invalid response from translation service' };
-  } catch (error) {
-    console.error('[Main] Translation failed:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// Remove existing handler if present to prevent "second handler" error
-ipcMain.removeHandler('click-element');
-ipcMain.handle('click-element', async (event, selector) => {
-  const view = tabViews.get(activeTabId);
-  if (!view) return { success: false, error: 'No active view' };
-  try {
-    const result = await view.webContents.executeJavaScript(`
+  // Remove existing handler if present to prevent "second handler" error
+  ipcMain.removeHandler('click-element');
+  ipcMain.handle('click-element', async (event, selector) => {
+    const view = tabViews.get(activeTabId);
+    if (!view) return { success: false, error: 'No active view' };
+    try {
+      const result = await view.webContents.executeJavaScript(`
       (() => {
         const el = document.querySelector('${selector}');
         if (el) {
@@ -2881,17 +2928,17 @@ ipcMain.handle('click-element', async (event, selector) => {
         return false;
       })()
     `);
-    return { success: result };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
+      return { success: result };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
 
-ipcMain.handle('type-text', async (event, { selector, text }) => {
-  const view = tabViews.get(activeTabId);
-  if (!view) return { success: false, error: 'No active view' };
-  try {
-    await view.webContents.executeJavaScript(`
+  ipcMain.handle('type-text', async (event, { selector, text }) => {
+    const view = tabViews.get(activeTabId);
+    if (!view) return { success: false, error: 'No active view' };
+    try {
+      await view.webContents.executeJavaScript(`
       (() => {
         const el = document.querySelector('${selector}');
         if (el) {
@@ -2904,17 +2951,17 @@ ipcMain.handle('type-text', async (event, { selector, text }) => {
         return false;
       })()
     `);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
 
-ipcMain.handle('fill-form', async (event, formData) => {
-  const view = tabViews.get(activeTabId);
-  if (!view) return { success: false, error: 'No active view' };
-  try {
-    await view.webContents.executeJavaScript(`
+  ipcMain.handle('fill-form', async (event, formData) => {
+    const view = tabViews.get(activeTabId);
+    if (!view) return { success: false, error: 'No active view' };
+    try {
+      await view.webContents.executeJavaScript(`
       (() => {
         const data = ${JSON.stringify(formData)};
         let successCount = 0;
@@ -2931,172 +2978,172 @@ ipcMain.handle('fill-form', async (event, formData) => {
         return successCount;
       })()
     `);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
 
-// Duplicate select-local-file removed
-
-
-// Duplicate execute-shell-command removed
+  // Duplicate select-local-file removed
 
 
-// ============================================================================
-// SCREEN CAPTURE - For OCR and cross-app clicking
-// ============================================================================
+  // Duplicate execute-shell-command removed
 
 
-// ============================================================================
-// APPLICATION SEARCH - Search for installed applications
-// ============================================================================
-ipcMain.handle('search-applications', async (event, query) => {
-  console.log('[AppSearch] Searching for:', query);
+  // ============================================================================
+  // SCREEN CAPTURE - For OCR and cross-app clicking
+  // ============================================================================
 
-  const platform = process.platform;
-  const results = [];
 
-  try {
-    if (platform === 'win32') {
-      // Windows: Search in Start Menu and Program Files
-      const searchPaths = [
-        path.join(process.env.ProgramData, 'Microsoft/Windows/Start Menu/Programs'),
-        path.join(process.env.APPDATA, 'Microsoft/Windows/Start Menu/Programs'),
-        'C:\\Program Files',
-        'C:\\Program Files (x86)'
-      ];
+  // ============================================================================
+  // APPLICATION SEARCH - Search for installed applications
+  // ============================================================================
+  ipcMain.handle('search-applications', async (event, query) => {
+    console.log('[AppSearch] Searching for:', query);
 
-      for (const searchPath of searchPaths) {
-        if (fs.existsSync(searchPath)) {
-          const files = fs.readdirSync(searchPath, { recursive: true });
-          files.forEach(file => {
-            if (file.toLowerCase().includes(query.toLowerCase()) &&
-              (file.endsWith('.lnk') || file.endsWith('.exe'))) {
-              results.push({
-                name: path.basename(file, path.extname(file)),
-                path: path.join(searchPath, file)
-              });
-            }
-          });
-        }
-      }
-    } else if (platform === 'darwin') {
-      // macOS: Search in Applications folder
-      const appsPath = '/Applications';
-      if (fs.existsSync(appsPath)) {
-        const apps = fs.readdirSync(appsPath);
-        apps.forEach(app => {
-          if (app.toLowerCase().includes(query.toLowerCase()) && app.endsWith('.app')) {
-            results.push({
-              name: path.basename(app, '.app'),
-              path: path.join(appsPath, app)
+    const platform = process.platform;
+    const results = [];
+
+    try {
+      if (platform === 'win32') {
+        // Windows: Search in Start Menu and Program Files
+        const searchPaths = [
+          path.join(process.env.ProgramData, 'Microsoft/Windows/Start Menu/Programs'),
+          path.join(process.env.APPDATA, 'Microsoft/Windows/Start Menu/Programs'),
+          'C:\\Program Files',
+          'C:\\Program Files (x86)'
+        ];
+
+        for (const searchPath of searchPaths) {
+          if (fs.existsSync(searchPath)) {
+            const files = fs.readdirSync(searchPath, { recursive: true });
+            files.forEach(file => {
+              if (file.toLowerCase().includes(query.toLowerCase()) &&
+                (file.endsWith('.lnk') || file.endsWith('.exe'))) {
+                results.push({
+                  name: path.basename(file, path.extname(file)),
+                  path: path.join(searchPath, file)
+                });
+              }
             });
           }
-        });
-      }
-    } else {
-      // Linux: Search in common application directories
-      const searchPaths = ['/usr/share/applications', '/usr/local/share/applications'];
-
-      for (const searchPath of searchPaths) {
-        if (fs.existsSync(searchPath)) {
-          const files = fs.readdirSync(searchPath);
-          files.forEach(file => {
-            if (file.toLowerCase().includes(query.toLowerCase()) && file.endsWith('.desktop')) {
+        }
+      } else if (platform === 'darwin') {
+        // macOS: Search in Applications folder
+        const appsPath = '/Applications';
+        if (fs.existsSync(appsPath)) {
+          const apps = fs.readdirSync(appsPath);
+          apps.forEach(app => {
+            if (app.toLowerCase().includes(query.toLowerCase()) && app.endsWith('.app')) {
               results.push({
-                name: path.basename(file, '.desktop'),
-                path: path.join(searchPath, file)
+                name: path.basename(app, '.app'),
+                path: path.join(appsPath, app)
               });
             }
           });
         }
-      }
-    }
+      } else {
+        // Linux: Search in common application directories
+        const searchPaths = ['/usr/share/applications', '/usr/local/share/applications'];
 
-    return {
-      success: true,
-      results: results.slice(0, 20) // Limit to 20 results
-    };
-  } catch (error) {
-    console.error('[AppSearch] Error:', error);
-    return {
-      success: false,
-      error: error.message,
-      results: []
-    };
-  }
-});
-
-// ============================================================================
-// OPEN EXTERNAL APP - Launch applications
-// ============================================================================
-// Duplicate open-external-app command removed
-
-
-// ============================================================================
-// AUTOMATION & OCR - Integrated handlers
-// ============================================================================
-
-// Helper: Capture Screen Region
-async function captureScreenRegion(bounds, outputPath) {
-  try {
-    if (robot && bounds) {
-      // Use robotjs for specific region if available (fastest)
-      const bmp = robot.screen.capture(bounds.x, bounds.y, bounds.width, bounds.height);
-
-      // Create new Jimp image (v0.x API)
-      const jimpImage = new Jimp(bmp.width, bmp.height);
-
-      let pos = 0;
-      // Convert raw BGRA to RGBA for Jimp
-      jimpImage.scan(0, 0, jimpImage.bitmap.width, jimpImage.bitmap.height, (x, y, idx) => {
-        jimpImage.bitmap.data[idx + 2] = bmp.image.readUInt8(pos++); // B -> R
-        jimpImage.bitmap.data[idx + 1] = bmp.image.readUInt8(pos++); // G
-        jimpImage.bitmap.data[idx + 0] = bmp.image.readUInt8(pos++); // R -> B
-        jimpImage.bitmap.data[idx + 3] = bmp.image.readUInt8(pos++); // A
-      });
-
-      await jimpImage.writeAsync(outputPath);
-      return outputPath;
-    } else {
-      // Fallback to screenshot-desktop (full screen)
-      const imgBuffer = await screenshot({ format: 'png' });
-      const jimpImage = await Jimp.read(imgBuffer);
-
-      if (bounds) {
-        jimpImage.crop(bounds.x, bounds.y, bounds.width, bounds.height);
+        for (const searchPath of searchPaths) {
+          if (fs.existsSync(searchPath)) {
+            const files = fs.readdirSync(searchPath);
+            files.forEach(file => {
+              if (file.toLowerCase().includes(query.toLowerCase()) && file.endsWith('.desktop')) {
+                results.push({
+                  name: path.basename(file, '.desktop'),
+                  path: path.join(searchPath, file)
+                });
+              }
+            });
+          }
+        }
       }
 
-      await jimpImage.writeAsync(outputPath);
-      return outputPath;
+      return {
+        success: true,
+        results: results.slice(0, 20) // Limit to 20 results
+      };
+    } catch (error) {
+      console.error('[AppSearch] Error:', error);
+      return {
+        success: false,
+        error: error.message,
+        results: []
+      };
     }
-  } catch (error) {
-    console.error('Capture failed:', error);
-    throw error;
+  });
+
+  // ============================================================================
+  // OPEN EXTERNAL APP - Launch applications
+  // ============================================================================
+  // Duplicate open-external-app command removed
+
+
+  // ============================================================================
+  // AUTOMATION & OCR - Integrated handlers
+  // ============================================================================
+
+  // Helper: Capture Screen Region
+  async function captureScreenRegion(bounds, outputPath) {
+    try {
+      if (robot && bounds) {
+        // Use robotjs for specific region if available (fastest)
+        const bmp = robot.screen.capture(bounds.x, bounds.y, bounds.width, bounds.height);
+
+        // Create new Jimp image (v0.x API)
+        const jimpImage = new Jimp(bmp.width, bmp.height);
+
+        let pos = 0;
+        // Convert raw BGRA to RGBA for Jimp
+        jimpImage.scan(0, 0, jimpImage.bitmap.width, jimpImage.bitmap.height, (x, y, idx) => {
+          jimpImage.bitmap.data[idx + 2] = bmp.image.readUInt8(pos++); // B -> R
+          jimpImage.bitmap.data[idx + 1] = bmp.image.readUInt8(pos++); // G
+          jimpImage.bitmap.data[idx + 0] = bmp.image.readUInt8(pos++); // R -> B
+          jimpImage.bitmap.data[idx + 3] = bmp.image.readUInt8(pos++); // A
+        });
+
+        await jimpImage.writeAsync(outputPath);
+        return outputPath;
+      } else {
+        // Fallback to screenshot-desktop (full screen)
+        const imgBuffer = await screenshot({ format: 'png' });
+        const jimpImage = await Jimp.read(imgBuffer);
+
+        if (bounds) {
+          jimpImage.crop(bounds.x, bounds.y, bounds.width, bounds.height);
+        }
+
+        await jimpImage.writeAsync(outputPath);
+        return outputPath;
+      }
+    } catch (error) {
+      console.error('Capture failed:', error);
+      throw error;
+    }
   }
-}
 
-// Handler: Perform OCR
-ipcMain.handle('perform-ocr', async (event, options) => {
-  const { useNative = true, bounds, language = 'eng', imagePath } = options || {};
-  let tempFile = imagePath;
-  let shouldDelete = false;
+  // Handler: Perform OCR
+  ipcMain.handle('perform-ocr', async (event, options) => {
+    const { useNative = true, bounds, language = 'eng', imagePath } = options || {};
+    let tempFile = imagePath;
+    let shouldDelete = false;
 
-  if (!tempFile) {
-    tempFile = path.join(os.tmpdir(), `ocr_${Date.now()}.png`);
-    shouldDelete = true;
-  }
-
-  try {
-    if (shouldDelete) {
-      await captureScreenRegion(bounds, tempFile);
+    if (!tempFile) {
+      tempFile = path.join(os.tmpdir(), `ocr_${Date.now()}.png`);
+      shouldDelete = true;
     }
 
-    if (useNative) {
-      try {
-        if (process.platform === 'darwin') {
-          const script = `
+    try {
+      if (shouldDelete) {
+        await captureScreenRegion(bounds, tempFile);
+      }
+
+      if (useNative) {
+        try {
+          if (process.platform === 'darwin') {
+            const script = `
       use framework "Vision"
       use framework "AppKit"
       use scripting additions
@@ -3118,10 +3165,10 @@ ipcMain.handle('perform-ocr', async (event, options) => {
       
       return resultText
           `;
-          const { stdout } = await execPromise(`osascript -l JavaScript -e '${script.replace(/'/g, "\\'")}'`);
-          return { text: stdout.trim(), confidence: 0.95 };
-        } else if (process.platform === 'win32') {
-          const psScript = `
+            const { stdout } = await execPromise(`osascript -l JavaScript -e '${script.replace(/'/g, "\\'")}'`);
+            return { text: stdout.trim(), confidence: 0.95 };
+          } else if (process.platform === 'win32') {
+            const psScript = `
       Add-Type -AssemblyName System.Runtime.WindowsRuntime
       [Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime] | Out-Null
       [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime] | Out-Null
@@ -3137,73 +3184,73 @@ ipcMain.handle('perform-ocr', async (event, options) => {
       
       $result.Text
           `;
-          const { stdout } = await execPromise(`powershell -Command "${psScript.replace(/"/g, '\\"')}"`);
-          return { text: stdout.trim(), confidence: 0.90 };
+            const { stdout } = await execPromise(`powershell -Command "${psScript.replace(/"/g, '\\"')}"`);
+            return { text: stdout.trim(), confidence: 0.90 };
+          }
+        } catch (nativeErr) {
+          console.warn('Native OCR failed (fallback to Tesseract):', nativeErr.message);
         }
-      } catch (nativeErr) {
-        console.warn('Native OCR failed (fallback to Tesseract):', nativeErr.message);
+      }
+
+      // Fallback to Tesseract
+      if (!tesseractWorker) {
+        tesseractWorker = await createWorker(language);
+      }
+      const { data } = await tesseractWorker.recognize(tempFile);
+      return {
+        text: data.text,
+        confidence: data.confidence / 100,
+        words: data.words.map(w => ({ text: w.text, bbox: w.bbox, confidence: w.confidence / 100 }))
+      };
+
+    } catch (error) {
+      console.error('OCR Error:', error);
+      return { error: error.message };
+    } finally {
+      if (shouldDelete) {
+        try { fs.unlinkSync(tempFile); } catch (e) { }
       }
     }
+  });
 
-    // Fallback to Tesseract
-    if (!tesseractWorker) {
-      tesseractWorker = await createWorker(language);
+  // Handler: Perform Click (Comprehensive)
+  const performClickHandler = async (event, args) => {
+    const { x, y, button = 'left', doubleClick = false } = args;
+
+    if (!robot) return { success: false, error: 'robotjs not available' };
+
+    try {
+      robot.moveMouseSmooth(x, y);
+      if (doubleClick) {
+        robot.mouseClick(button, true);
+      } else {
+        robot.mouseClick(button);
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Click Error:', error);
+      return { success: false, error: error.message };
     }
-    const { data } = await tesseractWorker.recognize(tempFile);
-    return {
-      text: data.text,
-      confidence: data.confidence / 100,
-      words: data.words.map(w => ({ text: w.text, bbox: w.bbox, confidence: w.confidence / 100 }))
-    };
+  };
 
-  } catch (error) {
-    console.error('OCR Error:', error);
-    return { error: error.message };
-  } finally {
-    if (shouldDelete) {
-      try { fs.unlinkSync(tempFile); } catch (e) { }
-    }
-  }
-});
+  ipcMain.handle('perform-click', performClickHandler);
+  ipcMain.handle('perform-cross-app-click', performClickHandler); // Alias for backward compatibility
 
-// Handler: Perform Click (Comprehensive)
-const performClickHandler = async (event, args) => {
-  const { x, y, button = 'left', doubleClick = false } = args;
-
-  if (!robot) return { success: false, error: 'robotjs not available' };
-
-  try {
-    robot.moveMouseSmooth(x, y);
-    if (doubleClick) {
-      robot.mouseClick(button, true);
-    } else {
-      robot.mouseClick(button);
-    }
-    return { success: true };
-  } catch (error) {
-    console.error('Click Error:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-ipcMain.handle('perform-click', performClickHandler);
-ipcMain.handle('perform-cross-app-click', performClickHandler); // Alias for backward compatibility
-
-// Handler: Get Window Info
-ipcMain.handle('get-window-info', async () => {
-  try {
-    if (process.platform === 'darwin') {
-      const script = `
+  // Handler: Get Window Info
+  ipcMain.handle('get-window-info', async () => {
+    try {
+      if (process.platform === 'darwin') {
+        const script = `
         tell application "System Events"
           set frontApp to name of first application process whose frontmost is true
           set frontWindow to name of front window of application process frontApp
           return {frontApp, frontWindow}
         end tell
       `;
-      const { stdout } = await execPromise(`osascript -e '${script}'`);
-      return { window: stdout.trim() }; // Simplified parsing
-    } else if (process.platform === 'win32') {
-      const script = `
+        const { stdout } = await execPromise(`osascript -e '${script}'`);
+        return { window: stdout.trim() }; // Simplified parsing
+      } else if (process.platform === 'win32') {
+        const script = `
         Add-Type @"
           using System;
           using System.Runtime.InteropServices;
@@ -3220,92 +3267,93 @@ ipcMain.handle('get-window-info', async () => {
         [void][Win32]::GetWindowText($handle, $title, 256)
         $title.ToString()
       `;
-      const { stdout } = await execPromise(`powershell -Command "${script}"`);
-      return { window: stdout.trim() };
-    }
-    return null;
-  } catch (error) {
-    console.error('Get Window Info Error:', error);
-    return { error: error.message };
-  }
-});
-
-// Duplicate capture-screen-region removed - now consolidated in main handlers section
-
-// ============================================================================
-// GLOBAL HOTKEY - Register global shortcuts
-// ============================================================================
-app.whenReady().then(() => {
-  // Register CMD/Windows + Shift + Space for spotlight search
-  const spotlightShortcut = process.platform === 'darwin' ? 'Command+Shift+Space' : 'Windows+Shift+Space';
-
-  try {
-    globalShortcut.register(spotlightShortcut, () => {
-      console.log('[Hotkey] Spotlight search triggered');
-
-      if (mainWindow) {
-        // Show window if hidden
-        if (!mainWindow.isVisible()) {
-          mainWindow.show();
-        }
-
-        // Focus window
-        mainWindow.focus();
-
-        // Send event to renderer to open unified search
-        mainWindow.webContents.send('open-unified-search');
-      } else {
-        // If window doesn't exist, create it
-        createWindow();
+        const { stdout } = await execPromise(`powershell -Command "${script}"`);
+        return { window: stdout.trim() };
       }
-    });
+      return null;
+    } catch (error) {
+      console.error('Get Window Info Error:', error);
+      return { error: error.message };
+    }
+  });
 
-    console.log(`[Hotkey] Registered ${spotlightShortcut} for spotlight search`);
-  } catch (error) {
-    console.error('[Hotkey] Failed to register:', error);
-  }
-});
+  // Duplicate capture-screen-region removed - now consolidated in main handlers section
 
-app.on('will-quit', () => {
-  // Clear persistent intervals
-  if (networkCheckInterval) clearInterval(networkCheckInterval);
-  if (clipboardCheckInterval) clearInterval(clipboardCheckInterval);
+  // ============================================================================
+  // GLOBAL HOTKEY - Register global shortcuts
+  // ============================================================================
+  app.whenReady().then(() => {
+    // Register CMD/Windows + Shift + Space for spotlight search
+    const spotlightShortcut = process.platform === 'darwin' ? 'Command+Shift+Space' : 'Windows+Shift+Space';
 
-  // Stop MCP server
-  if (mcpServer) {
-    mcpServer.close();
-    console.log('[Main] MCP Server stopped.');
-  }
+    try {
+      globalShortcut.register(spotlightShortcut, () => {
+        console.log('[Hotkey] Spotlight search triggered');
 
-  // Disconnect P2P service
-  if (p2pSyncService) {
-    p2pSyncService.disconnect();
-    console.log('[Main] P2P Sync Service disconnected.');
-  }
+        if (mainWindow) {
+          // Show window if hidden
+          if (!mainWindow.isVisible()) {
+            mainWindow.show();
+          }
 
-  // Stop WiFi Sync service
-  if (wifiSyncService) {
-    wifiSyncService.stop();
-    console.log('[Main] WiFi Sync Service stopped.');
-  }
+          // Focus window
+          mainWindow.focus();
 
-  // Unregister all shortcuts
-  globalShortcut.unregisterAll();
-});
+          // Send event to renderer to open unified search
+          mainWindow.webContents.send('open-unified-search');
+        } else {
+          // If window doesn't exist, create it
+          createWindow();
+        }
+      });
 
-app.on('window-all-closed', async () => {
-  // Terminate the Tesseract worker when the app quits
-  if (tesseractWorker) {
-    console.log('[Main] Terminating Tesseract.js worker...');
-    await tesseractWorker.terminate();
-    console.log('[Main] Tesseract.js worker terminated.');
-  }
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+      console.log(`[Hotkey] Registered ${spotlightShortcut} for spotlight search`);
+    } catch (error) {
+      console.error('[Hotkey] Failed to register:', error);
+    }
+  });
 
-// Final fallback to ensure process exits
-app.on('quit', async () => {
-  process.exit(0);
+  app.on('will-quit', () => {
+    // Clear persistent intervals
+    if (networkCheckInterval) clearInterval(networkCheckInterval);
+    if (clipboardCheckInterval) clearInterval(clipboardCheckInterval);
+
+    // Stop MCP server
+    if (mcpServer) {
+      mcpServer.close();
+      console.log('[Main] MCP Server stopped.');
+    }
+
+    // Disconnect P2P service
+    if (p2pSyncService) {
+      p2pSyncService.disconnect();
+      console.log('[Main] P2P Sync Service disconnected.');
+    }
+
+    // Stop WiFi Sync service
+    if (wifiSyncService) {
+      wifiSyncService.stop();
+      console.log('[Main] WiFi Sync Service stopped.');
+    }
+
+    // Unregister all shortcuts
+    globalShortcut.unregisterAll();
+  });
+
+  app.on('window-all-closed', async () => {
+    // Terminate the Tesseract worker when the app quits
+    if (tesseractWorker) {
+      console.log('[Main] Terminating Tesseract.js worker...');
+      await tesseractWorker.terminate();
+      console.log('[Main] Tesseract.js worker terminated.');
+    }
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
+  // Final fallback to ensure process exits
+  app.on('quit', async () => {
+    process.exit(0);
+  });
 });

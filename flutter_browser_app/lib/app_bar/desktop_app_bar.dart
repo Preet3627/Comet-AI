@@ -91,8 +91,8 @@ class _DesktopAppBarState extends State<DesktopAppBar> {
         ),
         IconButton(
             onPressed: () async {
-              if (!(await  WindowManagerPlus.current.isFullScreen())) {
-                 WindowManagerPlus.current.minimize();
+              if (!(await WindowManagerPlus.current.isFullScreen())) {
+                WindowManagerPlus.current.minimize();
               }
             },
             constraints: const BoxConstraints(
@@ -120,8 +120,8 @@ class _DesktopAppBarState extends State<DesktopAppBar> {
         ),
         IconButton(
             onPressed: () async {
-               WindowManagerPlus.current
-                  .setFullScreen(!(await  WindowManagerPlus.current.isFullScreen()));
+              WindowManagerPlus.current.setFullScreen(
+                  !(await WindowManagerPlus.current.isFullScreen()));
             },
             constraints: const BoxConstraints(
               maxWidth: 13,
@@ -201,19 +201,19 @@ class _DesktopAppBarState extends State<DesktopAppBar> {
               hitTestBehavior: HitTestBehavior.opaque,
               onEnter: (details) {
                 if (!Util.isWindows()) {
-                   WindowManagerPlus.current.setMovable(true);
+                  WindowManagerPlus.current.setMovable(true);
                 }
                 setState(() {});
               },
               onExit: (details) {
                 if (!Util.isWindows()) {
-                   WindowManagerPlus.current.setMovable(false);
+                  WindowManagerPlus.current.setMovable(false);
                 }
               },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onDoubleTap: () async {
-                  await  WindowManagerPlus.current.maximize();
+                  await WindowManagerPlus.current.maximize();
                 },
                 child: !widget.showTabs
                     ? const SizedBox(
@@ -251,7 +251,7 @@ class _DesktopAppBarState extends State<DesktopAppBar> {
     ].whereNotNull().toList();
 
     return Container(
-      color: Theme.of(context).colorScheme.primary,
+      color: const Color(0xFF121212),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.max,
