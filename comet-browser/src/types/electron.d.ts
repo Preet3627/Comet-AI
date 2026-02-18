@@ -194,10 +194,19 @@ declare global {
             onTriggerTranslationDialog: (callback: () => void) => () => void;
             toggleAdblocker: (enable: boolean) => void;
 
-            // WiFi Sync (Mobile to Desktop)
             getWifiSyncQr: () => Promise<string | null>;
             onWifiSyncStatus: (callback: (data: { connected: boolean }) => void) => () => void;
             onRemoteAiPrompt: (callback: (data: { prompt: string; commandId: string }) => void) => () => void;
+
+            // Missing APIs
+            generatePDF: (title: string, content: string) => Promise<{ success: boolean; error?: string }>;
+            getClipboardText: () => Promise<string>;
+            setClipboardText: (text: string) => void;
+            setVolume: (level: number) => Promise<{ success: boolean; error?: string }>;
+            setBrightness: (level: number) => Promise<{ success: boolean; error?: string }>;
+            performClick: (options: any) => Promise<{ success: boolean; error?: string }>;
+            performOCR: (options: any) => Promise<{ success: boolean; results: any[]; error?: string }>;
+            getWindowInfo: () => Promise<any>;
         };
     }
 }
