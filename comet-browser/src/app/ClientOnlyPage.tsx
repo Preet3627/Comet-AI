@@ -1101,6 +1101,7 @@ export default function Home() {
                   label={item.label}
                   active={!!(item.view && store.activeView === item.view) || !!(item.manager && activeManager === item.manager)}
                   onClick={() => handleSidebarClick(item)}
+                  collapsed={true}
                 />
               ))}
             </motion.div>
