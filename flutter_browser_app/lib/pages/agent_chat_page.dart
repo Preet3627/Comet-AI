@@ -59,22 +59,24 @@ class _AgentChatPageState extends State<AgentChatPage>
   }
 
   Future<void> _loadApiKeyAndStart() async {
-    // Try to get API key from browser settings
     final browserModel = Provider.of<BrowserModel>(context, listen: false);
     final settings = browserModel.getSettings();
-    // Use stored Claude/Anthropic key
-    _apiKey = settings.claudeApiKey.isNotEmpty ? settings.claudeApiKey : null;
+    final isGemini = settings.geminiModel.toLowerCase().contains('gemini');
+
+    _apiKey = isGemini ? settings.geminiApiKey : settings.claudeApiKey;
 
     if (_apiKey == null || _apiKey!.isEmpty) {
-      // Show API key dialog
-      final key = await _showApiKeyDialog();
+      final key = await _showApiKeyDialog(isGemini);
       if (key == null || key.isEmpty) {
         if (mounted) Navigator.pop(context);
         return;
       }
       _apiKey = key;
-      // Save it
-      settings.claudeApiKey = key;
+      if (isGemini) {
+        settings.geminiApiKey = key;
+      } else {
+        settings.claudeApiKey = key;
+      }
       browserModel.updateSettings(settings);
       browserModel.save();
     }
@@ -82,24 +84,28 @@ class _AgentChatPageState extends State<AgentChatPage>
     _startAgent();
   }
 
-  Future<String?> _showApiKeyDialog() async {
+  Future<String?> _showApiKeyDialog(bool isGemini) async {
     final controller = TextEditingController();
+    final providerName = isGemini ? 'Gemini' : 'Claude';
+    final keyPrefix = isGemini ? 'AIza...' : 'sk-ant...';
+
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0D0D1A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text(
-          'Claude API Key Required',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        title: Text(
+          '$providerName API Key Required',
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Comet Agent uses Claude AI to browse the web autonomously. Enter your Anthropic API key to continue.',
-              style: TextStyle(color: Colors.white60, fontSize: 13),
+            Text(
+              'Comet Agent uses $providerName AI to browse the web autonomously. Enter your API key to continue.',
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -107,17 +113,14 @@ class _AgentChatPageState extends State<AgentChatPage>
               obscureText: true,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'sk-ant-...',
+                hintText: keyPrefix,
                 hintStyle: const TextStyle(color: Colors.white30),
                 filled: true,
                 fillColor: Colors.white.withOpacity(0.05),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.cyan.withOpacity(0.3)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.cyan.withOpacity(0.2)),
+                  borderSide: BorderSide(
+                      color: const Color(0xFF00E5FF).withOpacity(0.3)),
                 ),
               ),
             ),
@@ -146,8 +149,12 @@ class _AgentChatPageState extends State<AgentChatPage>
   }
 
   void _startAgent() {
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final settings = browserModel.getSettings();
+
     _agentService = CometAgentService(
       apiKey: _apiKey!,
+      model: settings.geminiModel,
       webViewController: widget.webViewController,
     );
 

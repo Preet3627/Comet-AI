@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback } from 'react';
-import { Minus, Square, X, Maximize2, Settings, Search } from 'lucide-react'; // Import Settings icon and Search icon
+import { Minus, Square, X, Maximize2, Settings, Search, LogIn } from 'lucide-react'; // Import Settings icon and Search icon
 import { VirtualizedTabBar } from './VirtualizedTabBar';
 import { useAppStore } from '@/store/useAppStore';
 import { useRouter } from 'next/navigation'; // Import useRouter
@@ -94,10 +94,10 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
                 ) : (
                     <button
                         onClick={handleSignIn}
-                        className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-full text-xs font-semibold text-white/80 transition-colors flex items-center gap-1"
-                        title="Sign in with Google"
+                        className="px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 rounded-full text-xs font-semibold text-sky-400 border border-sky-500/30 transition-colors flex items-center gap-1"
+                        title="Sign in with Comet ID"
                     >
-                        <img src="https://www.google.com/favicon.ico" alt="Google" className="w-3.5 h-3.5" />
+                        <LogIn size={14} />
                         <span>Sign in</span>
                     </button>
                 )}

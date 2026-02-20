@@ -10,7 +10,6 @@ import 'agent_chat_page.dart';
 import '../url_predictor.dart';
 import 'dart:ui';
 
-/// Custom Comet-AI Home Page with vibrant glassmorphism UI
 class CometHomePage extends StatefulWidget {
   final Function(String)? onSearch;
 
@@ -24,8 +23,7 @@ class _CometHomePageState extends State<CometHomePage>
     with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _animationController;
-  late Animation<double> _glowAnimation;
-  bool _isShortcutsDirty = false;
+  late Animation<double> _fadeAnimation;
   List<String> _suggestions = [];
 
   @override
@@ -33,12 +31,12 @@ class _CometHomePageState extends State<CometHomePage>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
-
-    _glowAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+      duration: const Duration(milliseconds: 1500),
     );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+    );
+    _animationController.forward();
   }
 
   @override
@@ -48,40 +46,33 @@ class _CometHomePageState extends State<CometHomePage>
     super.dispose();
   }
 
-  void _handleSearch() {
-    if (_searchController.text.isNotEmpty) {
-      final query = _searchController.text;
+  void _handleSearch([String? forcedQuery]) {
+    final query = forcedQuery ?? _searchController.text;
+    if (query.isNotEmpty) {
       final windowModel = Provider.of<WindowModel>(context, listen: false);
 
       if (query.startsWith('>>')) {
-        // Trigger Comet Agent (agentic AI)
         final task = query.substring(2).trim();
         if (task.isEmpty) return;
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => AgentChatPage(
-              initialTask: task,
-              webViewController:
-                  null, // Will be set when launched from browser tab
-            ),
+            builder: (context) => AgentChatPage(initialTask: task),
           ),
         );
         return;
-      }
-
-      if (query.startsWith('>')) {
-        // Trigger Full Screen AI Chat
+      } else if (query.startsWith('>')) {
+        final prompt = query.substring(1).trim();
+        if (prompt.isEmpty) return;
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => FullScreenAIChat(initialMessage: query),
+            builder: (context) => FullScreenAIChat(initialMessage: prompt),
           ),
         );
         return;
       }
 
-      // Check if it's a URL or search query
       String url = query;
       if (!query.startsWith('http://') && !query.startsWith('https://')) {
         if (query.contains('.') && !query.contains(' ')) {
@@ -109,229 +100,176 @@ class _CometHomePageState extends State<CometHomePage>
   Widget build(BuildContext context) {
     final browserModel = Provider.of<BrowserModel>(context);
     final settings = browserModel.getSettings();
-    final bgColor = Color(int.parse(settings.homePageBgColor));
+    final isVibrant = settings.theme == "Vibrant";
 
-    return Container(
-      decoration: BoxDecoration(color: bgColor),
-      child: Stack(
-        children: [
-          // Animated background particles/stars
-          ...List.generate(30, (index) => _buildStar(index)),
-
-          // Main content
-          SafeArea(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 60),
-
-                    // Animated Comet-AI Logo
-                    _buildAnimatedLogo(settings),
-
-                    const SizedBox(height: 20),
-
-                    // "Ask Comet-AI anything" text
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [
-                          Color(0xFF00E5FF),
-                          Color(0xFFD500F9),
-                          Color(0xFF00E5FF),
-                        ],
-                      ).createShader(bounds),
-                      child: Text(
-                        settings.homePageWelcomeMessage,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          fontFamily: 'Outfit',
-                          letterSpacing: 1.5,
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isVibrant
+                ? [
+                    const Color(0xFF0F0C29),
+                    const Color(0xFF302B63),
+                    const Color(0xFF24243E)
+                  ]
+                : [const Color(0xFF000000), const Color(0xFF0A0A0A)],
+          ),
+        ),
+        child: Stack(
+          children: [
+            if (isVibrant) ...[
+              Positioned(
+                top: -100,
+                right: -100,
+                child: Container(
+                  width: 300,
+                  height: 300,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF00E5FF).withOpacity(0.05),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: -50,
+                left: -50,
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFD500F9).withOpacity(0.05),
+                  ),
+                ),
+              ),
+            ],
+            FadeTransition(
+              opacity: _fadeAnimation,
+              child: SafeArea(
+                child: CustomScrollView(
+                  slivers: [
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 80),
+                            _buildModernLogo(settings),
+                            const SizedBox(height: 40),
+                            _buildAddressSearchBar(settings),
+                            _buildSuggestions(),
+                            const SizedBox(height: 48),
+                            _buildBookmarksSection(settings, browserModel),
+                            const Spacer(),
+                            _buildQuickFeatures(context),
+                            const SizedBox(height: 40),
+                          ],
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 30),
-
-                    // Search bar with glassmorphism
-                    _buildSearchBar(settings),
-                    _buildSuggestions(),
-
-                    const SizedBox(height: 30),
-
-                    // Quick action buttons removed as requested
-
-                    const SizedBox(height: 30),
-
-                    // User Defined Shortcuts
-                    _buildUserShortcuts(settings, browserModel),
-
-                    const SizedBox(height: 30),
-
-                    // Social shortcuts (kept optionally)
-                    if (settings.showSocialShortcuts)
-                      _buildSocialShortcuts(settings),
-
-                    const SizedBox(height: 30),
-
-                    // Additional features
-                    _buildFeatureButtons(),
                   ],
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernLogo(BrowserSettings settings) {
+    return Column(
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF00E5FF), Color(0xFFD500F9)],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00E5FF).withOpacity(0.3),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
           ),
+          child: const Center(
+            child: Icon(Icons.rocket_launch, size: 40, color: Colors.white),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          settings.logoName.toUpperCase(),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddressSearchBar(BrowserSettings settings) {
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 20),
+          GestureDetector(
+            onTap: () => _showAgentDialog(),
+            child: const Icon(Icons.auto_awesome,
+                color: Color(0xFF00E5FF), size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              decoration: InputDecoration(
+                hintText: "Search or enter address",
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                border: InputBorder.none,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _suggestions = URLPredictor.getPredictions(value);
+                });
+              },
+              onSubmitted: (_) => _handleSearch(),
+            ),
+          ),
+          const SizedBox(width: 16),
+          _buildActionButton(Icons.add, () => _handleSearch()),
+          const SizedBox(width: 8),
         ],
       ),
     );
   }
 
-  Widget _buildStar(int index) {
-    final random = index * 0.1;
-    return Positioned(
-      left: (index * 37.0) % MediaQuery.of(context).size.width,
-      top: (index * 53.0) % MediaQuery.of(context).size.height,
-      child: AnimatedBuilder(
-        animation: _glowAnimation,
-        builder: (context, child) {
-          return Opacity(
-            opacity: (0.3 + random * 0.4) * _glowAnimation.value,
-            child: Container(
-              width: 2 + (index % 3),
-              height: 2 + (index % 3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF00E5FF).withOpacity(0.4),
-                    blurRadius: 6,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildAnimatedLogo(BrowserSettings settings) {
-    return AnimatedBuilder(
-      animation: _glowAnimation,
-      builder: (context, child) {
-        return Container(
-          width: 140,
-          height: 140,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(
-                  0xFF00E5FF,
-                ).withOpacity(0.3 * _glowAnimation.value),
-                blurRadius: 40,
-                spreadRadius: 15,
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(5.0),
-            child: Container(
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black,
-              ),
-              child: ClipOval(
-                child: settings.logoUrl.isNotEmpty
-                    ? Image.network(
-                        settings.logoUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildDefaultLogo(settings),
-                      )
-                    : _buildDefaultLogo(settings),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDefaultLogo(BrowserSettings settings) {
-    return Image.asset(
-      'assets/icon/icon.png',
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => const Icon(
-        Icons.rocket_launch,
-        size: 70,
-        color: Color(0xFF00E5FF),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar(BrowserSettings settings) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: const Color(0xFF00E5FF).withOpacity(0.3),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00E5FF).withOpacity(0.1),
-                blurRadius: 10,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.search, color: Color(0xFF00E5FF), size: 24),
-              const SizedBox(width: 15),
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontFamily: 'Inter',
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Search or enter address',
-                    hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
-                      fontFamily: 'Inter',
-                    ),
-                    border: InputBorder.none,
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _suggestions = URLPredictor.getPredictions(value);
-                    });
-                  },
-                  onSubmitted: (_) => _handleSearch(),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward, color: Color(0xFF00E5FF)),
-                onPressed: _handleSearch,
-              ),
-            ],
-          ),
+  Widget _buildActionButton(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          shape: BoxShape.circle,
         ),
+        child: Icon(icon, color: Colors.white.withOpacity(0.6), size: 20),
       ),
     );
   }
@@ -339,196 +277,103 @@ class _CometHomePageState extends State<CometHomePage>
   Widget _buildSuggestions() {
     if (_suggestions.isEmpty) return const SizedBox.shrink();
     return Container(
-      margin: const EdgeInsets.only(top: 10, left: 10, right: 10),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.2)),
+        color: Colors.black.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
-        children: _suggestions.map((suggestion) {
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-            title: Text(suggestion,
-                style: const TextStyle(color: Colors.white70, fontSize: 14)),
-            trailing: const Icon(Icons.arrow_outward,
-                color: Colors.white24, size: 16),
-            onTap: () {
-              _searchController.text = suggestion;
-              setState(() {
-                _suggestions = [];
-              });
-              _handleSearch();
-            },
-          );
-        }).toList(),
+        children: _suggestions
+            .map((s) => ListTile(
+                  title: Text(s,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 14)),
+                  leading: const Icon(Icons.history,
+                      color: Colors.white24, size: 18),
+                  onTap: () {
+                    _searchController.text = s;
+                    _handleSearch();
+                  },
+                ))
+            .toList(),
       ),
     );
   }
 
-  Widget _buildQuickActions() {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 15,
-      crossAxisSpacing: 15,
-      childAspectRatio: 1.5,
+  Widget _buildBookmarksSection(
+      BrowserSettings settings, BrowserModel browserModel) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildActionButton(
-            'Generate Art',
-            Icons.palette,
-            [
-              Color(0xFFE91E63),
-              Color(0xFFD500F9),
-            ],
-            () => widget.onSearch?.call('generate art')),
-        _buildActionButton(
-          'Ask Questions',
-          Icons.question_answer,
-          [Color(0xFF00BCD4), Color(0xFF29B6F6)],
-          () => widget.onSearch?.call('ask question'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              "BOOKMARKS",
+              style: TextStyle(
+                  color: Colors.white38,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add, color: Colors.white24, size: 16),
+              onPressed: () => _showAddShortcutDialog(settings, browserModel),
+            ),
+          ],
         ),
-        _buildActionButton(
-          'Summarize Text',
-          Icons.description,
-          [Color(0xFF5C6BC0), Color(0xFF7E57C2)],
-          () => widget.onSearch?.call('summarize'),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 24,
+          runSpacing: 24,
+          children: settings.homePageShortcuts
+              .map((e) => _buildBookmarkItem(e))
+              .toList(),
         ),
-        _buildActionButton(
-            'Write Code',
-            Icons.code,
-            [
-              Color(0xFF26A69A),
-              Color(0xFF00E676),
-            ],
-            () => widget.onSearch?.call('write code')),
       ],
     );
   }
 
-  Widget _buildActionButton(
-    String title,
-    IconData icon,
-    List<Color> gradientColors,
-    VoidCallback onTap,
-  ) {
+  Widget _buildBookmarkItem(Map<String, String> shortcut) {
     return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
+      onTap: () => _handleSearch(shortcut['url']),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  gradientColors[0].withOpacity(0.2),
-                  gradientColors[1].withOpacity(0.1),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: gradientColors[0], size: 32),
-                const SizedBox(height: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ],
+            child: const Center(
+              child: Icon(Icons.public, color: Colors.white54, size: 24),
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            shortcut['name']!,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSocialShortcuts(BrowserSettings settings) {
-    final socials = [
-      {
-        'icon': 'https://www.facebook.com/favicon.ico',
-        'url': 'https://facebook.com',
-        'color': Color(0xFF1877F2),
-      },
-      {
-        'icon': 'https://twitter.com/favicon.ico',
-        'url': 'https://twitter.com',
-        'color': Color(0xFF1DA1F2),
-      },
-      {
-        'icon': 'https://instagram.com/favicon.ico',
-        'url': 'https://instagram.com',
-        'color': Color(0xFFE4405F),
-      },
-      {
-        'icon': 'https://youtube.com/favicon.ico',
-        'url': 'https://youtube.com',
-        'color': Color(0xFFFF0000),
-      },
-      {
-        'icon': 'https://google.com/favicon.ico',
-        'url': 'https://google.com',
-        'color': Color(0xFF4285F4),
-      },
-    ];
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: socials.map((social) {
-        return _buildSocialButton(
-          social['url'] as String,
-          social['color'] as Color,
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSocialButton(String url, Color color) {
-    return GestureDetector(
-      onTap: () => widget.onSearch?.call(url),
-      child: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
-          ),
-          border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
-        ),
-        child: Icon(Icons.link, color: color, size: 28),
-      ),
-    );
-  }
-
-  Widget _buildFeatureButtons() {
+  Widget _buildQuickFeatures(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildFeatureIcon(Icons.settings, 'Settings', () {
-          Navigator.pushNamed(context, '/settings');
-        }),
-        _buildFeatureIcon(Icons.qr_code_scanner, 'Connect PC', () {
-          Navigator.pushNamed(context, '/connect-desktop');
-        }),
-        _buildFeatureIcon(Icons.bookmark, 'Bookmarks', () {
-          Navigator.pushNamed(context, '/bookmarks');
-        }),
-        _buildFeatureIcon(Icons.auto_awesome, 'Agent AI', () {
-          _showAgentDialog();
-        }),
+        _buildFeatureIcon(Icons.history, "History",
+            () => Navigator.pushNamed(context, '/settings')),
+        _buildFeatureIcon(Icons.qr_code, "Sync",
+            () => Navigator.pushNamed(context, '/connect-desktop')),
+        _buildFeatureIcon(Icons.shield, "Safe", () {}),
+        _buildFeatureIcon(Icons.psychology, "Gemini", () => _showAgentDialog()),
       ],
     );
   }
@@ -538,191 +383,10 @@ class _CometHomePageState extends State<CometHomePage>
       onTap: onTap,
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF29B6F6).withOpacity(0.2),
-                  const Color(0xFFD500F9).withOpacity(0.1),
-                ],
-              ),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: Icon(icon, color: const Color(0xFF29B6F6), size: 24),
-          ),
+          Icon(icon, color: Colors.white30, size: 24),
           const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontFamily: 'Inter',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUserShortcuts(
-      BrowserSettings settings, BrowserModel browserModel) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              "Your Shortcuts",
-              style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold),
-            ),
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline,
-                  color: Color(0xFF00E5FF)),
-              onPressed: () => _showAddShortcutDialog(settings, browserModel),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            mainAxisSpacing: 15,
-            crossAxisSpacing: 15,
-            childAspectRatio: 1,
-          ),
-          itemCount: settings.homePageShortcuts.length,
-          itemBuilder: (context, index) {
-            final shortcut = settings.homePageShortcuts[index];
-            return _buildShortcutItem(shortcut, index, settings, browserModel);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShortcutItem(Map<String, String> shortcut, int index,
-      BrowserSettings settings, BrowserModel browserModel) {
-    return GestureDetector(
-      onLongPress: () =>
-          _showDeleteShortcutDialog(index, settings, browserModel),
-      onTap: () => widget.onSearch?.call(shortcut['url']!),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withOpacity(0.2)),
-            ),
-            child: const Icon(Icons.public, color: Colors.white, size: 24),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            shortcut['name']!,
-            style: const TextStyle(color: Colors.white, fontSize: 10),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddShortcutDialog(
-      BrowserSettings settings, BrowserModel browserModel) {
-    final nameController = TextEditingController();
-    final urlController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF121212),
-        title:
-            const Text("Add Shortcut", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                  labelText: "Name", labelStyle: TextStyle(color: Colors.grey)),
-            ),
-            TextField(
-              controller: urlController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                  labelText: "URL", labelStyle: TextStyle(color: Colors.grey)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty &&
-                  urlController.text.isNotEmpty) {
-                final newShortcuts =
-                    List<Map<String, String>>.from(settings.homePageShortcuts);
-                newShortcuts.add({
-                  'name': nameController.text,
-                  'url': urlController.text.startsWith('http')
-                      ? urlController.text
-                      : 'https://${urlController.text}'
-                });
-                settings.homePageShortcuts = newShortcuts;
-                browserModel.updateSettings(settings);
-                browserModel.save();
-                Navigator.pop(context);
-                setState(() {});
-              }
-            },
-            child: const Text("Add"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteShortcutDialog(
-      int index, BrowserSettings settings, BrowserModel browserModel) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF121212),
-        title: const Text("Delete Shortcut?",
-            style: TextStyle(color: Colors.white)),
-        content: const Text("Are you sure you want to remove this shortcut?",
-            style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text("No")),
-          TextButton(
-            onPressed: () {
-              final newShortcuts =
-                  List<Map<String, String>>.from(settings.homePageShortcuts);
-              newShortcuts.removeAt(index);
-              settings.homePageShortcuts = newShortcuts;
-              browserModel.updateSettings(settings);
-              browserModel.save();
-              Navigator.pop(context);
-              setState(() {});
-            },
-            child: const Text("Yes", style: TextStyle(color: Colors.redAccent)),
-          ),
+          Text(label,
+              style: const TextStyle(color: Colors.white30, fontSize: 10)),
         ],
       ),
     );
@@ -732,80 +396,81 @@ class _CometHomePageState extends State<CometHomePage>
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF020208),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.auto_awesome, color: Color(0xFF00E5FF)),
-            const SizedBox(width: 10),
-            const Text("Comet Agent", style: TextStyle(color: Colors.white)),
-          ],
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: AlertDialog(
+          backgroundColor: Colors.black.withOpacity(0.8),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32),
+              side: const BorderSide(color: Colors.white12)),
+          title: const Text("Comet Neural Agent",
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+          content: TextField(
+            controller: controller,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: "Issue a command...",
+              hintStyle: TextStyle(color: Colors.white24),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.05),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
+            ),
+            onSubmitted: (val) {
+              Navigator.pop(context);
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (c) => AgentChatPage(initialTask: val)));
+            },
+          ),
         ),
+      ),
+    );
+  }
+
+  void _showAddShortcutDialog(
+      BrowserSettings settings, BrowserModel browserModel) {
+    final nameController = TextEditingController();
+    final urlController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title:
+            const Text("Add Shortcut", style: TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "What should the agent do for you today?",
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            const SizedBox(height: 15),
             TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white),
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: "e.g. Find the best current price for a PS5",
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-                filled: true,
-                fillColor: Colors.white.withOpacity(0.05),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                      color: const Color(0xFF00E5FF).withOpacity(0.3)),
-                ),
-              ),
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => AgentChatPage(
-                        initialTask: value.trim(),
-                      ),
-                    ),
-                  );
-                }
-              },
-            ),
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: "Name")),
+            TextField(
+                controller: urlController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: "URL")),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00E5FF),
-              foregroundColor: Colors.black,
-            ),
             onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
+              if (nameController.text.isNotEmpty &&
+                  urlController.text.isNotEmpty) {
+                final newShortcuts =
+                    List<Map<String, String>>.from(settings.homePageShortcuts);
+                newShortcuts.add(
+                    {'name': nameController.text, 'url': urlController.text});
+                settings.homePageShortcuts = newShortcuts;
+                browserModel.updateSettings(settings);
+                browserModel.save();
                 Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AgentChatPage(
-                      initialTask: controller.text.trim(),
-                    ),
-                  ),
-                );
+                setState(() {});
               }
             },
-            child: const Text("Launch Agent"),
+            child: const Text("Add"),
           ),
         ],
       ),

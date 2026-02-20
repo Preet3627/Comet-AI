@@ -20,6 +20,7 @@ class BrowserSettings {
   String customUrlHomePage;
   bool debuggingEnabled;
   String geminiApiKey;
+  String geminiModel;
   String openaiApiKey;
   String claudeApiKey;
   String openRouterApiKey;
@@ -45,6 +46,7 @@ class BrowserSettings {
     this.customUrlHomePage = "",
     this.debuggingEnabled = false,
     this.geminiApiKey = "",
+    this.geminiModel = "gemini-3.1-pro-preview",
     this.openaiApiKey = "",
     this.claudeApiKey = "",
     this.openRouterApiKey = "",
@@ -101,6 +103,7 @@ class BrowserSettings {
             customUrlHomePage: map["customUrlHomePage"] ?? "",
             debuggingEnabled: map["debuggingEnabled"] ?? false,
             geminiApiKey: map["geminiApiKey"] ?? "",
+            geminiModel: map["geminiModel"] ?? "gemini-3.1-pro-preview",
             openaiApiKey: map["openaiApiKey"] ?? "",
             claudeApiKey: map["claudeApiKey"] ?? "",
             openRouterApiKey: map["openRouterApiKey"] ?? "",
@@ -134,6 +137,7 @@ class BrowserSettings {
       "customUrlHomePage": customUrlHomePage,
       "debuggingEnabled": debuggingEnabled,
       "geminiApiKey": geminiApiKey,
+      "geminiModel": geminiModel,
       "openaiApiKey": openaiApiKey,
       "claudeApiKey": claudeApiKey,
       "openRouterApiKey": openRouterApiKey,

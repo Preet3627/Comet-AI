@@ -21,42 +21,31 @@ import {
     Search,
     RefreshCw,
     ExternalLink,
-    Copy as CopyIcon
+    Copy as CopyIcon,
+    Download as DownloadIcon
 } from "lucide-react";
 import { firebaseConfigStorage, FirebaseConfig } from "@/lib/firebaseConfigStorage";
 
 const COMET_README = `
-# ☄️ Comet Browser (v0.1.8)
+# ☄️ Comet Browser (v0.2.0)
 Made in India 🇮🇳
-### The Intelligent Workspace for the Future
+### The Future of Autonomous Web Intelligence
 
-**Built by a solo high school developer (Latestinssan)**, running on extreme constraints (i3 4th Gen, 4GB RAM), yet designed to outperform modern browsers in productivity and intelligence.
+**Comet** is an AI-native browser designed to automate your digital life. Built for extreme performance and deep AI integration.
 
-**Comet** is not just a fork; it's a **custom-hardened Chromium environment** designed for:
-1.  **Native AI Orchestration**: Seamlessly switch between Google Gemini 3, GPT-4o, Claude 3.5, Groq, and **Local Ollama (Deepseek R1)**.
-2.  **RAG-Powered Memory**: Your browser remembers your context. It builds a local vector database of your sessions to provide "Perplexity-style" answers offline.
-3.  **Hardware Isolation**: Every tab is sandboxed for maximum security and crash resistance.
-4.  **Decentralized Sync**: Sync your data (tabs, clipboard, history) across devices using P2P direct connections or Firebase with end-to-end encryption.
+**Core Pillars:**
+1.  **Autonomous Agency**: The Comet Agent doesn't just answer questions; it *acts*. It can navigate, scrape, and automate complex workflows.
+2.  **Neural Orchestration**: Native support for Gemini 1.5 Pro, Claude 3.5, and local Deepseek R1 via Ollama.
+3.  **Local Memory (RAG)**: Built-in vector database for infinite semantic history search.
+4.  **Hardware Isolation**: Sandboxed Chromium environment for maximum security.
 
 ---
 
-## 🚀 Features (v0.1.8 Stable)
-
-### 🧠 Intelligence & RAG
-*   **Perplexity-Style Answers**: Ask complex questions to your sidebar. Comet scans your current page and retrieves relevant context from your history.
-*   **Local Vector DB**: Automatically indexes your browsing for offline semantic search.
-*   **Deepseek R1 Integration**: Optimized for the 1.5B model running locally via Ollama.
-*   **OCR & Vision**: Automatic screenshot analysis and text extraction via Tesseract.js.
-
-### ⚡ Performance & Core
-*   **Chromium Rendering Engine**: We use the raw power of Chromium for 100% web compatibility, stripped of bloatware.
-*   **Optimized for Low-End PCs**: Validated on 4GB RAM machines. Aggressive tab suspension technology.
-*   **Google Navigation Fixed**: Resolved infinite loop issues with search engine redirects.
-
-### 🛡️ Security & Sync
-*   **Identity-Aware**: Login via \`browser.ponsrischool.in\` to verify your session.
-*   **P2P File Drop**: Send files between Mobile and Desktop instantly.
-*   **Admin Console**: (Enterprise) Manage user access and monitor sync status.
+## 🚀 Version 0.2.0 "Stardust" Update
+*   **Neural Translation Engine**: Integrated Google Translate with AI fallback.
+*   **Ambient Workspace**: Procedural music and visualizer for productivity.
+*   **Performance++**: Reduced RAM footprint for 4GB systems.
+*   **Global Spotlight**: Instant ⌘+Space/Alt+Space access to everything.
 `.trim();
 
 import { firebaseSyncService } from "@/lib/FirebaseSyncService";
@@ -208,7 +197,7 @@ const LandingPage = () => {
                                 onClick={handleLogin}
                                 className="px-6 py-2 glass-dark rounded-xl border border-white/10 hover:border-sky-400/50 transition-all flex items-center gap-2 group"
                             >
-                                <span className="text-xs font-black uppercase tracking-widest text-sky-400">Identity Access</span>
+                                <span className="text-xs font-black uppercase tracking-widest text-sky-400">Comet ID Access</span>
                                 <LogIn size={16} className="text-sky-400 group-hover:translate-x-1 transition-transform" />
                             </button>
                         </div>
@@ -222,7 +211,7 @@ const LandingPage = () => {
                         <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }}>
                             <div className="inline-block px-4 py-1.5 rounded-full bg-sky-500/10 border border-sky-400/20 text-sky-400 text-[10px] font-black uppercase tracking-widest mb-8">
                                 <Sparkles size={12} className="inline mr-2" />
-                                Experimental Preview • v0.1.8 Stable
+                                Neural Link Established • v0.2.0 Stardust
                             </div>
                             <h1 className="text-7xl md:text-[8.5rem] font-black uppercase mb-8 leading-[0.82] tracking-tighter text-white">
                                 Navigate <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-indigo-400 to-purple-500 animate-gradient-x">THE VOID</span>
@@ -251,8 +240,8 @@ const LandingPage = () => {
                                             disabled={isLoading}
                                             className="btn-vibrant-secondary flex items-center justify-center gap-3 py-5"
                                         >
-                                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google" />
-                                            {isLoading ? <RefreshCw className="animate-spin" size={18} /> : 'Authorize via Google'}
+                                            <Shield size={18} className="text-sky-400" />
+                                            {isLoading ? <RefreshCw className="animate-spin" size={18} /> : 'Authorize Comet ID'}
                                         </button>
                                     </>
                                 )}
@@ -261,6 +250,27 @@ const LandingPage = () => {
                                         {store.user ? `Identified Entity: ${store.user.email}` : 'No registration required for guest access'}
                                     </p>
                                 </div>
+
+                                {store.user && (
+                                    <div className="mt-8 grid grid-cols-1 gap-4">
+                                        <button
+                                            onClick={() => {
+                                                const platform = navigator.platform.toLowerCase();
+                                                let url = "https://github.com/Preet3627/Comet-AI/releases/latest";
+                                                if (platform.includes('win')) url = "https://github.com/Preet3627/Comet-AI/releases/download/v0.2.0/Comet-Setup.exe";
+                                                else if (platform.includes('mac')) url = "https://github.com/Preet3627/Comet-AI/releases/download/v0.2.0/Comet-Mac.dmg";
+                                                window.open(url, '_blank');
+                                            }}
+                                            className="w-full py-4 glass-vibrant rounded-2xl border border-sky-400/30 flex items-center justify-center gap-3 group hover:bg-sky-400/10 transition-all"
+                                        >
+                                            <DownloadIcon size={18} className="text-sky-400" />
+                                            <div className="text-left">
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Download Latest Release</p>
+                                                <p className="text-[8px] font-bold text-sky-400/60 uppercase tracking-widest">v0.2.0 for {navigator.platform}</p>
+                                            </div>
+                                        </button>
+                                    </div>
+                                )}
 
                                 {store.user && (
                                     <motion.div

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/browser_model.dart';
 import '../sync_service.dart';
 
 class FullScreenAIChat extends StatefulWidget {
@@ -39,8 +41,18 @@ class _FullScreenAIChatState extends State<FullScreenAIChat> {
     });
 
     try {
-      final result =
-          await syncService.sendPromptToDesktop(widget.initialMessage);
+      final browserModel = Provider.of<BrowserModel>(context, listen: false);
+      final settings = browserModel.getSettings();
+      final model = settings.geminiModel;
+
+      setState(() {
+        _statusMessage = "Using $model Intelligence...";
+      });
+
+      final result = await syncService.sendPromptToDesktop(
+        widget.initialMessage,
+        model: model,
+      );
       setState(() {
         if (result != null && result['error'] != null) {
           _statusMessage = "Process Failed";

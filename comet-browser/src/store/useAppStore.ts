@@ -662,13 +662,13 @@ export const useAppStore = create<BrowserState>()(
                     // Create the view first
                     window.electronAPI.createView({ tabId: id, url: finalUrl });
 
-                    // Activate it immediately with default bounds
-                    // The bounds will be updated by the UI component
+                    // Activate it immediately with sensible defaults
+                    // (x: 70 for rail, y: 96 for title+url bar)
                     setTimeout(() => {
                         if (window.electronAPI) {
                             window.electronAPI.activateView({
                                 tabId: id,
-                                bounds: { x: 0, y: 40, width: 1200, height: 760 }
+                                bounds: { x: 70, y: 96, width: 1000, height: 700 }
                             });
                         }
                     }, 100);

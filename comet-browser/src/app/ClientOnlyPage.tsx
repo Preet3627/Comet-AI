@@ -1101,7 +1101,6 @@ export default function Home() {
                   label={item.label}
                   active={!!(item.view && store.activeView === item.view) || !!(item.manager && activeManager === item.manager)}
                   onClick={() => handleSidebarClick(item)}
-                  collapsed={true}
                 />
               ))}
             </motion.div>
@@ -1120,14 +1119,21 @@ export default function Home() {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: store.isSidebarCollapsed ? 70 : store.sidebarWidth, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.5, ease: 'easeInOut' }}
-              className={`h-full border-r border-border-color cursor-grab active:cursor-grabbing ${store.sidebarSide === 'left' ? 'order-first' : 'order-last'} no-drag-region`}
+              transition={{ duration: 0.3, ease: 'easeOut' }} // Faster transition
+              className={`h-full border-r border-border-color cursor-grab active:cursor-grabbing ${store.sidebarSide === 'left' ? 'order-first' : 'order-last'} no-drag-region bg-black/20`}
+              onUpdate={() => {
+                // Trigger resize during animation to keep BrowserView in sync
+                if (window.electronAPI) window.dispatchEvent(new Event('resize'));
+              }}
             >
               <AIChatSidebar
                 studentMode={store.studentMode}
                 toggleStudentMode={() => store.setStudentMode(!store.studentMode)}
                 isCollapsed={store.isSidebarCollapsed}
-                toggleCollapse={store.toggleSidebarCollapse}
+                toggleCollapse={() => {
+                  store.toggleSidebarCollapse();
+                  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+                }}
                 selectedEngine={store.selectedEngine}
                 setSelectedEngine={store.setSelectedEngine}
                 theme={store.theme}
@@ -1143,9 +1149,9 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
-        <main className="flex-1 flex flex-col relative overflow-hidden bg-black/5">
+        <main className="flex-1 flex flex-col relative overflow-hidden bg-black/5 min-w-0">
           {store.activeView === 'browser' && (
-            <header className="h-[56px] flex items-center px-4 gap-4 border-b border-white/5 bg-black/40 backdrop-blur-3xl z-40 no-drag-region">
+            <header className="h-[56px] flex-shrink-0 flex items-center px-4 gap-4 border-b border-white/5 bg-black/40 backdrop-blur-3xl z-40 no-drag-region">
               <div className="flex items-center gap-1">
                 <button onClick={() => setRailVisible(!railVisible)} className={`p-2 rounded-xl transition-all ${railVisible ? 'text-secondary-text' : 'bg-accent text-primary-bg'}`} title="Toggle Tools Rail">
                   <Layout size={18} />

@@ -1190,6 +1190,7 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
 
   // Track audio status
   newView.webContents.on('is-currently-audible-changed', (isAudible) => {
+    console.log(`[Audio] Tab ${tabId} audible: ${isAudible}`);
     if (isAudible) audibleTabs.add(tabId);
     else audibleTabs.delete(tabId);
     if (mainWindow) {
@@ -1585,19 +1586,20 @@ ipcMain.handle('load-vector-store', async () => {
   return [];
 });
 
-{ id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro (Latest)' },
-{ id: 'gemini-3.1-flash', name: 'Gemini 3.1 Flash (Latest)' },
-{ id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro (Experimental)' },
-{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-{ id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-{ id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-{ id: 'gpt-4o', name: 'GPT-4o' },
-{ id: 'o1', name: 'OpenAI o1' },
-{ id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet' },
-{ id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet' },
-{ id: 'ollama', name: 'Ollama (Local AI)' },
-{ id: 'groq-mixtral', name: 'Groq LPU' },
-{ id: 'openai-compatible', name: 'OpenAI Compatible' }
+const llmProviders = [
+  { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro (Latest)' },
+  { id: 'gemini-3.1-flash', name: 'Gemini 3.1 Flash (Latest)' },
+  { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro (Experimental)' },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  { id: 'gpt-4o', name: 'GPT-4o' },
+  { id: 'o1', name: 'OpenAI o1' },
+  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet' },
+  { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet' },
+  { id: 'ollama', name: 'Ollama (Local AI)' },
+  { id: 'groq-mixtral', name: 'Groq LPU' },
+  { id: 'openai-compatible', name: 'OpenAI Compatible' }
 ];
 let activeLlmProvider = 'gemini-1.5-flash';
 const llmConfigs = {};
@@ -2565,37 +2567,111 @@ app.whenReady().then(() => {
     if (!view) return { error: 'No active view' };
 
     try {
+      // Improved Google Translate Injection with Cookie Support for faster activation
       const code = `
       (function() {
+        // Set the Google Translate cookie for the target language
+        // Format: /auto/[target_lang]
+        const lang = '${targetLanguage}';
+        document.cookie = 'googtrans=/auto/' + lang + '; path=/; domain=' + window.location.hostname;
+        document.cookie = 'googtrans=/auto/' + lang + '; path=/;';
+        
         if (!document.getElementById('google_translate_element')) {
           const div = document.createElement('div');
           div.id = 'google_translate_element';
           div.style.display = 'none';
           document.body.appendChild(div);
           
-          const script = document.createElement('script');
-          script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
-          document.body.appendChild(script);
-          
           window.googleTranslateElementInit = function() {
-            new google.translate.TranslateElement({pageLanguage: 'auto'}, 'google_translate_element');
+            new google.translate.TranslateElement({
+              pageLanguage: 'auto',
+              layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+              autoDisplay: true
+            }, 'google_translate_element');
           };
+
+          const script = document.createElement('script');
+          script.src = 'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+          document.body.appendChild(script);
+        } else {
+          // If already exists, just trigger the change
+          const combo = document.querySelector('.goog-te-combo');
+          if (combo) {
+            combo.value = lang;
+            combo.dispatchEvent(new Event('change'));
+          }
         }
         
-        var check = setInterval(function() {
-          var combo = document.querySelector('.goog-te-combo');
+        // Polling for the combo box as a backup
+        let attempts = 0;
+        const check = setInterval(function() {
+          const combo = document.querySelector('.goog-te-combo');
           if (combo) {
-            combo.value = '${targetLanguage}';
-            combo.dispatchEvent(new Event('change'));
+            if (combo.value !== lang) {
+              combo.value = lang;
+              combo.dispatchEvent(new Event('change'));
+            }
             clearInterval(check);
           }
+          if (attempts++ > 20) clearInterval(check);
         }, 500);
       })()
     `;
       await view.webContents.executeJavaScript(code);
       return { success: true };
     } catch (e) {
+      console.error("[Translation] Website translation failed:", e);
       return { error: e.message };
+    }
+  });
+
+  // Integrated Translation IPC (Google Translate + Neural Fallback)
+  ipcMain.handle('translate-text', async (event, { text, from, to }) => {
+    if (!text) return { success: false, error: 'No text provided' };
+
+    // Support both 'to' and 'targetLanguage' (some frontend parts might use different keys)
+    const targetLang = to || 'en';
+    const sourceLang = from || 'auto';
+
+    try {
+      console.log(`[Translation] Attempting Google Translate for: "${text.substring(0, 30)}..." to ${targetLang}`);
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data && data[0]) {
+        const translated = data[0].map(x => x[0]).join('');
+        return {
+          success: true,
+          translated,
+          method: 'google'
+        };
+      }
+    } catch (e) {
+      console.warn("[Translation] Google Translate API failed, falling back to Neural Engine:", e.message);
+    }
+
+    // Neural Fallback
+    try {
+      console.log(`[Neural Translation] Translating to ${targetLang} using ${activeLlmProvider}`);
+      const prompt = [
+        { role: 'system', content: `You are a high-performance neural translation engine. Translate the following text into ${targetLang}. Return ONLY the translated string.` },
+        { role: 'user', content: text }
+      ];
+
+      const result = await llmGenerateHandler(prompt, { temperature: 0.3 });
+      if (result.error) throw new Error(result.error);
+
+      return {
+        success: true,
+        translated: result.text,
+        method: 'neural',
+        provider: activeLlmProvider
+      };
+    } catch (error) {
+      console.error("[Translation] All translation methods failed:", error);
+      return { success: false, error: error.message };
     }
   });
 
@@ -2959,26 +3035,6 @@ app.whenReady().then(() => {
   // SHELL COMMAND EXECUTION - For AI control of system features
   // ============================================================================
 
-  // Universal Translation using Google Translate API (Fallback for missing free-translate)
-  ipcMain.handle('translate-text', async (event, { text, from, to }) => {
-    try {
-      const sl = from || 'auto';
-      const tl = to;
-      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data && data[0]) {
-        const translated = data[0].map(x => x[0]).join('');
-        return { success: true, translated };
-      }
-      return { success: false, error: 'Invalid response from translation service' };
-    } catch (error) {
-      console.error('[Main] Translation failed:', error);
-      return { success: false, error: error.message };
-    }
-  });
 
   // Remove existing handler if present to prevent "second handler" error
   ipcMain.removeHandler('click-element');
@@ -3392,6 +3448,16 @@ app.whenReady().then(() => {
       });
 
       console.log(`[Hotkey] Registered ${spotlightShortcut} for spotlight search`);
+
+      // Ctrl+P for Printing
+      globalShortcut.register('CommandOrControl+P', () => {
+        const view = tabViews.get(activeTabId);
+        if (view) {
+          view.webContents.print();
+        } else if (mainWindow) {
+          mainWindow.webContents.print();
+        }
+      });
     } catch (error) {
       console.error('[Hotkey] Failed to register:', error);
     }

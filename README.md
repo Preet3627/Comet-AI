@@ -4,7 +4,7 @@
 
 ![Comet AI Browser](https://raw.githubusercontent.com/Preet3627/Comet-AI/main/icon.ico)
 
-**The World's Most Advanced Autonomous AI Browser**
+**One Of World's Most Advanced Autonomous AI Browser**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-blue)]()
@@ -72,9 +72,9 @@ Measured on real hardware, not marketing slides.
 
 | Metric | Value | Notes |
 | :--- | :--- | :--- |
-| Speedometer 3 | ~14 ms | Faster than Chrome/Edge on same system |
+| Speedometer 3 | ~14 ms | |
 | UI Load Time | < 2 seconds | Cold start observed |
-| Electron RAM (AI + 1 tab) | ~700–800 MB | Expected Electron overhead |
+| Electron RAM (AI + 1 tab) | ~462-500 MB | Expected Electron overhead |
 | System RAM | 8 GB (6.9 GB used) | Still smooth, no visible lag |
 | Agent Reaction Time | ~3-5s | Claude 3.7 Sonnet processing latency |
 
@@ -113,14 +113,13 @@ Comet AI Browser is a multi-platform, open-source project in active development.
 
 ## ✨ Feature Matrix (Desktop vs Mobile)
 
-| Feature | 🖥️ Desktop | 📱 Mobile | Status |
-| :--- | :---: | :---: | :--- |
-| **Comet Agent (Agency)** | ✅ | ✅ | **New!** (Use `>>` on Mobile) |
-| **Multimodal Perception** | ✅ | ✅ | Vision + OCR + DOM |
-| **PDF Generation** | ✅ | 🧪 | Autonomous Document Creation |
-| **Presenton Studio** | ✅ | 🧪 | AI Presentations |
-| **WiFi Desktop Sync** | ✅ | ✅ | **Core Feature** |
-| **History & Clipboard** | ✅ | ✅ | Cross-device |
+| Feature                   | 🖥️ Desktop| 📱 Mobile   | Status                       |
+| **Comet Agent (Agency)**  |     ✅    |     ✅      | **New!** (Use `>>` on Mobile)|
+| **Multimodal Perception** |     ✅    |     ✅      | Vision + OCR + DOM           |
+| **PDF Generation**        |     ✅    |     🧪      | Autonomous Document Creation |
+| **Presenton Studio**      |     ✅    |     🧪      | AI Presentations             |
+| **WiFi Desktop Sync**     |     ✅    |     ✅      | **Core Feature**             |
+| **History & Clipboard**   |     ✅    |     ✅      | Cross-device                 |
 
 ---
 
@@ -143,11 +142,10 @@ Comet AI is designed as an autonomous browser-level agent.
 
 ### 🖥️ Desktop
 
-| Platform | Binary | Status |
-| :--- | :--- | :--- |
-| Windows | `.exe` | ✅ Beta |
-| macOS | `.dmg` | 🧪 In Dev |
-| Linux | `AppImage` | 🧪 In Dev |
+| Platform | Binary    | Status    |
+| Windows  | `.exe`    | ✅ Beta   |
+| macOS    | `.dmg`    | 🧪 In Dev |
+| Linux    | `AppImage`| 🧪 In Dev |
 
 ### 📱 Mobile
 

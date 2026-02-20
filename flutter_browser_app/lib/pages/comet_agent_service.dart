@@ -108,10 +108,12 @@ STUCK: "Exact reason why the agent cannot proceed"
 ''';
 
   final String apiKey;
+  final String model;
   final InAppWebViewController? webViewController;
 
   CometAgentService({
     required this.apiKey,
+    this.model = 'gemini-3.1-pro-preview',
     this.webViewController,
   });
 
@@ -126,6 +128,58 @@ STUCK: "Exact reason why the agent cannot proceed"
   void stop() {
     _shouldStop = true;
     _currentSession?.isRunning = false;
+  }
+
+  // ─────────────────────────────────────────────
+  // ONE-SHOT ACTIONS (Summarize, Click Analysis)
+  // ─────────────────────────────────────────────
+
+  Future<String> summarizePage(String pageText) async {
+    final prompt = """
+    Summarize the following web page content precisely and beautifully. 
+    Use bullet points for key features and a short paragraph for the main purpose.
+    Focus on relevance and value.
+    
+    CONTENT:
+    $pageText
+    """;
+    return await performOneShotAction(prompt);
+  }
+
+  Future<Map<String, dynamic>> analyzeForClick(
+      String goal, String screenshotBase64) async {
+    final prompt = """
+    Analyze this screenshot for the goal: "$goal"
+    Identify the exact element to click. 
+    Return ONLY a JSON object with:
+    {
+      "explanation": "Why this element?",
+      "point": {"x": number, "y": number},
+      "description": "Short description of the element"
+    }
+    """;
+    final response =
+        await performOneShotAction(prompt, screenshotBase64: screenshotBase64);
+    try {
+      // Find JSON block in response
+      final jsonStart = response.indexOf('{');
+      final jsonEnd = response.lastIndexOf('}') + 1;
+      if (jsonStart != -1 && jsonEnd != -1) {
+        return jsonDecode(response.substring(jsonStart, jsonEnd));
+      }
+    } catch (e) {
+      debugPrint("[Agent] Error parsing click analysis: $e");
+    }
+    return {"explanation": "Analysis failed", "point": null};
+  }
+
+  Future<String> performOneShotAction(String prompt,
+      {String? screenshotBase64}) async {
+    if (model.toLowerCase().contains('gemini')) {
+      return await _callGeminiAPI(prompt, screenshotBase64);
+    } else {
+      return await _callClaudeAPI(prompt, screenshotBase64);
+    }
   }
 
   Future<AgentSession> runTask(String task) async {
@@ -160,10 +214,15 @@ STUCK: "Exact reason why the agent cannot proceed"
         lastActionResult: session.lastActionResult,
       );
 
-      // 3. Call Claude API
+      // 3. Call AI API (Gemini or Claude)
       AgentStep step;
       try {
-        final response = await _callClaudeAPI(userMessage, screenshot);
+        String response;
+        if (model.contains('gemini')) {
+          response = await _callGeminiAPI(userMessage, screenshot);
+        } else {
+          response = await _callClaudeAPI(userMessage, screenshot);
+        }
         step = _parseResponse(response, stepNumber, screenshot);
       } catch (e) {
         step = AgentStep(
@@ -263,12 +322,9 @@ STUCK: "Exact reason why the agent cannot proceed"
     try {
       final result = await webViewController!.evaluateJavascript(source: '''
         (function() {
-          // Get a trimmed, meaningful DOM snapshot
           const clone = document.documentElement.cloneNode(true);
-          // Remove scripts, styles, SVG for brevity
           clone.querySelectorAll('script, style, svg, noscript, link[rel="stylesheet"]').forEach(el => el.remove());
           let html = clone.outerHTML;
-          // Trim to ~12000 chars
           if (html.length > 12000) {
             html = html.substring(0, 12000) + '... [TRUNCATED]';
           }
@@ -283,8 +339,6 @@ STUCK: "Exact reason why the agent cannot proceed"
   }
 
   Future<String> _extractOcrText(String? screenshotBase64) async {
-    // Extract visible text from DOM as a proxy for OCR
-    // (Real OCR would require a native plugin like google_mlkit_text_recognition)
     if (webViewController == null) return '';
     try {
       final result = await webViewController!.evaluateJavascript(source: '''
@@ -351,7 +405,6 @@ LAST_ACTION_RESULT: $lastActionResult
       String userMessage, String? screenshotBase64) async {
     final List<Map<String, dynamic>> content = [];
 
-    // Add screenshot if available
     if (screenshotBase64 != null && screenshotBase64.isNotEmpty) {
       content.add({
         'type': 'image',
@@ -363,14 +416,13 @@ LAST_ACTION_RESULT: $lastActionResult
       });
     }
 
-    // Add text message
     content.add({
       'type': 'text',
       'text': userMessage,
     });
 
     final body = jsonEncode({
-      'model': 'claude-opus-4-5',
+      'model': model.contains('claude') ? model : 'claude-3-7-sonnet-20250219',
       'max_tokens': 4096,
       'system': _systemPrompt,
       'messages': [
@@ -403,26 +455,72 @@ LAST_ACTION_RESULT: $lastActionResult
   }
 
   // ─────────────────────────────────────────────
+  // GEMINI API CALL
+  // ─────────────────────────────────────────────
+
+  Future<String> _callGeminiAPI(
+      String userMessage, String? screenshotBase64) async {
+    final List<Map<String, dynamic>> parts = [];
+
+    parts.add({'text': '$userMessage\n\nSYSTEM_INSTRUCTIONS: $_systemPrompt'});
+
+    if (screenshotBase64 != null && screenshotBase64.isNotEmpty) {
+      parts.add({
+        'inline_data': {
+          'mime_type': 'image/jpeg',
+          'data': screenshotBase64,
+        }
+      });
+    }
+
+    final body = jsonEncode({
+      'contents': [
+        {
+          'parts': parts,
+        }
+      ],
+      'generationConfig': {
+        'temperature': 0.1,
+        'maxOutputTokens': 4096,
+        if (model.contains('thinking')) 'thinking_level': 'MEDIUM',
+      },
+    });
+
+    final response = await http
+        .post(
+          Uri.parse(
+              'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey'),
+          headers: {'Content-Type': 'application/json'},
+          body: body,
+        )
+        .timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Gemini API error ${response.statusCode}: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+    return data['candidates'][0]['content']['parts'][0]['text'] as String;
+  }
+
+  // ─────────────────────────────────────────────
   // RESPONSE PARSING
   // ─────────────────────────────────────────────
 
   AgentStep _parseResponse(
       String response, int stepNumber, String? screenshot) {
-    // Extract <thinking> block
     final thinkingMatch =
         RegExp(r'<thinking>([\s\S]*?)<\/thinking>').firstMatch(response);
     final thinking = thinkingMatch?.group(1)?.trim() ?? '';
 
-    // Extract **Status:** line
     final statusMatch = RegExp(r'\*\*Status:\*\*\s*(.+)').firstMatch(response);
     final status = statusMatch?.group(1)?.trim() ?? '';
 
-    // Extract **Next Action:** line
     final nextActionMatch =
         RegExp(r'\*\*Next Action:\*\*\s*(.+)').firstMatch(response);
     final nextAction = nextActionMatch?.group(1)?.trim() ?? '';
 
-    // Extract ```actions``` block
     final actionsMatch =
         RegExp(r'```actions\n([\s\S]*?)```').firstMatch(response);
     final actionsBlock = actionsMatch?.group(1) ?? '';
@@ -432,7 +530,6 @@ LAST_ACTION_RESULT: $lastActionResult
         .where((l) => l.isNotEmpty)
         .toList();
 
-    // Determine step status
     AgentStepStatus stepStatus = AgentStepStatus.acting;
     if (actions.any((a) => a.startsWith('DONE:'))) {
       stepStatus = AgentStepStatus.done;
@@ -484,13 +581,13 @@ class AgentActionExecutor {
     final hasSuccess = results.any((r) => r == 'success');
 
     if (hasFailure && hasSuccess) return 'partial — some actions failed';
-    if (hasFailure)
+    if (hasFailure) {
       return 'failed — ${results.firstWhere((r) => r.startsWith('failed'))}';
+    }
     return 'success';
   }
 
   Future<String> _executeAction(String action) async {
-    // NAVIGATE
     if (action.startsWith('NAVIGATE:')) {
       final url = action.replaceFirst('NAVIGATE:', '').trim();
       await controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
@@ -498,86 +595,86 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    // BACK
     if (action == 'BACK') {
       await controller.goBack();
       return 'success';
     }
 
-    // REFRESH
     if (action == 'REFRESH') {
       await controller.reload();
       return 'success';
     }
 
-    // CLICK
     if (action.startsWith('CLICK:')) {
       final target = action.replaceFirst('CLICK:', '').trim();
       return await _click(target);
     }
 
-    // DOUBLE_CLICK
     if (action.startsWith('DOUBLE_CLICK:')) {
       final selector = action.replaceFirst('DOUBLE_CLICK:', '').trim();
       await controller.evaluateJavascript(source: '''
-        const el = document.querySelector('$selector');
-        if (el) { el.dispatchEvent(new MouseEvent('dblclick', {bubbles: true})); }
+        (function() {
+          const el = document.querySelector(${jsonEncode(selector)});
+          if (el) { el.dispatchEvent(new MouseEvent('dblclick', {bubbles: true})); }
+        })()
       ''');
       return 'success';
     }
 
-    // TYPE
     if (action.startsWith('TYPE:')) {
       final parts = action.replaceFirst('TYPE:', '').split('|');
       if (parts.length >= 2) {
         final selector = parts[0].trim();
         final value = parts[1].trim().replaceAll('"', '');
         await controller.evaluateJavascript(source: '''
-          const el = document.querySelector('$selector');
-          if (el) {
-            el.focus();
-            el.value = '';
-            el.value = ${jsonEncode(value)};
-            el.dispatchEvent(new Event('input', {bubbles: true}));
-            el.dispatchEvent(new Event('change', {bubbles: true}));
-          }
+          (function() {
+            const el = document.querySelector(${jsonEncode(selector)});
+            if (el) {
+              el.focus();
+              el.value = '';
+              el.value = ${jsonEncode(value)};
+              el.dispatchEvent(new Event('input', {bubbles: true}));
+              el.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+          })()
         ''');
         return 'success';
       }
       return 'failed: invalid TYPE format';
     }
 
-    // SELECT
     if (action.startsWith('SELECT:')) {
       final parts = action.replaceFirst('SELECT:', '').split('|');
       if (parts.length >= 2) {
         final selector = parts[0].trim();
         final value = parts[1].trim().replaceAll('"', '');
         await controller.evaluateJavascript(source: '''
-          const el = document.querySelector('$selector');
-          if (el) {
-            el.value = ${jsonEncode(value)};
-            el.dispatchEvent(new Event('change', {bubbles: true}));
-          }
+          (function() {
+            const el = document.querySelector(${jsonEncode(selector)});
+            if (el) {
+              el.value = ${jsonEncode(value)};
+              el.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+          })()
         ''');
         return 'success';
       }
       return 'failed: invalid SELECT format';
     }
 
-    // CHECK / UNCHECK
     if (action.startsWith('CHECK:') || action.startsWith('UNCHECK:')) {
       final isCheck = action.startsWith('CHECK:');
       final selector =
           action.replaceFirst(isCheck ? 'CHECK:' : 'UNCHECK:', '').trim();
       await controller.evaluateJavascript(source: '''
-        const el = document.querySelector('$selector');
-        if (el) { el.checked = $isCheck; el.dispatchEvent(new Event('change', {bubbles: true})); }
+        (function() {
+          const el = document.querySelector(${jsonEncode(selector)});
+          if (el) { el.checked = $isCheck; el.dispatchEvent(new Event('change', {bubbles: true})); }
+        })()
       ''');
       return 'success';
     }
 
-    // SCROLL
     if (action.startsWith('SCROLL:')) {
       final params = action.replaceFirst('SCROLL:', '').trim();
       if (params == 'to_bottom') {
@@ -588,7 +685,9 @@ class AgentActionExecutor {
       } else if (params.startsWith('to_element |')) {
         final selector = params.replaceFirst('to_element |', '').trim();
         await controller.evaluateJavascript(source: '''
-          document.querySelector('$selector')?.scrollIntoView({behavior: 'smooth'});
+          (function() {
+            document.querySelector(${jsonEncode(selector)})?.scrollIntoView({behavior: 'smooth'});
+          })()
         ''');
       } else {
         final parts = params.split('|');
@@ -602,14 +701,12 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    // WAIT
     if (action.startsWith('WAIT:')) {
       final ms = int.tryParse(action.replaceFirst('WAIT:', '').trim()) ?? 1000;
       await Future.delayed(Duration(milliseconds: ms.clamp(100, 10000)));
       return 'success';
     }
 
-    // WAIT_FOR
     if (action.startsWith('WAIT_FOR:')) {
       final parts = action.replaceFirst('WAIT_FOR:', '').split('|');
       final selector = parts[0].trim();
@@ -619,24 +716,23 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    // JS
     if (action.startsWith('JS:')) {
       final code = action.replaceFirst('JS:', '').trim();
       await controller.evaluateJavascript(source: code);
       return 'success';
     }
 
-    // EXTRACT
     if (action.startsWith('EXTRACT:')) {
       final parts = action.replaceFirst('EXTRACT:', '').split('|');
       final selector = parts[0].trim();
       final result = await controller.evaluateJavascript(source: '''
-        document.querySelector('$selector')?.textContent?.trim() ?? ''
+        (function() {
+          return document.querySelector(${jsonEncode(selector)})?.textContent?.trim() ?? '';
+        })()
       ''');
       return 'extracted: $result';
     }
 
-    // DONE / STUCK — handled by caller
     if (action.startsWith('DONE:') || action.startsWith('STUCK:')) {
       return 'terminal';
     }
@@ -645,7 +741,6 @@ class AgentActionExecutor {
   }
 
   Future<String> _click(String target) async {
-    // coords=(x, y)
     if (target.startsWith('coords=')) {
       final match = RegExp(r'coords=\((\d+),\s*(\d+)\)').firstMatch(target);
       if (match != null) {
@@ -658,7 +753,6 @@ class AgentActionExecutor {
       }
     }
 
-    // text="..."
     if (target.startsWith('text=')) {
       final text = target.replaceFirst('text=', '').replaceAll('"', '').trim();
       await controller.evaluateJavascript(source: '''
@@ -670,9 +764,8 @@ class AgentActionExecutor {
               return true;
             }
           }
-          // Try XPath as fallback
           const result = document.evaluate(
-            '//*[contains(text(), ${jsonEncode(text)})]',
+            '//*[contains(text(), ' + JSON.stringify(${jsonEncode(text)}) + ')]',
             document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
           );
           result.singleNodeValue?.click();
@@ -681,22 +774,24 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    // xpath=...
     if (target.startsWith('xpath=')) {
       final xpath = target.replaceFirst('xpath=', '').trim();
       await controller.evaluateJavascript(source: '''
-        const result = document.evaluate(
-          ${jsonEncode(xpath)}, document, null,
-          XPathResult.FIRST_ORDERED_NODE_TYPE, null
-        );
-        result.singleNodeValue?.click();
+        (function() {
+          const result = document.evaluate(
+            ${jsonEncode(xpath)}, document, null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE, null
+          );
+          result.singleNodeValue?.click();
+        })()
       ''');
       return 'success';
     }
 
-    // CSS selector (default)
     await controller.evaluateJavascript(source: '''
-      document.querySelector(${jsonEncode(target)})?.click();
+      (function() {
+        document.querySelector(${jsonEncode(target)})?.click();
+      })()
     ''');
     return 'success';
   }

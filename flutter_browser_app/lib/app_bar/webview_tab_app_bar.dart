@@ -1,4 +1,5 @@
-// import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:convert';
+import 'dart:ui';
 import 'dart:io';
 
 import 'dart:async';
@@ -22,10 +23,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../pages/ai_chat_page.dart';
-
-import '../url_predictor.dart';
-import '../pages/connect_desktop_page.dart';
+import 'package:flutter_browser/pages/ai_chat_page.dart';
+import 'package:flutter_browser/pages/agent_chat_page.dart';
+import 'package:flutter_browser/pages/comet_agent_service.dart';
+import 'package:flutter_browser/url_predictor.dart';
+import 'package:flutter_browser/pages/connect_desktop_page.dart';
 import '../animated_flutter_browser_logo.dart';
 import '../custom_popup_dialog.dart';
 import '../custom_popup_menu_item.dart';
@@ -128,22 +130,63 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
         return Selector<WebViewModel, bool>(
           selector: (context, webViewModel) => webViewModel.isIncognitoMode,
           builder: (context, isIncognitoMode, child) {
-            final barColor = Colors.black;
-            return leading != null
-                ? AppBar(
-                    backgroundColor: barColor,
-                    leading: leading,
-                    leadingWidth: 130,
-                    titleSpacing: 0.0,
-                    title: _buildSearchTextField(),
-                    actions: _buildActionsMenu(),
-                  )
-                : AppBar(
-                    backgroundColor: barColor,
-                    titleSpacing: 10.0,
-                    title: _buildSearchTextField(),
-                    actions: _buildActionsMenu(),
-                  );
+            final browserModel =
+                Provider.of<BrowserModel>(context, listen: false);
+            final windowModel =
+                Provider.of<WindowModel>(context, listen: false);
+            final settings = browserModel.getSettings();
+            final isVibrant = settings.theme == "Vibrant";
+
+            return PreferredSize(
+              preferredSize: const Size.fromHeight(80),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: const BoxDecoration(color: Colors.transparent),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(30),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    child: Container(
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: isVibrant
+                            ? Colors.white.withOpacity(0.1)
+                            : Colors.black.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(
+                          color: isVibrant
+                              ? Colors.white.withOpacity(0.2)
+                              : Colors.white.withOpacity(0.05),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 4),
+                          _buildModernLeading(settings),
+                          Expanded(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: _buildSearchTextField(),
+                            ),
+                          ),
+                          _buildModernActions(windowModel, browserModel),
+                          const SizedBox(width: 8),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
           },
         );
       },
@@ -246,65 +289,209 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
 
     return CompositedTransformTarget(
       link: _layerLink,
-      child: SizedBox(
-        height: 40.0,
-        child: Stack(
-          children: <Widget>[
-            TextField(
-              onChanged: (value) {
-                _debounceTimer?.cancel();
-                _debounceTimer = Timer(const Duration(milliseconds: 400), () {
-                  if (mounted && _searchController?.text == value) {
-                    setState(() {
-                      _suggestions = URLPredictor.getPredictions(value);
-                    });
-                    _updateOverlay();
-                  }
-                });
-              },
-              onSubmitted: (value) {
-                _onSubmitted(value);
-              },
-              onTap: () {
-                if (!shouldSelectText ||
-                    _searchController == null ||
-                    _searchController!.text.isEmpty) {
-                  return;
-                }
-                shouldSelectText = false;
-                _searchController!.selection = TextSelection(
-                  baseOffset: 0,
-                  extentOffset: _searchController!.text.length,
-                );
-              },
-              onTapOutside: (event) {
-                shouldSelectText = true;
-              },
-              keyboardType: TextInputType.url,
-              focusNode: _focusNode,
-              autofocus: false,
-              controller: _searchController,
-              textInputAction: TextInputAction.go,
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.only(
-                  left: 20.0,
-                  top: 10.0,
-                  right: 10.0,
-                  bottom: 10.0,
-                ),
-                filled: true,
-                fillColor: Colors.black,
-                border: outlineBorder,
-                focusedBorder: outlineBorder,
-                enabledBorder: outlineBorder,
-                hintText: "Search or type a web address",
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.4), fontSize: 16.0),
-              ),
-              style: const TextStyle(color: Colors.white, fontSize: 16.0),
+      child: TextField(
+        onChanged: (value) {
+          _debounceTimer?.cancel();
+          _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+            if (mounted && _searchController?.text == value) {
+              setState(() {
+                _suggestions = URLPredictor.getPredictions(value);
+              });
+              _updateOverlay();
+            }
+          });
+        },
+        onSubmitted: (value) {
+          _onSubmitted(value);
+        },
+        onTap: () {
+          if (!shouldSelectText ||
+              _searchController == null ||
+              _searchController!.text.isEmpty) {
+            return;
+          }
+          shouldSelectText = false;
+          _searchController!.selection = TextSelection(
+            baseOffset: 0,
+            extentOffset: _searchController!.text.length,
+          );
+        },
+        onTapOutside: (event) {
+          shouldSelectText = true;
+        },
+        keyboardType: TextInputType.url,
+        focusNode: _focusNode,
+        autofocus: false,
+        controller: _searchController,
+        textInputAction: TextInputAction.go,
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(
+          hintText: "Search or enter address",
+          hintStyle: TextStyle(
+            color: Colors.white.withOpacity(0.3),
+            fontSize: 14.0,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14.0,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernLeading(BrowserSettings settings) {
+    final webViewModel = Provider.of<WebViewModel>(context, listen: true);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          constraints: const BoxConstraints(maxWidth: 40),
+          icon: const Icon(Icons.auto_awesome,
+              color: Color(0xFF00E5FF), size: 20),
+          onPressed: () => _showAgentDialog(),
+        ),
+        if (!Util.isMobile()) ...[
+          IconButton(
+            constraints: const BoxConstraints(maxWidth: 36),
+            icon: const Icon(Icons.arrow_back_ios_new,
+                size: 14, color: Colors.white70),
+            onPressed: () => webViewModel.webViewController?.goBack(),
+          ),
+          IconButton(
+            constraints: const BoxConstraints(maxWidth: 36),
+            icon: const Icon(Icons.arrow_forward_ios,
+                size: 14, color: Colors.white70),
+            onPressed: () => webViewModel.webViewController?.goForward(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildModernActions(
+      WindowModel windowModel, BrowserModel browserModel) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!Util.isMobile())
+          IconButton(
+            constraints: const BoxConstraints(maxWidth: 36),
+            icon: const Icon(Icons.refresh, size: 18, color: Colors.white70),
+            onPressed: () {
+              final webViewModel =
+                  Provider.of<WebViewModel>(context, listen: false);
+              webViewModel.webViewController?.reload();
+            },
+          ),
+        _buildCircularAction(Icons.add, () => addNewTab()),
+        const SizedBox(width: 8),
+        _buildTabsCountAction(windowModel, browserModel),
+        const SizedBox(width: 4),
+        _buildMoreAction(),
+      ],
+    );
+  }
+
+  Widget _buildCircularAction(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white70, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildTabsCountAction(
+      WindowModel windowModel, BrowserModel browserModel) {
+    return GestureDetector(
+      onTap: () async {
+        if (windowModel.webViewTabs.isNotEmpty) {
+          var webViewModel = windowModel.getCurrentTab()?.webViewModel;
+          if (webViewModel != null) {
+            webViewModel.screenshot = await webViewModel.webViewController
+                ?.takeScreenshot(
+                  screenshotConfiguration: ScreenshotConfiguration(
+                    compressFormat: CompressFormat.JPEG,
+                    quality: 20,
+                  ),
+                )
+                .timeout(const Duration(milliseconds: 1000),
+                    onTimeout: () => null);
+          }
+          browserModel.showTabScroller = true;
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white24, width: 1.5),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          windowModel.webViewTabs.length.toString(),
+          style: const TextStyle(
+              color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreAction() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.white70),
+      onSelected: _popupMenuChoiceAction,
+      itemBuilder: (context) => PopupMenuActions.choices
+          .map((choice) => PopupMenuItem(
+                value: choice,
+                child: Text(choice),
+              ))
+          .toList(),
+    );
+  }
+
+  void _showAgentDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: AlertDialog(
+          backgroundColor: Colors.black.withOpacity(0.8),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32),
+              side: const BorderSide(color: Colors.white12)),
+          title: const Text("Comet Neural Agent",
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+          content: TextField(
+            controller: controller,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: "Issue a command...",
+              hintStyle: TextStyle(color: Colors.white24),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.05),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
             ),
-            /* Info icon removed as requested */
-          ],
+            onSubmitted: (val) {
+              Navigator.pop(context);
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (c) => FullScreenAIChat(initialMessage: val)));
+            },
+          ),
         ),
       ),
     );
@@ -1470,6 +1657,15 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                   _runAIAction("simplify");
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.touch_app, color: Color(0xFFD500F9)),
+                title: const Text("Smart Click"),
+                subtitle: const Text("Tell the agent what to click on screen"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showClickDialog();
+                },
+              ),
               const SizedBox(height: 20),
             ],
           ),
@@ -1479,19 +1675,24 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
   }
 
   void _runAIAction(String action) async {
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final settings = browserModel.getSettings();
     final windowModel = Provider.of<WindowModel>(context, listen: false);
     final webViewModel = windowModel.getCurrentTab()?.webViewModel;
     final webViewController = webViewModel?.webViewController;
 
     if (webViewController == null) return;
 
-    // Get page text
-    final pageText = await webViewController.evaluateJavascript(
-      source: "document.body.innerText",
-    );
+    final isGemini = settings.geminiModel.toLowerCase().contains('gemini');
+    final apiKey = isGemini ? settings.geminiApiKey : settings.claudeApiKey;
 
-    // Show loading dialog
-    if (!mounted) return;
+    if (apiKey.isEmpty) {
+      _showErrorSnackBar(
+          "API Key required for AI actions. Please set it in Settings.");
+      return;
+    }
+
+    // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1500,33 +1701,167 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
       ),
     );
 
-    // TODO: Integrate with actual AI providers using keys from BrowserSettings
-    // For now, we'll simulate a response or use a default one
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (mounted) Navigator.pop(context); // Close loading
-
-    if (mounted) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(
-            "${action[0].toUpperCase()}${action.substring(1)} Result",
-          ),
-          content: SingleChildScrollView(
-            child: Text(
-              "AI response for $action would appear here.\n\nContent Length analyzed: ${pageText.toString().length} characters.\n\n(AI Provider API integration in progress...)",
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Close"),
-            ),
-          ],
-        ),
+    try {
+      final agent = CometAgentService(
+        apiKey: apiKey,
+        model: settings.geminiModel,
+        webViewController: webViewController,
       );
+
+      String result = "";
+      if (action == "summarize") {
+        final text = await webViewController.evaluateJavascript(
+            source: "document.body.innerText");
+        result = await agent.summarizePage(text.toString());
+      } else if (action == "explain") {
+        final text = await webViewController.evaluateJavascript(
+            source: "document.body.innerText");
+        result = await agent.performOneShotAction(
+            "Explain the main concepts of this page: $text");
+      } else if (action == "simplify") {
+        final text = await webViewController.evaluateJavascript(
+            source: "document.body.innerText");
+        result = await agent.performOneShotAction(
+            "Simplify this content for easy reading: $text");
+      }
+
+      if (mounted) Navigator.pop(context); // Hide loading
+
+      _showAIResultDialog(
+        "${action[0].toUpperCase()}${action.substring(1)}",
+        result,
+      );
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Hide loading
+      _showErrorSnackBar("AI Action failed: $e");
     }
+  }
+
+  void _showClickDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text("Smart Click",
+            style: TextStyle(color: Color(0xFF00E5FF))),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: "E.g., click the login button",
+            hintStyle: TextStyle(color: Colors.white24),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _executeSmartClick(controller.text);
+            },
+            child: const Text("Execute"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeSmartClick(String goal) async {
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final settings = browserModel.getSettings();
+    final webViewModel = Provider.of<WebViewModel>(context, listen: false);
+    final webViewController = webViewModel.webViewController;
+
+    if (webViewController == null) return;
+
+    final isGemini = settings.geminiModel.toLowerCase().contains('gemini');
+    final apiKey = isGemini ? settings.geminiApiKey : settings.claudeApiKey;
+
+    if (apiKey.isEmpty) {
+      _showErrorSnackBar("API Key required.");
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFD500F9))),
+    );
+
+    try {
+      final screenshot = await webViewController.takeScreenshot();
+      if (screenshot == null) throw Exception("Could not capture screen");
+      final base64Image = base64Encode(screenshot);
+
+      final agent = CometAgentService(
+        apiKey: apiKey,
+        model: settings.geminiModel,
+        webViewController: webViewController,
+      );
+
+      final analysis = await agent.analyzeForClick(goal, base64Image);
+
+      if (mounted) Navigator.pop(context); // Hide loading
+
+      if (analysis['point'] != null) {
+        final x = (analysis['point']['x'] as num).toDouble();
+        final y = (analysis['point']['y'] as num).toDouble();
+
+        // Execute click using javascript
+        await webViewController.evaluateJavascript(source: """
+          var el = document.elementFromPoint($x, $y);
+          if (el) {
+            el.click();
+            el.focus();
+          }
+        """);
+
+        _showSuccessSnackBar("Clicked: ${analysis['description'] ?? 'Target'}");
+      } else {
+        _showErrorSnackBar(
+            "Could not identify target: ${analysis['explanation']}");
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      _showErrorSnackBar("Smart Click failed: $e");
+    }
+  }
+
+  void _showAIResultDialog(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: Text(title, style: const TextStyle(color: Color(0xFF00E5FF))),
+        content: SingleChildScrollView(
+          child: Text(content,
+              style: const TextStyle(
+                  color: Colors.white70, fontSize: 14, height: 1.5)),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Close")),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
+  }
+
+  void _showSuccessSnackBar(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: const Color(0xFF00FF88)),
+    );
   }
 
   void _showSyncDialog() {
@@ -1551,11 +1886,22 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     }
 
     if (webViewModel.webViewController != null) {
-      if (value.startsWith('>')) {
+      if (value.startsWith('>>')) {
+        // Double arrow -> Autonomous Browser Agent
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => FullScreenAIChat(initialMessage: value),
+            builder: (context) =>
+                AgentChatPage(initialTask: value.substring(2).trim()),
+          ),
+        );
+      } else if (value.startsWith('>')) {
+        // Single arrow -> Desktop Control Chat
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                FullScreenAIChat(initialMessage: value.substring(1).trim()),
           ),
         );
       } else {

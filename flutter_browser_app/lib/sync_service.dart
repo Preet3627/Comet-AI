@@ -370,8 +370,11 @@ class SyncService {
   }
 
   /// Send a prompt to be executed on desktop (for AI features)
-  Future<Map?> sendPromptToDesktop(String prompt) async {
-    return executeOnDesktop('ai-prompt', args: {'prompt': prompt});
+  Future<Map?> sendPromptToDesktop(String prompt, {String? model}) async {
+    return executeOnDesktop('ai-prompt', args: {
+      'prompt': prompt,
+      'model': model,
+    });
   }
 
   /// Disconnect from desktop

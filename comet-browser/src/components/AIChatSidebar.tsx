@@ -188,10 +188,13 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         (window as any).mermaid.initialize({
           startOnLoad: false,
           theme: 'dark',
-          securityLevel: 'loose'
+          securityLevel: 'loose',
+          fontFamily: 'inherit',
         });
         setIsMermaidLoaded(true);
         console.log('[Mermaid] Loaded and initialized successfully');
+        // Initial run
+        setTimeout(() => (window as any).mermaid.run(), 500);
       } else {
         console.error("Mermaid script loaded, but mermaid object not found.");
       }
@@ -643,7 +646,18 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
             break;
 
           case 'EXPLAIN_CAPABILITIES':
-            result = 'Capabilities explained';
+            setMessages(prev => [...prev, { role: 'model', content: "🚀 **I am the Comet AI Agent.** Here is what I can do for you:" }]);
+            await delay(1200);
+            setMessages(prev => [...prev, { role: 'model', content: "📂 **Content Intelligence**: I can read and summarize any webpage ([READ_PAGE_CONTENT]) or analyze visual content via OCR ([SCREENSHOT_AND_ANALYZE])." }]);
+            await delay(1500);
+            setMessages(prev => [...prev, { role: 'model', content: "⚙️ **System Control**: I can automate your OS! Try asking me to change volume, brightness, or open any desktop application ([OPEN_APP])." }]);
+            await delay(1500);
+            setMessages(prev => [...prev, { role: 'model', content: "🧠 **Dynamic Memory**: Every session is indexed in my local vector database. I remember what you've seen, even offline." }]);
+            await delay(1500);
+            setMessages(prev => [...prev, { role: 'model', content: "📊 **Visualization**: I can generate charts and Mermaid diagrams ([GENERATE_DIAGRAM]) to visualize complex data." }]);
+            await delay(1500);
+            setMessages(prev => [...prev, { role: 'model', content: "📧 **Workspace Tools**: I can manage your Gmail, generate PDFs, and even create presentations in Presenton Studio." }]);
+            result = 'Capabilities explained comprehensively';
             break;
 
           case 'GENERATE_PDF':
@@ -1440,14 +1454,14 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
 
                     if (match && match[1] === 'mermaid' && isMermaidLoaded) {
                       return (
-                        <div className="relative group bg-black/40 p-4 rounded-xl my-4 text-center" onClick={e => e.stopPropagation()}>
-                          <div className="mermaid">{codeString}</div>
+                        <div className="relative group bg-black/40 p-4 rounded-xl my-4 text-center overflow-x-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+                          <div className="mermaid bg-white p-4 rounded-lg inline-block">{codeString}</div>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleExportDiagram(codeString);
                             }}
-                            className="absolute top-2 right-2 p-1 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                            className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white/70 hover:bg-black/90 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-xl"
                             title="Export Diagram"
                           >
                             <Download size={14} />

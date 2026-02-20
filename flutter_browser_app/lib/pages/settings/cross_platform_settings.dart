@@ -228,7 +228,47 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
       const ListTile(title: Text("Neural Intelligence Keys"), enabled: false),
       ListTile(
         title: const Text("Gemini API Key"),
-        subtitle: Text(settings.geminiApiKey.isEmpty ? "Not Set" : "••••••••"),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(settings.geminiApiKey.isEmpty ? "Not Set" : "••••••••"),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Text("Model: ",
+                    style: TextStyle(fontSize: 10, color: Colors.grey)),
+                DropdownButton<String>(
+                  value: settings.geminiModel,
+                  style:
+                      const TextStyle(fontSize: 10, color: Color(0xFF00E5FF)),
+                  dropdownColor: Colors.black,
+                  underline: Container(),
+                  items: [
+                    'gemini-3.1-pro-preview',
+                    'gemini-3.0-ultra',
+                    'gemini-2.5-flash',
+                    'gemini-2.0-pro-exp',
+                    'gemini-2.0-flash-thinking-exp',
+                    'gemini-1.5-pro',
+                    'gemini-1.5-flash',
+                  ]
+                      .map((m) => DropdownMenuItem(
+                          value: m, child: Text(m.toUpperCase())))
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      if (value != null) {
+                        settings.geminiModel = value;
+                        browserModel.updateSettings(settings);
+                        browserModel.save();
+                      }
+                    });
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
         leading: const Icon(Icons.api, color: Color(0xFF00E5FF)),
         onTap: () =>
             _showApiKeyDialog(context, "Gemini", settings.geminiApiKey, (val) {

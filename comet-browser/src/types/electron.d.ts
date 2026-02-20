@@ -149,6 +149,7 @@ declare global {
             gmailGetMessage: (messageId: string) => Promise<{ success: boolean; message?: any; error?: string }>;
             gmailSendMessage: (to: string, subject: string, body: string, threadId?: string | null) => Promise<{ success: boolean; result?: any; error?: string }>;
             gmailAddLabelToMessage: (messageId: string, labelName: string) => Promise<{ success: boolean; result?: any; error?: string }>;
+            onGmailOAuthCode: (callback: (code: string) => void) => () => void;
 
             // AI Response
             saveAiResponse: (content: string) => void;
@@ -178,8 +179,7 @@ declare global {
             onP2PMessage: (callback: (message: any) => void) => () => void;
             encryptData: (data: ArrayBuffer, key: string) => Promise<{ encryptedData: ArrayBuffer; iv: ArrayBuffer; authTag: ArrayBuffer; salt: ArrayBuffer; } | { error: string }>;
             decryptData: (encryptedData: ArrayBuffer, key: string, iv: ArrayBuffer, authTag: ArrayBuffer, salt: ArrayBuffer) => Promise<{ decryptedData: ArrayBuffer; } | { error: string }>;
-            scanFolder: (path: string, types: string[]) => Promise<any[]>;
-            readFileBuffer: (path: string) => Promise<ArrayBuffer>;
+            // scanFolder and readFileBuffer are already defined above (lines 88-89)
 
             // Persistent Storage
             savePersistentData: (key: string, data: any) => Promise<{ success: boolean; error?: string }>;
@@ -193,8 +193,27 @@ declare global {
             translateWebsite: (args: { targetLanguage: string }) => Promise<{ success?: boolean; error?: string }>;
             onTriggerTranslationDialog: (callback: () => void) => () => void;
             toggleAdblocker: (enable: boolean) => void;
+            translateText: (args: { text: string; to: string; from?: string }) => Promise<{ success: boolean; translated?: string; error?: string }>;
+            openSettingsPopup: (section?: string) => void;
+            openProfilePopup: () => void;
+            openPluginsPopup: () => void;
+            openDownloadsPopup: () => void;
+            openClipboardPopup: () => void;
+            openCartPopup: () => void;
+            openPopupWindow: (type: string, options?: any) => void;
+            closePopupWindow: (type: string) => void;
+            closeAllPopups: () => void;
+            onLoadAuthToken: (callback: (token: string) => void) => () => void;
+            saveAuthToken: (args: { token: string }) => void;
+            getAuthToken: () => Promise<string | null>;
+            getUserInfo: () => Promise<any>;
+            clearAuth: () => void;
+            googleOAuthLogin: () => void;
+            onGoogleOAuthCode: (callback: (code: string) => void) => () => void;
+            onSetSettingsSection: (callback: (section: string) => void) => () => void;
 
             getWifiSyncQr: () => Promise<string | null>;
+            getWifiSyncInfo: () => Promise<{ deviceName: string, pairingCode: string, ip: string, port: number }>;
             onWifiSyncStatus: (callback: (data: { connected: boolean }) => void) => () => void;
             onRemoteAiPrompt: (callback: (data: { prompt: string; commandId: string }) => void) => () => void;
 
