@@ -5,6 +5,7 @@ export interface LLMProviderOptions {
   baseUrl?: string;
   model?: string;
   type?: string;
+  localLlmMode?: string;
   // Add other common options as needed
 }
 

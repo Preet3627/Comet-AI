@@ -105,8 +105,10 @@ interface BrowserState {
     setOllamaModel: (model: string) => void;
     localLLMBaseUrl: string;
     localLLMModel: string;
+    localLlmMode: 'light' | 'normal' | 'heavy';
     setLocalLLMBaseUrl: (url: string) => void;
     setLocalLLMModel: (model: string) => void;
+    setLocalLlmMode: (mode: 'light' | 'normal' | 'heavy') => void;
 
     // AI Permission
     askForAiPermission: boolean;
@@ -297,6 +299,7 @@ export const useAppStore = create<BrowserState>()(
             ollamaModel: 'deepseek-r1:1.5b',
             localLLMBaseUrl: '',
             localLLMModel: '',
+            localLlmMode: 'normal',
             mcpServerPort: 3001,
             additionalAIInstructions: '',
 
@@ -500,6 +503,7 @@ export const useAppStore = create<BrowserState>()(
             setOllamaModel: (model) => set({ ollamaModel: model }),
             setLocalLLMBaseUrl: (url) => set({ localLLMBaseUrl: url }),
             setLocalLLMModel: (model) => set({ localLLMModel: model }),
+            setLocalLlmMode: (mode) => set({ localLlmMode: mode }),
 
             // AI Permission
             askForAiPermission: true,

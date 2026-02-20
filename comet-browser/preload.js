@@ -217,6 +217,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('resume-tab-and-activate', subscription);
   },
   getMemoryUsage: () => ipcRenderer.invoke('get-memory-usage'),
+  pullOllamaModel: (model, callback) => {
+    ipcRenderer.send('ollama-pull-model', model);
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('ollama-pull-progress', subscription);
+    return () => ipcRenderer.removeListener('ollama-pull-progress', subscription);
+  },
 
   importOllamaModel: (data) => ipcRenderer.invoke('ollama-import-model', data),
   selectLocalFile: () => ipcRenderer.invoke('select-local-file'),
@@ -314,6 +320,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openDownloadsPopup: () => ipcRenderer.send('open-downloads-popup'),
   openClipboardPopup: () => ipcRenderer.send('open-clipboard-popup'),
   openCartPopup: () => ipcRenderer.send('open-cart-popup'),
+  openSearchPopup: (options) => ipcRenderer.send('open-search-popup', options),
+  openTranslatePopup: (options) => ipcRenderer.send('open-translate-popup', options),
+  openContextMenuPopup: (options) => ipcRenderer.send('open-context-menu-popup', options),
 
   // Listen for settings section changes (for popup windows)
   onSetSettingsSection: (callback) => {

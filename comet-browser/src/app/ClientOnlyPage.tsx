@@ -162,7 +162,11 @@ export default function Home() {
     { icon: <Lock size={20} />, label: 'Passwords', manager: 'password' },
     { icon: <Shield size={20} />, label: 'Firewall', manager: 'firewall' },
     { icon: <Share2 size={20} />, label: 'P2P Sync', manager: 'p2p' },
-    { icon: <CopyIcon size={20} />, label: 'Clipboard', action: 'clipboard' },
+    { icon: <CopyIcon size={20} />, label: 'Clipboard', popup: 'clipboard' },
+    { icon: <Languages size={20} />, label: 'Translate', popup: 'translate' },
+    { icon: <Search size={20} />, label: 'Search Apps', popup: 'search' },
+    { icon: <DownloadIcon size={20} />, label: 'Downloads', popup: 'downloads' },
+    { icon: <ShoppingCart size={20} />, label: 'Cart', popup: 'cart' },
     { icon: <Puzzle size={20} />, label: 'Extensions', popup: 'plugins' },
   ];
 
@@ -174,15 +178,19 @@ export default function Home() {
       setShowClipboard(false);
     } else if (item.manager) {
       setActiveManager(item.manager);
-      store.setActiveView('browser'); // Keep browser view active when showing managers
+      store.setActiveView('browser');
       setShowClipboard(false);
-    } else if (item.action === 'clipboard') {
-      setShowClipboard(!showClipboard);
-      setActiveManager(null);
     } else if (item.popup) {
       if (window.electronAPI) {
-        if (item.popup === 'plugins') (window.electronAPI as any).openPluginsPopup();
-        else if (item.popup === 'settings') (window.electronAPI as any).openSettingsPopup();
+        switch (item.popup) {
+          case 'plugins': window.electronAPI.openPluginsPopup(); break;
+          case 'settings': window.electronAPI.openSettingsPopup(); break;
+          case 'clipboard': window.electronAPI.openClipboardPopup(); break;
+          case 'translate': window.electronAPI.openTranslatePopup(); break;
+          case 'search': window.electronAPI.openSearchPopup(); break;
+          case 'downloads': window.electronAPI.openDownloadsPopup(); break;
+          case 'cart': window.electronAPI.openCartPopup(); break;
+        }
       }
     }
   };
@@ -196,9 +204,16 @@ export default function Home() {
       const panel = params.get('panel');
       if (panel) {
         setIsPopupWindow(true);
-        if (panel === 'settings' || panel === 'profile' || panel === 'extensions' || panel === 'downloads' || panel === 'clipboard') {
+        const settingsPanels = ['settings', 'profile', 'extensions', 'downloads', 'clipboard', 'history', 'performance', 'sync', 'account'];
+        if (settingsPanels.includes(panel)) {
           setSettingsSection(panel === 'settings' ? 'profile' : panel);
           setShowSettings(true);
+        } else if (panel === 'cart') {
+          setShowCart(true);
+        } else if (panel === 'translate') {
+          setShowTranslateDialog(true);
+        } else if (panel === 'search' || panel === 'apps') {
+          setShowSpotlightSearch(true);
         }
       }
     }
@@ -381,23 +396,21 @@ export default function Home() {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-
-    const menuWidth = 192; // w-48 = 192px
-    const menuHeight = 250; // Approximate height based on content
-    const padding = 16; // Some padding from the edge of the screen
-
-    let x = e.clientX;
-    let y = e.clientY;
-
-    if (e.clientX + menuWidth + padding > window.innerWidth) {
-      x = window.innerWidth - menuWidth - padding;
+    if (window.electronAPI) {
+      window.electronAPI.openContextMenuPopup({
+        x: e.screenX,
+        y: e.screenY,
+      });
+    } else {
+      const menuWidth = 192;
+      const menuHeight = 250;
+      const padding = 16;
+      let x = e.clientX;
+      let y = e.clientY;
+      if (e.clientX + menuWidth + padding > window.innerWidth) x = window.innerWidth - menuWidth - padding;
+      if (e.clientY + menuHeight + padding > window.innerHeight) y = window.innerHeight - menuHeight - padding;
+      setShowContextMenu({ x, y });
     }
-
-    if (e.clientY + menuHeight + padding > window.innerHeight) {
-      y = window.innerHeight - menuHeight - padding;
-    }
-
-    setShowContextMenu({ x, y });
   };
 
   const handleTranslate = async () => {
@@ -1066,17 +1079,75 @@ export default function Home() {
     */
   }, [store.user, store.hasSeenWelcomePage, store.clientId]);
 
-  // Temporarily commented out for automatic Google login
-  // if ((!store.user && !store.hasSeenWelcomePage) || store.activeView === 'landing-page') {
-  //   return (
-  //     <div className={`flex flex-col min-h-screen w-full bg-deep-space relative font-sans text-primary-text transition-all duration-700`}>
-  //       <TitleBar />
-  //       <div className="flex-1 pt-10 bg-[#020205]">
-  //         <LandingPage />
-  //       </div>
-  //     </div>
-  //   );
-  // }
+  // Early return for standalone popup windows
+  if (isPopupWindow) {
+    const params = new URLSearchParams(window.location.search);
+    const panel = params.get('panel');
+
+    return (
+      <div className="h-screen w-full bg-black flex flex-col overflow-hidden">
+        {panel === 'clipboard' && <ClipboardManager />}
+        {panel === 'cart' && <UnifiedCartPanel onClose={() => window.close()} onScan={handleCartScan} />}
+        {(panel === 'search' || panel === 'apps') && <SpotlightSearchOverlay show={true} onClose={() => window.close()} />}
+        {panel === 'context-menu' && (
+          <div className="w-full h-full bg-[#0a0a0f]/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5 flex flex-col">
+            <button onClick={() => { window.electronAPI?.reload(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <RotateCw size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Reload</span>
+            </button>
+            <button onClick={() => { window.electronAPI?.goBack(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <ChevronLeft size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Back</span>
+            </button>
+            <button onClick={() => { window.electronAPI?.goForward(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <ChevronRight size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Forward</span>
+            </button>
+            <div className="h-[1px] bg-white/5 my-1" />
+            <button onClick={() => { window.electronAPI?.openTranslatePopup(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <Languages size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Translate</span>
+            </button>
+            <button onClick={() => { window.electronAPI?.toggleFullscreen(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <Maximize2 size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Fullscreen</span>
+            </button>
+            <button onClick={() => { window.electronAPI?.openDevTools(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <Code2 size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Inspect</span>
+            </button>
+          </div>
+        )}
+        {panel === 'translate' && (
+          <div className="flex-1 p-6 flex flex-col items-center justify-center relative drag-region">
+            <button onClick={() => window.close()} className="absolute top-4 right-4 p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all no-drag-region">
+              <X size={16} />
+            </button>
+            <h3 className="text-sm font-black uppercase tracking-widest text-white mb-6">Neural Translation</h3>
+            <div className="grid grid-cols-2 gap-3 w-full max-w-sm overflow-y-auto max-h-[400px] custom-scrollbar no-drag-region">
+              {store.availableLanguages.map(langCode => (
+                <button
+                  key={langCode}
+                  onClick={async () => {
+                    if (window.electronAPI) {
+                      await window.electronAPI.translateWebsite({ targetLanguage: langCode });
+                      window.close();
+                    }
+                  }}
+                  className="p-4 bg-white/5 hover:bg-accent/10 border border-white/5 rounded-xl transition-all"
+                >
+                  <span className="text-sm font-bold text-white tracking-widest uppercase">{langCode}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {(panel === 'settings' || panel === 'profile' || panel === 'extensions' || panel === 'downloads') && (
+          <SettingsPanel onClose={() => window.close()} defaultSection={settingsSection} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-col h-screen w-full bg-deep-space overflow-hidden relative font-sans text-primary-text transition-all duration-700`}>
@@ -1383,98 +1454,9 @@ export default function Home() {
                 />
               )}
 
-              {showCart && (
-                <UnifiedCartPanel onClose={() => setShowCart(false)} onScan={handleCartScan} />
-              )}
+              {/* Standalone popups are now handled externally via separate windows */}
 
-              {showDownloads && (
-                <div className={`absolute top-20 ${store.sidebarSide === 'right' && store.sidebarOpen ? 'right-[290px]' : 'right-4'} z-[90] w-72 h-96 bg-[#020205]/95 backdrop-blur-3xl border border-white/5 rounded-2xl shadow-2xl flex flex-col overflow-hidden`}>
-                  <div className="p-4 border-b border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Recent Downloads</span>
-                    <button onClick={() => setShowDownloads(false)} className="text-white/20 hover:text-white"><X size={14} /></button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                    {downloads.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center opacity-20">
-                        <DownloadCloud size={32} className="mb-2" />
-                        <p className="text-[10px] uppercase font-bold tracking-tighter">No active downloads</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {downloads.map((d, i) => (
-                          <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">
-                            <DownloadIcon size={14} className={d.status === 'downloading' ? 'animate-bounce text-accent' : 'text-white/40'} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[10px] text-white font-bold truncate">{d.name}</p>
-                              <p className={`text-[8px] uppercase font-black ${d.status === 'completed' ? 'text-green-500' : d.status === 'failed' ? 'text-red-500' : 'text-accent'}`}>
-                                {d.status}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {showExtensionsPopup && (
-                <div className={`absolute top-20 ${store.sidebarSide === 'right' && store.sidebarOpen ? 'right-[290px]' : 'right-4'} z-[90] w-80 h-[32rem] bg-[#0a0a0f]/90 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-[0_30px_60px_-12px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300`}>
-                  <div className="p-5 border-b border-white/5 flex items-center justify-between bg-white/[0.03]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-deep-space-accent-neon/10 flex items-center justify-center border border-deep-space-accent-neon/20">
-                        <Puzzle size={16} className="text-deep-space-accent-neon" />
-                      </div>
-                      <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/80">Neural Modules</span>
-                    </div>
-                    <button onClick={() => setShowExtensionsPopup(false)} className="p-2 rounded-full hover:bg-white/5 text-white/30 hover:text-white transition-all"><X size={16} /></button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-5 custom-scrollbar space-y-4">
-                    {activeExtensions.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center gap-6 px-6">
-                        <div className="p-5 rounded-3xl bg-white/[0.02] border border-dashed border-white/10">
-                          <Package size={48} className="text-white/10" />
-                        </div>
-                        <div className="space-y-2">
-                          <p className="text-[10px] uppercase font-black tracking-widest text-white/40 leading-relaxed">System scan complete <br /><span className="text-white/10">No modules found</span></p>
-                          <p className="text-[8px] uppercase font-black text-deep-space-accent-neon/30 tracking-[0.2em]">Ready for instantiation</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-3">
-                        {activeExtensions.map((ext, i) => (
-                          <div key={i} className="p-4 rounded-[1.5rem] bg-white/[0.03] border border-white/5 flex items-center gap-4 group hover:bg-white/[0.08] hover:border-white/10 transition-all cursor-default">
-                            <div className="w-11 h-11 rounded-2xl bg-black/40 flex items-center justify-center text-deep-space-accent-neon border border-white/5 shadow-xl group-hover:scale-105 transition-transform">
-                              <Package size={22} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[11px] text-white font-bold truncate tracking-tight">{ext.name}</p>
-                              <div className="flex items-center gap-3 mt-1">
-                                <span className={`w-1.5 h-1.5 rounded-full ${ext.enabled ? 'bg-deep-space-accent-neon shadow-[0_0_10px_#00ffff]' : 'bg-white/10'}`} />
-                                <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">v{ext.version}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-5 border-t border-white/5 bg-white/[0.03]">
-                    <button
-                      onClick={() => { setShowExtensionsPopup(false); setSettingsSection('extensions'); setShowSettings(true); }}
-                      className="w-full py-3.5 bg-deep-space-accent-neon/10 hover:bg-deep-space-accent-neon text-deep-space-accent-neon hover:text-deep-space-bg border border-deep-space-accent-neon/20 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] transition-all duration-300 shadow-lg hover:shadow-deep-space-accent-neon/20"
-                    >
-                      ORCHESTRATION PANEL
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {showClipboard && (
-                <div className={`absolute top-20 ${store.sidebarSide === 'right' && store.sidebarOpen ? 'right-[290px]' : 'right-4'} z-[90] w-80 h-[30rem]`}>
-                  <ClipboardManager />
-                </div>
-              )}
+              {/* Standalone popups are now handled via separate BrowserWindows */}
 
               {/* Manager Overlays */}
               {activeManager === 'password' && (

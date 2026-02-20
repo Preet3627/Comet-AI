@@ -56,7 +56,7 @@ if (!fs.existsSync(extensionsPath)) {
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const fetch = require('cross-fetch'); // Make sure cross-fetch is always available globally
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenAI } = require("@google/genai");
 
 const MCP_SERVER_PORT = process.env.MCP_SERVER_PORT || 3001;
 
@@ -190,42 +190,45 @@ const llmGenerateHandler = async (messages, options = {}) => {
       const gKey = apiKey || process.env.GEMINI_API_KEY;
       if (!gKey) return { error: 'Missing Gemini API Key' };
 
-      const genAI = new GoogleGenerativeAI(gKey);
+      const genAI = new GoogleGenAI(gKey);
 
       let modelName = 'gemini-2.0-flash';
-      let generationConfigOverrides = {};
+      let thinkingConfig = null;
 
-      // Gemini 3.1 series (latest as of Feb 2026)
+      // Gemini 3.1 & 3.0 series (Latest 2026)
       if (providerId.includes('3.1-pro')) {
         modelName = 'gemini-3.1-pro-preview';
+        thinkingConfig = { includeThought: true };
       } else if (providerId.includes('3.1-flash')) {
         modelName = 'gemini-3.1-flash-preview';
-        // Gemini 3.0 series - use correct v1beta names (3-pro-preview does NOT exist)
       } else if (providerId.includes('3-deep-think')) {
-        modelName = 'gemini-exp-1206'; // deepthink/reasoning model available as exp
+        modelName = 'gemini-3-deep-think';
+        thinkingConfig = { includeThought: true };
       } else if (providerId.includes('3-pro')) {
-        modelName = 'gemini-2.5-pro-preview-05-06'; // fallback: closest available pro
+        modelName = 'gemini-3.1-pro-preview'; // Forward compatibility
       } else if (providerId.includes('3-flash')) {
-        modelName = 'gemini-2.5-flash-preview-04-17'; // fallback: closest available flash
-        // Gemini 2.5 series
+        modelName = 'gemini-3-flash-preview';
+        // 2.5 series
       } else if (providerId.includes('2.5-pro')) {
-        modelName = 'gemini-2.5-pro-preview-05-06';
+        modelName = 'gemini-2.5-pro';
+        thinkingConfig = { thinkingBudget: "4096" }; // Reasoning budget for 2.5 series
+      } else if (providerId.includes('2.5-flash-lite')) {
+        modelName = 'gemini-2.5-flash-lite';
       } else if (providerId.includes('2.5-flash')) {
-        modelName = 'gemini-2.5-flash-preview-04-17';
-        // Gemini 2.0 series
+        modelName = 'gemini-2.5-flash';
+        // Legacy and Experimental
       } else if (providerId.includes('2.0-pro')) {
         modelName = 'gemini-2.0-pro-exp-02-05';
       } else if (providerId.includes('2.0-flash-lite')) {
         modelName = 'gemini-2.0-flash-lite';
       } else if (providerId.includes('2.0-flash')) {
         modelName = 'gemini-2.0-flash';
-        // Gemini 1.5 series
       } else if (providerId.includes('1.5-pro')) {
         modelName = 'gemini-1.5-pro';
       } else if (providerId.includes('1.5-flash')) {
         modelName = 'gemini-1.5-flash';
       } else {
-        modelName = 'gemini-2.0-flash'; // Default: fast and reliable
+        modelName = 'gemini-2.0-flash';
       }
 
       const systemMessage = messages.find(m => m.role === 'system');
@@ -233,20 +236,39 @@ const llmGenerateHandler = async (messages, options = {}) => {
 
       const model = genAI.getGenerativeModel({
         model: modelName,
-        systemInstruction: systemMessage ? systemMessage.content : undefined
+        systemInstruction: systemMessage ? systemMessage.content : undefined,
+        // New Thinking Config for 3.1 series
+        ...(thinkingConfig ? { thinkingConfig } : {})
       });
+
+      // Helper to convert message to Gemini parts (supports Multimodal)
+      const mapMessageToParts = (m) => {
+        const parts = [{ text: m.content || '' }];
+        if (m.attachments && Array.isArray(m.attachments)) {
+          m.attachments.forEach(attachment => {
+            if (attachment.data && attachment.mimeType) {
+              parts.push({
+                inlineData: {
+                  data: attachment.data, // base64 string
+                  mimeType: attachment.mimeType
+                }
+              });
+            }
+          });
+        }
+        return parts;
+      };
 
       // Gemini history MUST start with 'user' and alternate user/model
       let history = [];
       const historySource = chatMessages.slice(0, -1);
 
       if (historySource.length > 0) {
-        // Find first user message to start the history
         const firstUserIndex = historySource.findIndex(m => m.role === 'user');
         if (firstUserIndex !== -1) {
           history = historySource.slice(firstUserIndex).map(m => ({
             role: m.role === 'user' ? 'user' : 'model',
-            parts: [{ text: m.content }]
+            parts: mapMessageToParts(m)
           }));
         }
       }
@@ -257,11 +279,10 @@ const llmGenerateHandler = async (messages, options = {}) => {
         generationConfig: {
           maxOutputTokens: 8192,
           temperature: 0.7,
-          ...generationConfigOverrides // Inject latest 2026 reasoning config
         },
       });
 
-      const genResult = await chat.sendMessage(lastMessage.content);
+      const genResult = await chat.sendMessage(mapMessageToParts(lastMessage));
       const response = await genResult.response;
       result = { text: response.text() };
 
@@ -322,14 +343,33 @@ const llmGenerateHandler = async (messages, options = {}) => {
 
     } else if (providerId === 'ollama') {
       const baseUrl = config.baseUrl || 'http://localhost:11434';
-      const model = config.model || 'llama3.3';
+      let model = config.model || 'llama3.2'; // Default to a lightweight modern model
+
+      // Override model based on selected intensity mode
+      if (options.localLlmMode || config.localLlmMode) {
+        const mode = options.localLlmMode || config.localLlmMode;
+        if (mode === 'light') model = 'llama3.2:1b';
+        else if (mode === 'normal') model = 'llama3.2:3b';
+        else if (mode === 'heavy') model = 'llama3.3'; // or llama3.1:8b for balanced-heavy
+      }
+
+      // Handle multimodal for Ollama
+      const mappedMessages = messages.map(m => {
+        const msg = { role: m.role, content: m.content || '' };
+        if (m.attachments && Array.isArray(m.attachments)) {
+          msg.images = m.attachments
+            .filter(a => a.mimeType && a.mimeType.startsWith('image/'))
+            .map(a => a.data); // Ollama expects base64 strings in 'images' array
+        }
+        return msg;
+      });
 
       const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          messages: mappedMessages,
           stream: false,
           keep_alive: "1h",
           options: { temperature: 0.7, num_ctx: 32768 }
@@ -345,9 +385,19 @@ const llmGenerateHandler = async (messages, options = {}) => {
 
     } else if (providerId.includes('groq')) {
       const groqKey = apiKey || process.env.GROQ_API_KEY;
-      if (!groqKey) return { error: 'Missing Groq API Key' };
+      if (!groqKey) return { error: 'Missing Groq API Key. Please add it in settings.' };
 
-      const modelName = config.model || 'mixtral-8x7b-32768';
+      let modelName = 'llama-3.3-70b-versatile'; // Standard high-quality default
+
+      if (providerId.includes('llama-3-3')) {
+        modelName = 'llama-3.3-70b-versatile';
+      } else if (providerId.includes('llama-3-1-8b')) {
+        modelName = 'llama-3.1-8b-instant';
+      } else if (providerId.includes('deepseek-r1')) {
+        modelName = 'deepseek-r1-distill-llama-70b';
+      } else if (providerId.includes('mixtral')) {
+        modelName = 'mixtral-8x7b-32768';
+      }
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -358,10 +408,16 @@ const llmGenerateHandler = async (messages, options = {}) => {
         body: JSON.stringify({
           model: modelName,
           messages: messages.map(m => ({ role: m.role, content: m.content })),
-          temperature: 0.7
+          temperature: 0.7,
         }),
         signal: controller.signal
       });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        return { error: `Groq API Error (${response.status}): ${errData.error?.message || response.statusText}` };
+      }
+
       const data = await response.json();
       result = { text: data.choices?.[0]?.message?.content || 'No response from Groq.' };
 
@@ -683,7 +739,7 @@ async function createWindow() {
 
 ipcMain.handle('test-gemini-api', async (event, apiKey) => {
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent("test");
     await result.response; // Ensure the call completes
@@ -1587,8 +1643,12 @@ ipcMain.handle('load-vector-store', async () => {
 });
 
 const llmProviders = [
-  { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro (Latest)' },
-  { id: 'gemini-3.1-flash', name: 'Gemini 3.1 Flash (Latest)' },
+  { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro (Latest Reasoning)' },
+  { id: 'gemini-3.1-flash', name: 'Gemini 3.1 Flash (High Speed)' },
+  { id: 'gemini-3-deep-think', name: 'Gemini 3 Deep Think (Scientific)' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (Ultra Cost-Effective)' },
   { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro (Experimental)' },
   { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
   { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
@@ -1598,7 +1658,10 @@ const llmProviders = [
   { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet' },
   { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet' },
   { id: 'ollama', name: 'Ollama (Local AI)' },
-  { id: 'groq-mixtral', name: 'Groq LPU' },
+  { id: 'groq-llama-3-3-70b', name: 'Groq: Llama 3.3 70B (Versatile)' },
+  { id: 'groq-llama-3-1-8b', name: 'Groq: Llama 3.1 8B (Instant)' },
+  { id: 'groq-deepseek-r1', name: 'Groq: DeepSeek R1 Distill Llama 70B' },
+  { id: 'groq-mixtral', name: 'Groq: Mixtral 8x7b' },
   { id: 'openai-compatible', name: 'OpenAI Compatible' }
 ];
 let activeLlmProvider = 'gemini-1.5-flash';
@@ -1706,6 +1769,22 @@ ipcMain.handle('llm-generate-chat-content', async (event, messages, options = {}
 // This allows `child_process.spawn('ollama', ...)` to find and execute the Ollama CLI.
 // Users should install the latest stable version of Ollama for their respective OS (Windows, macOS, Linux).
 // For Windows, it's expected that the official installer is used which adds ollama to PATH.
+ipcMain.on('ollama-pull-model', (event, modelName) => {
+  const ollama = spawn('ollama', ['pull', modelName]);
+
+  ollama.stdout.on('data', (data) => {
+    event.sender.send('ollama-pull-progress', { model: modelName, output: data.toString(), done: false });
+  });
+
+  ollama.stderr.on('data', (data) => {
+    event.sender.send('ollama-pull-progress', { model: modelName, output: data.toString(), done: false });
+  });
+
+  ollama.on('close', (code) => {
+    event.sender.send('ollama-pull-progress', { model: modelName, output: '', done: true, success: code === 0 });
+  });
+});
+
 ipcMain.handle('ollama-import-model', async (event, { modelName, filePath }) => {
   try {
     if (!fs.existsSync(filePath)) return { success: false, error: 'File not found' };
@@ -2912,7 +2991,19 @@ app.whenReady().then(() => {
         route = isDev ? '/?panel=clipboard' : '/clipboard';
         break;
       case 'cart':
+      case 'unified-cart':
         route = '/cart';
+        break;
+      case 'search':
+      case 'search-apps':
+        route = isDev ? '/?panel=apps' : '/apps';
+        break;
+      case 'translate':
+        route = isDev ? '/?panel=translate' : '/translate';
+        break;
+      case 'context-menu':
+      case 'rightclick':
+        route = isDev ? '/?panel=context-menu' : '/context-menu';
         break;
       default:
         route = `/${type}`;
@@ -3026,6 +3117,30 @@ app.whenReady().then(() => {
     createPopupWindow('cart', {
       width: 500,
       height: 700,
+    });
+  });
+
+  ipcMain.on('open-search-popup', (event, options = {}) => {
+    createPopupWindow('search', {
+      width: 600,
+      height: 500,
+      ...options
+    });
+  });
+
+  ipcMain.on('open-translate-popup', (event, options = {}) => {
+    createPopupWindow('translate', {
+      width: 400,
+      height: 500,
+      ...options
+    });
+  });
+
+  ipcMain.on('open-context-menu-popup', (event, options = {}) => {
+    createPopupWindow('context-menu', {
+      width: 250,
+      height: 400,
+      ...options
     });
   });
 

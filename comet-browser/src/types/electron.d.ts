@@ -200,6 +200,9 @@ declare global {
             openDownloadsPopup: () => void;
             openClipboardPopup: () => void;
             openCartPopup: () => void;
+            openSearchPopup: (options?: any) => void;
+            openTranslatePopup: (options?: any) => void;
+            openContextMenuPopup: (options?: any) => void;
             openPopupWindow: (type: string, options?: any) => void;
             closePopupWindow: (type: string) => void;
             closeAllPopups: () => void;

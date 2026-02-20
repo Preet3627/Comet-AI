@@ -95,14 +95,14 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
 
     let config: LLMProviderOptions = {};
     if (activeProviderId === 'ollama') {
-      config = { baseUrl: store.ollamaBaseUrl, model: store.ollamaModel };
+      config = { baseUrl: store.ollamaBaseUrl, model: store.ollamaModel, localLlmMode: store.localLlmMode };
     } else if (activeProviderId === 'openai-compatible') {
       config = { apiKey: store.openaiApiKey, baseUrl: store.localLLMBaseUrl, model: store.localLLMModel };
     } else if (activeProviderId.startsWith('gemini')) {
       config = { apiKey: store.geminiApiKey };
     } else if (activeProviderId === 'claude' || activeProviderId === 'anthropic' || activeProviderId === 'claude-3-5-sonnet') {
       config = { apiKey: store.anthropicApiKey, model: store.localLLMModel };
-    } else if (activeProviderId === 'groq' || activeProviderId === 'mixtral-8x7b-groq') {
+    } else if (activeProviderId === 'groq' || activeProviderId === 'mixtral-8x7b-groq' || activeProviderId?.startsWith('groq')) {
       config = { apiKey: store.groqApiKey, model: store.localLLMModel };
     } else if (activeProviderId === 'local-tfjs') {
       config = { type: 'local-tfjs' };
@@ -261,6 +261,30 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                             value={store.ollamaModel || ''}
                             onChange={(e) => store.setOllamaModel(e.target.value)}
                           />
+                        </div>
+
+                        {/* Local LLM Mode Selection */}
+                        <div className="space-y-1">
+                          <label htmlFor="local-mode-select" className="text-[9px] text-white/30 uppercase font-bold">Local intelligence Intensity</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {(['light', 'normal', 'heavy'] as const).map((m) => (
+                              <button
+                                key={m}
+                                onClick={() => store.setLocalLlmMode(m)}
+                                className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all border ${store.localLlmMode === m
+                                  ? 'bg-deep-space-accent-neon/20 border-deep-space-accent-neon/50 text-deep-space-accent-neon'
+                                  : 'bg-black/20 border-white/5 text-white/40 hover:text-white/60'
+                                  }`}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[8px] text-white/20 italic pt-1">
+                            {store.localLlmMode === 'light' && 'Optimized for speed. Uses smaller, efficient models.'}
+                            {store.localLlmMode === 'normal' && 'Balanced performance. Good for most daily tasks.'}
+                            {store.localLlmMode === 'heavy' && 'Max reasoning. Recommended for coding and analysis.'}
+                          </p>
                         </div>
 
                         {/* Terminal & Pull Section */}
@@ -452,7 +476,7 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                       </div>
                     )}
 
-                    {(activeProviderId === 'groq' || activeProviderId === 'mixtral-8x7b-groq') && (
+                    {activeProviderId?.startsWith('groq') && (
                       <div className="space-y-3">
                         <input
                           type="password"
@@ -461,7 +485,19 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                           value={store.groqApiKey || ''}
                           onChange={(e) => store.setGroqApiKey(e.target.value)}
                         />
-                        <p className="text-[10px] text-white/30 italic">Using Mixtral 8x7b via Groq's high-speed LPU.</p>
+                        <select
+                          id="groq-model-select"
+                          aria-label="Groq Model Selection"
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                          value={store.localLLMModel || 'llama-3.3-70b-versatile'}
+                          onChange={(e) => store.setLocalLLMModel(e.target.value)}
+                        >
+                          <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Versatile)</option>
+                          <option value="llama-3.1-8b-instant">Llama 3.1 8B (Instant)</option>
+                          <option value="deepseek-r1-distill-llama-70b">DeepSeek R1 Distill Llama 70B</option>
+                          <option value="mixtral-8x7b-32768">Mixtral 8x7b</option>
+                        </select>
+                        <p className="text-[10px] text-white/30 italic">High-speed inference active via Groq's LPU engine.</p>
                       </div>
                     )}
                   </div>
