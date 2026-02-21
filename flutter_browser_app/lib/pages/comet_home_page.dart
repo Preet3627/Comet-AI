@@ -184,8 +184,8 @@ class _CometHomePageState extends State<CometHomePage>
     return Column(
       children: [
         Container(
-          width: 80,
-          height: 80,
+          width: 180,
+          height: 180,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.transparent,
@@ -193,22 +193,22 @@ class _CometHomePageState extends State<CometHomePage>
           child: Center(
             child: Image.asset(
               'assets/icon/icon.png',
-              width: 40,
-              height: 40,
+              width: 140,
+              height: 140,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.rocket_launch, size: 40, color: Colors.white),
+                  const Icon(Icons.rocket_launch, size: 140, color: Colors.white),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         Text(
           settings.logoName.toUpperCase(),
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 18,
+            fontSize: 24,
             fontWeight: FontWeight.w900,
-            letterSpacing: 8,
+            letterSpacing: 10,
           ),
         ),
       ],

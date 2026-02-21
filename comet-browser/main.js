@@ -566,7 +566,7 @@ async function createWindow() {
     },
     titleBarStyle: 'hidden',
     backgroundColor: '#0D0E1C',
-    icon: path.join(__dirname, 'icon.ico'),
+    icon: path.join(__dirname, 'out', 'icon.ico'),
     // Optimize for GPU compositing
     show: false,
     paintWhenInitiallyHidden: false
@@ -2787,8 +2787,8 @@ app.whenReady().then(() => {
     } else {
       // Google Translate Element (Legacy Injection)
       try {
-      // Improved Google Translate Injection with Cookie Support for faster activation
-      const code = `
+        // Improved Google Translate Injection with Cookie Support for faster activation
+        const code = `
       (function() {
         // Set the Google Translate cookie for the target language
         // Format: /auto/[target_lang]
@@ -2837,12 +2837,12 @@ app.whenReady().then(() => {
         }, 500);
       })()
     `;
-      await view.webContents.executeJavaScript(code);
-      return { success: true, method: 'google' };
-    } catch (e) {
-      console.error("[Translation] Website translation failed:", e);
-      return { error: e.message };
-    }
+        await view.webContents.executeJavaScript(code);
+        return { success: true, method: 'google' };
+      } catch (e) {
+        console.error("[Translation] Website translation failed:", e);
+        return { error: e.message };
+      }
     }
   });
 
@@ -4257,7 +4257,7 @@ app.whenReady().then(() => {
 
     // Cleanup desktop automation services
     if (tesseractOcrService) {
-      tesseractOcrService.terminate().catch(() => {});
+      tesseractOcrService.terminate().catch(() => { });
       console.log('[Main] TesseractOcrService terminated.');
     }
 

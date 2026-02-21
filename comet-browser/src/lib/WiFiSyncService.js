@@ -100,6 +100,7 @@ exports.getWiFiSync = getWiFiSync;
 var events_1 = require("events");
 var ws_1 = require("ws");
 var os = __importStar(require("os"));
+var dgram = __importStar(require("dgram"));
 var electron_1 = require("electron");
 var WiFiSyncService = /** @class */ (function (_super) {
     __extends(WiFiSyncService, _super);
@@ -107,9 +108,12 @@ var WiFiSyncService = /** @class */ (function (_super) {
         if (port === void 0) { port = 3004; }
         var _this = _super.call(this) || this;
         _this.wss = null;
+        _this.discoverySocket = null;
+        _this.discoveryInterval = null;
         _this.clients = new Set();
         _this.port = port;
         _this.deviceId = "desktop-".concat(os.hostname().substring(0, 8));
+        _this.pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
         return _this;
     }
     WiFiSyncService.prototype.start = function () {
@@ -131,20 +135,46 @@ var WiFiSyncService = /** @class */ (function (_super) {
                 ws.on('error', function (err) {
                     console.error('[WiFi-Sync] WebSocket error:', err);
                 });
-                // Send immediate handshake info
-                ws.send(JSON.stringify({
-                    type: 'handshake-ack',
-                    deviceId: _this.deviceId,
-                    hostname: os.hostname(),
-                    platform: os.platform()
-                }));
                 _this.emit('client-connected');
             });
+            this._startDiscovery();
             return true;
         }
         catch (e) {
             console.error('[WiFi-Sync] Failed to start server:', e);
             return false;
+        }
+    };
+    WiFiSyncService.prototype._startDiscovery = function () {
+        var _this = this;
+        try {
+            this.discoverySocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+            var discoveryPort_1 = 3005; // Different port for discovery
+            var beacon_1 = JSON.stringify({
+                type: 'comet-ai-beacon',
+                deviceId: this.deviceId,
+                deviceName: os.hostname(),
+                ip: this.getLocalIp(),
+                port: this.port
+            });
+            this.discoveryInterval = setInterval(function () {
+                if (_this.discoverySocket) {
+                    var message = Buffer.from(beacon_1);
+                    _this.discoverySocket.send(message, discoveryPort_1, '255.255.255.255', function (err) {
+                        if (err)
+                            console.error('[WiFi-Sync] Discovery send failed:', err);
+                    });
+                }
+            }, 3000);
+            this.discoverySocket.bind(0, function () {
+                if (_this.discoverySocket) {
+                    _this.discoverySocket.setBroadcast(true);
+                    console.log('[WiFi-Sync] Discovery beacon started');
+                }
+            });
+        }
+        catch (e) {
+            console.error('[WiFi-Sync] Failed to start discovery:', e);
         }
     };
     WiFiSyncService.prototype._handleMessage = function (ws, data) {
@@ -153,12 +183,27 @@ var WiFiSyncService = /** @class */ (function (_super) {
             console.log("[WiFi-Sync] Received: ".concat(msg.type));
             switch (msg.type) {
                 case 'handshake':
-                    ws.send(JSON.stringify({
-                        type: 'handshake-ack',
-                        deviceId: this.deviceId,
-                        hostname: os.hostname(),
-                        platform: os.platform()
-                    }));
+                    console.log('[WiFi-Sync] Handshake received from:', msg.deviceId);
+                    if (msg.pairingCode === this.pairingCode) {
+                        ws.send(JSON.stringify({
+                            type: 'handshake-ack',
+                            deviceId: this.deviceId,
+                            hostname: os.hostname(),
+                            platform: os.platform(),
+                            authenticated: true
+                        }));
+                        console.log('[WiFi-Sync] Client authenticated successfully');
+                    }
+                    else {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            code: 'AUTH_FAILED',
+                            message: 'Invalid pairing code'
+                        }));
+                        console.log('[WiFi-Sync] Client authentication failed');
+                        // Optional: ws.close() or keep open for retry? 
+                        // Flutter UI allows retry.
+                    }
                     break;
                 case 'execute-command':
                     this._handleCommand(ws, msg);
@@ -220,6 +265,17 @@ var WiFiSyncService = /** @class */ (function (_super) {
             this.wss.close();
             this.wss = null;
         }
+        if (this.discoveryInterval) {
+            clearInterval(this.discoveryInterval);
+            this.discoveryInterval = null;
+        }
+        if (this.discoverySocket) {
+            this.discoverySocket.close();
+            this.discoverySocket = null;
+        }
+    };
+    WiFiSyncService.prototype.getPairingCode = function () {
+        return this.pairingCode;
     };
     return WiFiSyncService;
 }(events_1.EventEmitter));

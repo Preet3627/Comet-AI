@@ -17,13 +17,20 @@ class _FullScreenAIChatState extends State<FullScreenAIChat> {
   String? _response;
   bool _isProcessing = true;
 
+  late String _currentMessage;
+
   @override
   void initState() {
     super.initState();
+    _currentMessage = widget.initialMessage;
     _processQuery();
   }
 
-  Future<void> _processQuery() async {
+  Future<void> _processQuery([String? newMessage]) async {
+    if (newMessage != null) {
+      _currentMessage = newMessage;
+    }
+    
     final syncService = SyncService();
 
     if (!syncService.isConnectedToDesktop) {
@@ -50,7 +57,7 @@ class _FullScreenAIChatState extends State<FullScreenAIChat> {
       });
 
       final result = await syncService.sendPromptToDesktop(
-        widget.initialMessage,
+        _currentMessage,
         model: model,
       );
       setState(() {
@@ -169,18 +176,46 @@ class _FullScreenAIChatState extends State<FullScreenAIChat> {
                       Icons.desktop_windows, "Desktop Control Active"),
                   _buildInfoRow(Icons.security, "Secure Sandboxed Execution"),
                   const SizedBox(height: 30),
-                  ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.check),
-                    label: const Text("Done"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD500F9),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 30, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30)),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 30),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: const Color(0xFF00E5FF).withOpacity(0.2)),
                     ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 14),
+                            decoration: const InputDecoration(
+                              hintText: "Ask another question...",
+                              hintStyle: TextStyle(color: Colors.white30),
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: (val) {
+                              if (val.isNotEmpty) {
+                                setState(() {
+                                  _isProcessing = true;
+                                  _response = null;
+                                  _statusMessage = "Processing New Request...";
+                                });
+                                _processQuery(val);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Close",
+                        style: TextStyle(color: Colors.white38)),
                   ),
                 ],
               ],

@@ -33,6 +33,7 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
   bool _isWindowClosed = false;
   final FocusNode _focusNode = FocusNode();
   int _lastScrollY = 0;
+  Timer? _appBarTimer;
 
   final TextEditingController _httpAuthUsernameController =
       TextEditingController();
@@ -300,16 +301,24 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
       },
       onScrollChanged: (controller, x, y) {
         if (isCurrentTab(currentWebViewModel)) {
-          if (y > _lastScrollY && y > 100) {
-            // Scrolling down
-            if (currentWebViewModel.isAppBarVisible) {
-              currentWebViewModel.isAppBarVisible = false;
-            }
-          } else if (y < _lastScrollY || y < 10) {
-            // Scrolling up or at top
-            if (!currentWebViewModel.isAppBarVisible) {
-              currentWebViewModel.isAppBarVisible = true;
-            }
+          // Add a small threshold and delay to prevent lag/flicker
+          final int delta = (y - _lastScrollY).abs();
+          if (delta > 10) {
+            _appBarTimer?.cancel();
+            _appBarTimer = Timer(const Duration(milliseconds: 150), () {
+              if (!mounted) return;
+              if (y > _lastScrollY && y > 150) {
+                // Scrolling down
+                if (currentWebViewModel.isAppBarVisible) {
+                  currentWebViewModel.isAppBarVisible = false;
+                }
+              } else if (y < _lastScrollY - 20 || y < 50) {
+                // Scrolling up or at top
+                if (!currentWebViewModel.isAppBarVisible) {
+                  currentWebViewModel.isAppBarVisible = true;
+                }
+              }
+            });
           }
           _lastScrollY = y;
         }

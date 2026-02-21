@@ -101,9 +101,7 @@
       "src/lib/P2PFileSyncService.js",
       "src/lib/*.js",
       "package.json",
-      "LICENSE.txt",
-      "icon.ico",
-      "icon.png"
+      "LICENSE.txt"
     ],
     "nsis": {
       "oneClick": false,
@@ -114,13 +112,13 @@
       "shortcutName": "Comet Browser"
     },
     "win": {
-      "icon": "icon.ico",
+      "icon": "assets/icon.ico",
       "target": [
         "nsis"
       ]
     },
     "mac": {
-      "icon": "icon.png",
+      "icon": "assets/icon.png",
       "target": [
         "dmg",
         "zip"
@@ -129,7 +127,7 @@
       "gatekeeperAssess": false
     },
     "linux": {
-      "icon": "icon.png",
+      "icon": "assets/icon.png",
       "target": [
         "AppImage"
       ],

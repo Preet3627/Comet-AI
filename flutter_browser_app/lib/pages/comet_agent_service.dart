@@ -311,7 +311,11 @@ STUCK: "Exact reason why the agent cannot proceed"
     if (webViewController == null) return 'unknown';
     try {
       final uri = await webViewController!.getUrl();
-      return uri?.toString() ?? 'unknown';
+      if (uri == null) {
+        final jsUrl = await webViewController!.evaluateJavascript(source: 'window.location.href');
+        return jsUrl?.toString() ?? 'unknown';
+      }
+      return uri.toString();
     } catch (e) {
       return 'unknown';
     }
@@ -320,15 +324,21 @@ STUCK: "Exact reason why the agent cannot proceed"
   Future<String> _extractDom() async {
     if (webViewController == null) return '';
     try {
+      // Wait a bit if loading
+      if (await webViewController!.isLoading()) {
+        await Future.delayed(const Duration(milliseconds: 1000));
+      }
       final result = await webViewController!.evaluateJavascript(source: '''
         (function() {
-          const clone = document.documentElement.cloneNode(true);
-          clone.querySelectorAll('script, style, svg, noscript, link[rel="stylesheet"]').forEach(el => el.remove());
-          let html = clone.outerHTML;
-          if (html.length > 12000) {
-            html = html.substring(0, 12000) + '... [TRUNCATED]';
-          }
-          return html;
+          try {
+            const clone = document.documentElement.cloneNode(true);
+            clone.querySelectorAll('script, style, svg, noscript, link[rel="stylesheet"]').forEach(el => el.remove());
+            let html = clone.outerHTML;
+            if (html.length > 15000) {
+              html = html.substring(0, 15000) + '... [TRUNCATED]';
+            }
+            return html;
+          } catch(e) { return "Error: " + e.toString(); }
         })()
       ''');
       return result?.toString() ?? '';
@@ -587,6 +597,34 @@ class AgentActionExecutor {
     return 'success';
   }
 
+  Future<String> _getCurrentUrl() async {
+    if (controller == null) return 'unknown';
+    try {
+      final uri = await controller.getUrl();
+      if (uri == null) {
+        // Fallback: try to get from JS if InAppWebView is confused
+        final jsUrl = await controller.evaluateJavascript(source: 'window.location.href');
+        return jsUrl?.toString() ?? 'unknown';
+      }
+      return uri.toString();
+    } catch (e) {
+      return 'unknown';
+    }
+  }
+
+  Future<void> _waitForPageLoad([int timeoutMs = 10000]) async {
+    if (controller == null) return;
+    int elapsed = 0;
+    while (elapsed < timeoutMs) {
+      final isLoading = await controller.isLoading();
+      if (!isLoading) break;
+      await Future.delayed(const Duration(milliseconds: 500));
+      elapsed += 500;
+    }
+    // Final stabilization delay
+    await Future.delayed(const Duration(milliseconds: 1000));
+  }
+
   Future<String> _executeAction(String action) async {
     // Clean up the action string from potential brackets or extra quotes
     String normalizedAction = action.trim();
@@ -609,7 +647,7 @@ class AgentActionExecutor {
       if (!url.startsWith('http')) url = 'https://$url';
       
       await controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
-      await Future.delayed(const Duration(milliseconds: 3000));
+      await _waitForPageLoad(15000); // Wait up to 15s for load
       return 'success';
     }
 

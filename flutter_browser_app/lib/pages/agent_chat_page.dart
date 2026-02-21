@@ -170,10 +170,20 @@ class _AgentChatPageState extends State<AgentChatPage>
     final browserModel = Provider.of<BrowserModel>(context, listen: false);
     final settings = browserModel.getSettings();
 
+    InAppWebViewController? controller = widget.webViewController;
+    
+    if (controller == null) {
+      final windowModel = Provider.of<WindowModel>(context, listen: false);
+      final currentTab = windowModel.getCurrentTab();
+      if (currentTab != null) {
+        controller = currentTab.webViewModel.webViewController;
+      }
+    }
+
     _agentService = CometAgentService(
       apiKey: _apiKey!,
       model: settings.geminiModel,
-      webViewController: widget.webViewController,
+      webViewController: controller,
     );
 
     setState(() {
@@ -184,41 +194,7 @@ class _AgentChatPageState extends State<AgentChatPage>
       _stuckMessage = null;
     });
 
-    _agentService.onStep.listen((step) {
-      if (mounted) {
-        setState(() {
-          _steps.add(step);
-          
-          final doneAction = step.actions.firstWhereOrNull((a) {
-            final normalized = a.trim().replaceAll('[', '').replaceAll(']', '');
-            return normalized.startsWith('DONE:');
-          });
-          
-          final stuckAction = step.actions.firstWhereOrNull((a) {
-            final normalized = a.trim().replaceAll('[', '').replaceAll(']', '');
-            return normalized.startsWith('STUCK:');
-          });
-
-          if (doneAction != null) {
-            _isDone = true;
-            _isRunning = false;
-            _doneMessage = doneAction
-                .replaceAll('[', '').replaceAll(']', '')
-                .replaceFirst('DONE:', '')
-                .trim()
-                .replaceAll('"', '');
-          } else if (stuckAction != null) {
-            _isRunning = false;
-            _stuckMessage = stuckAction
-                .replaceAll('[', '').replaceAll(']', '')
-                .replaceFirst('STUCK:', '')
-                .trim()
-                .replaceAll('"', '');
-          }
-        });
-        _scrollToBottom();
-      }
-    });
+    _hookAgentListeners();
 
     _agentService.runTask(widget.initialTask).then((session) {
       if (mounted) {
@@ -252,6 +228,89 @@ class _AgentChatPageState extends State<AgentChatPage>
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
+      }
+    });
+  }
+
+  void _sendFollowUpTask(String task) {
+    if (task.isEmpty) return;
+    
+    setState(() {
+      _isRunning = true;
+      _isDone = false;
+      _stuckMessage = null;
+      _doneMessage = null;
+    });
+
+    // Check if we need to get a controller
+    if (_agentService.webViewController == null) {
+      final windowModel = Provider.of<WindowModel>(context, listen: false);
+      final currentTab = windowModel.getCurrentTab();
+      if (currentTab != null) {
+        // Re-initialize service with the controller
+        final browserModel = Provider.of<BrowserModel>(context, listen: false);
+        final settings = browserModel.getSettings();
+        _agentService = CometAgentService(
+          apiKey: _apiKey!,
+          model: settings.geminiModel,
+          webViewController: currentTab.webViewModel.webViewController,
+        );
+        // Re-hook listeners
+        _hookAgentListeners();
+      }
+    }
+
+    _agentService.runTask(task).then((session) {
+      if (mounted) {
+        setState(() {
+          if (!_isDone && _stuckMessage == null) {
+            _isRunning = false;
+            if (session.isDone) {
+              _isDone = true;
+              _doneMessage = session.doneMessage;
+            } else if (session.stuckMessage != null) {
+              _stuckMessage = session.stuckMessage;
+            }
+          }
+        });
+      }
+    });
+  }
+
+  void _hookAgentListeners() {
+    _agentService.onStep.listen((step) {
+      if (mounted) {
+        setState(() {
+          _steps.add(step);
+          
+          final doneAction = step.actions.firstWhereOrNull((a) {
+            final normalized = a.trim().replaceAll('[', '').replaceAll(']', '');
+            return normalized.startsWith('DONE:');
+          });
+          
+          final stuckAction = step.actions.firstWhereOrNull((a) {
+            final normalized = a.trim().replaceAll('[', '').replaceAll(']', '');
+            return normalized.startsWith('STUCK:');
+          });
+
+          if (doneAction != null) {
+            _isDone = true;
+            _isRunning = false;
+            _doneMessage = doneAction
+                .replaceAll('[', '').replaceAll(']', '')
+                .replaceFirst('DONE:', '')
+                .trim()
+                .replaceAll('"', '');
+          } else if (stuckAction != null) {
+            _isRunning = false;
+            _stuckMessage = stuckAction
+                .replaceAll('[', '').replaceAll(']', '')
+                .replaceFirst('STUCK:', '')
+                .trim()
+                .replaceAll('"', '');
+          }
+        });
+        _scrollToBottom();
       }
     });
   }
@@ -863,54 +922,96 @@ class _AgentChatPageState extends State<AgentChatPage>
   }
 
   Widget _buildBottomBar() {
+    final followUpController = TextEditingController();
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back, size: 16),
-              label: const Text('Back to Browser'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.08),
-                foregroundColor: Colors.white70,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+          if (!_isRunning)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: followUpController,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: const InputDecoration(
+                        hintText: "Send follow-up instruction...",
+                        hintStyle: TextStyle(color: Colors.white30),
+                        border: InputBorder.none,
+                      ),
+                      onSubmitted: (val) {
+                        _sendFollowUpTask(val);
+                        followUpController.clear();
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Color(0xFF00E5FF), size: 20),
+                    onPressed: () {
+                      _sendFollowUpTask(followUpController.text);
+                      followUpController.clear();
+                    },
+                  ),
+                ],
               ),
             ),
-          ),
-          if (!_isRunning && (_isDone || _stuckMessage != null)) ...[
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _steps.clear();
-                    _isDone = false;
-                    _stuckMessage = null;
-                    _doneMessage = null;
-                  });
-                  _startAgent();
-                },
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Retry Task'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00E5FF).withOpacity(0.15),
-                  foregroundColor: const Color(0xFF00E5FF),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                        color: const Color(0xFF00E5FF).withOpacity(0.3)),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('Back to Browser'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white.withOpacity(0.08),
+                    foregroundColor: Colors.white70,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                   ),
                 ),
               ),
-            ),
-          ],
+              if (!_isRunning && (_isDone || _stuckMessage != null)) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _steps.clear();
+                        _isDone = false;
+                        _stuckMessage = null;
+                        _doneMessage = null;
+                      });
+                      _startAgent();
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Retry Task'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E5FF).withOpacity(0.15),
+                      foregroundColor: const Color(0xFF00E5FF),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                            color: const Color(0xFF00E5FF).withOpacity(0.3)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
