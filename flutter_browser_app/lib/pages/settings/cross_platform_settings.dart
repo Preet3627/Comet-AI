@@ -449,15 +449,35 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
           );
         },
       ),
+      SwitchListTile(
+        title: const Text("URL Predictor"),
+        subtitle:
+            const Text("Predict and suggest URLs as you type (Default: Off)"),
+        value: settings.urlPredictorEnabled,
+        onChanged: (value) {
+          setState(() {
+            settings.urlPredictorEnabled = value;
+            browserModel.updateSettings(settings);
+            browserModel.save();
+          });
+        },
+      ),
       ListTile(
         title: const Text("Theme"),
         subtitle: Text(settings.theme),
         leading: const Icon(Icons.style, color: Colors.cyan),
         trailing: DropdownButton<String>(
           value: settings.theme,
-          items: ["Dark", "Vibrant", "Glass", "Minimal", "Ocean", "Sunset", "Forest", "Purple"]
-              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-              .toList(),
+          items: [
+            "Dark",
+            "Vibrant",
+            "Glass",
+            "Minimal",
+            "Ocean",
+            "Sunset",
+            "Forest",
+            "Purple"
+          ].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
           onChanged: (val) {
             setState(() {
               if (val != null) settings.theme = val;

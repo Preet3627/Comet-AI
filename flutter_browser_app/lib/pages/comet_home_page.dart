@@ -196,8 +196,10 @@ class _CometHomePageState extends State<CometHomePage>
               width: 140,
               height: 140,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.rocket_launch, size: 140, color: Colors.white),
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.rocket_launch,
+                  size: 140,
+                  color: Colors.white),
             ),
           ),
         ),
@@ -239,9 +241,15 @@ class _CometHomePageState extends State<CometHomePage>
                 border: InputBorder.none,
               ),
               onChanged: (value) {
-                setState(() {
-                  _suggestions = URLPredictor.getPredictions(value);
-                });
+                if (settings.urlPredictorEnabled) {
+                  setState(() {
+                    _suggestions = URLPredictor.getPredictions(value);
+                  });
+                } else if (_suggestions.isNotEmpty) {
+                  setState(() {
+                    _suggestions = [];
+                  });
+                }
               },
               onSubmitted: (_) => _handleSearch(),
             ),
@@ -355,7 +363,8 @@ class _CometHomePageState extends State<CometHomePage>
                         height: 36,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.public, color: Colors.white54, size: 24),
+                            const Icon(Icons.public,
+                                color: Colors.white54, size: 24),
                       ),
                     )
                   : const Icon(Icons.public, color: Colors.white54, size: 24),
@@ -465,7 +474,8 @@ class _CometHomePageState extends State<CometHomePage>
             TextField(
                 controller: logoController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: "Logo URL (optional)")),
+                decoration:
+                    const InputDecoration(labelText: "Logo URL (optional)")),
           ],
         ),
         actions: [
@@ -500,12 +510,13 @@ class _CometHomePageState extends State<CometHomePage>
     final nameController = TextEditingController(text: shortcut['name']);
     final urlController = TextEditingController(text: shortcut['url']);
     final logoController = TextEditingController(text: shortcut['logo'] ?? '');
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text("Edit Shortcut", style: TextStyle(color: Colors.white)),
+        title:
+            const Text("Edit Shortcut", style: TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -520,7 +531,8 @@ class _CometHomePageState extends State<CometHomePage>
             TextField(
                 controller: logoController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: "Logo URL (optional)")),
+                decoration:
+                    const InputDecoration(labelText: "Logo URL (optional)")),
           ],
         ),
         actions: [

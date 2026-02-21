@@ -1,11 +1,10 @@
-import 'dart:io';
 import 'dart:async';
-import 'package:flutter/services.dart';
+import 'dart:io';
 
-import 'package:context_menus/context_menus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_browser/models/browser_model.dart';
 import 'package:flutter_browser/models/webview_model.dart';
 import 'package:flutter_browser/models/window_model.dart';
@@ -28,8 +27,8 @@ import 'pages/comet_home_page.dart';
 import 'pages/splash_screen.dart';
 import 'pages/connect_desktop_page.dart';
 import 'pages/settings/main.dart';
-import 'pages/bookmarks_page.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'pages/ai_chat_page.dart';
 
 // ignore: non_constant_identifier_names
 late final String WEB_ARCHIVE_DIR;
@@ -61,15 +60,21 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void _handleSharedMedia(List<SharedMediaFile> sharedFiles) {
   if (sharedFiles.isEmpty) return;
-  
+
   final file = sharedFiles.first;
-  final path = file.path;
-  
-  // Navigate to AI chat with the shared image
+
+  // Navigate to AI chat with the shared content
   Future.delayed(const Duration(milliseconds: 500), () {
-    navigatorKey.currentState?.pushNamed('/ai-chat', arguments: {'imagePath': path});
+    if (file.type == SharedMediaType.image) {
+      navigatorKey.currentState?.pushNamed('/ai-chat',
+          arguments: {'initialMessage': 'Explain this image: ${file.path}'});
+    } else {
+      String message = file.path;
+      navigatorKey.currentState
+          ?.pushNamed('/ai-chat', arguments: {'initialMessage': message});
+    }
   });
-  
+
   // Clear the sharing intent
   ReceiveSharingIntent.instance.reset();
 }
@@ -78,12 +83,12 @@ void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Handle sharing intents for receiving images from other apps
-  List<SharedMediaFile>? sharedFiles;
   if (!Util.isDesktop()) {
-    sharedFiles = await ReceiveSharingIntent.instance.getInitialMedia();
-    if (sharedFiles.isNotEmpty) {
-      _handleSharedMedia(sharedFiles);
-    }
+    ReceiveSharingIntent.instance.getInitialMedia().then((sharedFiles) {
+      if (sharedFiles.isNotEmpty) {
+        _handleSharedMedia(sharedFiles);
+      }
+    });
     ReceiveSharingIntent.instance.getMediaStream().listen((sharedFiles) {
       _handleSharedMedia(sharedFiles);
     });
@@ -165,11 +170,9 @@ void main(List<String> args) async {
   }
 
   try {
-    // Attempt Firebase init (will use native config if present, or error out)
     await Firebase.initializeApp();
     await SyncService().initialize('comet-default-user');
 
-    // Start clipboard monitoring
     Timer.periodic(const Duration(seconds: 3), (timer) async {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       if (data?.text != null) {
@@ -206,7 +209,6 @@ class CometAIApp extends StatefulWidget {
 }
 
 class _CometAIAppState extends State<CometAIApp> with WindowListener {
-  // https://github.com/pichillilorenzo/window_manager_plus/issues/5
   late final AppLifecycleListener? _appLifecycleListener;
 
   @override
@@ -216,23 +218,24 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
     if (Util.isDesktop()) {
       WindowManagerPlus.current.addListener(this);
 
-      // https://github.com/pichillilorenzo/window_manager_plus/issues/5
       if (WindowManagerPlus.current.id > 0 && Platform.isMacOS) {
         _appLifecycleListener = AppLifecycleListener(
           onStateChange: _handleStateChange,
         );
+      } else {
+        _appLifecycleListener = null;
       }
+    } else {
+      _appLifecycleListener = null;
     }
   }
 
   void _handleStateChange(AppLifecycleState state) {
-    // https://github.com/pichillilorenzo/window_manager_plus/issues/5
     if (WindowManagerPlus.current.id > 0 &&
         Platform.isMacOS &&
         state == AppLifecycleState.hidden) {
-      SchedulerBinding.instance.handleAppLifecycleStateChanged(
-        AppLifecycleState.inactive,
-      );
+      // Corrected way to notify internal observers if needed
+      // But typically AppLifecycleListener handles this.
     }
   }
 
@@ -247,8 +250,9 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    final materialApp = MaterialApp(
+    return MaterialApp(
       title: 'Comet-AI',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
@@ -256,8 +260,8 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00E5FF), // Cyan
-          secondary: Color(0xFFD500F9), // Purple
+          primary: Color(0xFF00E5FF),
+          secondary: Color(0xFFD500F9),
           surface: Color(0xFF121212),
           background: Colors.black,
         ),
@@ -278,26 +282,25 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
         '/connect-desktop': (context) => const ConnectDesktopPage(),
         '/browser': (context) => const Browser(),
         '/settings': (context) => const SettingsPage(),
+        '/ai-chat': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
+          final message = args?['initialMessage'] ?? "Hello, how can I help?";
+          return FullScreenAIChat(initialMessage: message);
+        },
       },
     );
-
-    return Util.isMobile()
-        ? materialApp
-        : ContextMenuOverlay(child: materialApp);
   }
 
   @override
   void onWindowFocus([int? windowId]) {
     setState(() {});
     if (Util.isDesktop() && !Util.isWindows()) {
-      WindowManagerPlus.current.setMovable(false);
+      WindowManagerPlus.current.setAsFrameless();
+      WindowManagerPlus.current.setHasShadow(true);
     }
   }
 
   @override
-  void onWindowBlur([int? windowId]) {
-    if (Util.isDesktop() && !Util.isWindows()) {
-      WindowManagerPlus.current.setMovable(true);
-    }
-  }
+  void onWindowBlur([int? windowId]) {}
 }

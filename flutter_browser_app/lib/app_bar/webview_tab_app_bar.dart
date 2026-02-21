@@ -22,6 +22,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:translator/translator.dart';
 
 import 'package:flutter_browser/pages/ai_chat_page.dart';
 import 'package:flutter_browser/pages/agent_chat_page.dart';
@@ -138,7 +139,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
             final isVibrant = settings.theme == "Vibrant";
 
             return PreferredSize(
-              preferredSize: const Size.fromHeight(100),
+              preferredSize: const Size.fromHeight(80),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -147,40 +148,46 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                   borderRadius: BorderRadius.circular(30),
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                    child: Container(
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: isVibrant
-                            ? Colors.white.withOpacity(0.1)
-                            : Colors.black.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
+                    child: GestureDetector(
+                      onHorizontalDragEnd: (details) {
+                        if (details.primaryVelocity! > 0) {
+                          // Swipe Right -> Prev Tab
+                          int currentIndex = windowModel.getCurrentTabIndex();
+                          if (currentIndex > 0) {
+                            windowModel.showTab(currentIndex - 1);
+                          }
+                        } else if (details.primaryVelocity! < 0) {
+                          // Swipe Left -> Next Tab
+                          int currentIndex = windowModel.getCurrentTabIndex();
+                          if (currentIndex <
+                              windowModel.webViewTabs.length - 1) {
+                            windowModel.showTab(currentIndex + 1);
+                          }
+                        }
+                      },
+                      child: Container(
+                        height: 52,
+                        decoration: BoxDecoration(
                           color: isVibrant
-                              ? Colors.white.withOpacity(0.2)
-                              : Colors.white.withOpacity(0.05),
+                              ? Colors.white.withOpacity(0.12)
+                              : Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.1),
+                            width: 0.5,
+                          ),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 4),
-                          _buildModernLeading(settings),
-                          Expanded(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              child: _buildSearchTextField(),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 8),
+                            _buildModernLeading(settings),
+                            Expanded(
+                              child: _buildSearchTextField(settings),
                             ),
-                          ),
-                          _buildModernActions(windowModel, browserModel),
-                          const SizedBox(width: 8),
-                        ],
+                            _buildModernActions(windowModel, browserModel),
+                            const SizedBox(width: 10),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -281,16 +288,20 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     );
   }
 
-  Widget _buildSearchTextField() {
-    final browserModel = Provider.of<BrowserModel>(context, listen: true);
-    final settings = browserModel.getSettings();
-
-    final webViewModel = Provider.of<WebViewModel>(context, listen: true);
-
+  Widget _buildSearchTextField(BrowserSettings settings) {
     return CompositedTransformTarget(
       link: _layerLink,
       child: TextField(
         onChanged: (value) {
+          if (!settings.urlPredictorEnabled) {
+            if (_suggestions.isNotEmpty) {
+              setState(() {
+                _suggestions = [];
+              });
+              _updateOverlay();
+            }
+            return;
+          }
           _debounceTimer?.cancel();
           _debounceTimer = Timer(const Duration(milliseconds: 400), () {
             if (mounted && _searchController?.text == value) {
@@ -306,11 +317,11 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
         },
         onTap: () {
           if (_searchController != null) {
-            _searchController!.text = "";
+            _searchController!.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: _searchController!.text.length,
+            );
           }
-        },
-        onTapOutside: (event) {
-          shouldSelectText = true;
         },
         keyboardType: TextInputType.url,
         focusNode: _focusNode,
@@ -321,16 +332,19 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
         decoration: InputDecoration(
           hintText: "Search or enter address",
           hintStyle: TextStyle(
-            color: Colors.white.withOpacity(0.3),
-            fontSize: 14.0,
+            color: Colors.white.withOpacity(0.4),
+            fontSize: 15.0,
+            fontFamily: 'Outfit',
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          isDense: true,
         ),
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 14.0,
-          fontWeight: FontWeight.w500,
+          fontSize: 16.0,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Outfit',
         ),
       ),
     );
@@ -343,9 +357,26 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
       children: [
         IconButton(
           constraints: const BoxConstraints(maxWidth: 40),
-          icon: const Icon(Icons.auto_awesome,
-              color: Color(0xFF00E5FF), size: 20),
-          onPressed: () => _showAgentDialog(),
+          icon: const Icon(Icons.home, color: Colors.white70, size: 24),
+          onPressed: () {
+            final browserModel =
+                Provider.of<BrowserModel>(context, listen: false);
+            final windowModel =
+                Provider.of<WindowModel>(context, listen: false);
+            final settings = browserModel.getSettings();
+            var url = settings.homePageEnabled &&
+                    settings.customUrlHomePage.isNotEmpty
+                ? WebUri(settings.customUrlHomePage)
+                : WebUri(settings.searchEngine.url);
+
+            final webViewModel = windowModel.getCurrentTab()?.webViewModel;
+            if (webViewModel?.webViewController != null) {
+              webViewModel!.webViewController!
+                  .loadUrl(urlRequest: URLRequest(url: url));
+            } else {
+              addNewTab(url: url);
+            }
+          },
         ),
         if (!Util.isMobile()) ...[
           IconButton(
@@ -1037,7 +1068,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                       ],
                     ),
                   );
-                case PopupMenuActions.AI_ASSISTANT:
+                case PopupMenuActions.ASK_AI:
                   return CustomPopupMenuItem<String>(
                     enabled: windowModel.getCurrentTab() != null,
                     value: choice,
@@ -1049,6 +1080,19 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                           Icons.auto_awesome,
                           color: Color(0xFF00E5FF),
                         ),
+                      ],
+                    ),
+                  );
+                case PopupMenuActions.ADD_TO_HOME_SCREEN:
+                  return CustomPopupMenuItem<String>(
+                    enabled: true,
+                    value: choice,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(choice),
+                        const Icon(Icons.add_to_home_screen,
+                            color: Colors.black),
                       ],
                     ),
                   );
@@ -1076,6 +1120,18 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                           padding: const EdgeInsets.only(right: 6),
                           child: const AnimatedFlutterBrowserLogo(size: 12.5),
                         ),
+                      ],
+                    ),
+                  );
+                case PopupMenuActions.DOWNLOAD:
+                  return CustomPopupMenuItem<String>(
+                    enabled: windowModel.getCurrentTab() != null,
+                    value: choice,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(choice),
+                        const Icon(Icons.download, color: Colors.blue),
                       ],
                     ),
                   );
@@ -1138,14 +1194,20 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
       case PopupMenuActions.SHARE:
         share();
         break;
-      case PopupMenuActions.AI_ASSISTANT:
+      case PopupMenuActions.ASK_AI:
         _showAIAssistant();
+        break;
+      case PopupMenuActions.ADD_TO_HOME_SCREEN:
+        _addToHomeScreen();
         break;
       case PopupMenuActions.SYNC_WITH_DESKTOP:
         _showSyncDialog();
         break;
       case PopupMenuActions.DESKTOP_MODE:
         toggleDesktopMode();
+        break;
+      case PopupMenuActions.DOWNLOAD:
+        takeScreenshotAndShow();
         break;
       case PopupMenuActions.DEVELOPERS:
         Future.delayed(const Duration(milliseconds: 300), () {
@@ -1177,7 +1239,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
   void _analyzePageWithAI() async {
     final webViewModel = Provider.of<WebViewModel>(context, listen: false);
     final controller = webViewModel.webViewController;
-    
+
     if (controller == null) return;
 
     showDialog(
@@ -1189,7 +1251,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           children: [
             CircularProgressIndicator(color: Color(0xFF00E5FF)),
             SizedBox(width: 20),
-            Text("Analyzing page with AI...", style: TextStyle(color: Colors.white)),
+            Text("Analyzing page with AI...",
+                style: TextStyle(color: Colors.white)),
           ],
         ),
       ),
@@ -1198,7 +1261,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     try {
       final title = await controller.getTitle() ?? '';
       final url = await controller.getUrl() ?? '';
-      
+
       final pageContent = await controller.evaluateJavascript(source: '''
         (function() {
           var text = document.body.innerText.substring(0, 5000);
@@ -1214,7 +1277,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           context,
           MaterialPageRoute(
             builder: (context) => FullScreenAIChat(
-              initialMessage: 'Analyze this webpage:\n\nURL: $url\n\nTitle: $title\n\nContent: $pageContent\n\nPlease provide a summary and key information from this page.',
+              initialMessage:
+                  'Analyze this webpage:\n\nURL: $url\n\nTitle: $title\n\nContent: $pageContent\n\nPlease provide a summary and key information from this page.',
             ),
           ),
         );
@@ -1232,7 +1296,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
   void _ocrScanPage() async {
     final webViewModel = Provider.of<WebViewModel>(context, listen: false);
     final controller = webViewModel.webViewController;
-    
+
     if (controller == null) return;
 
     showDialog(
@@ -1244,7 +1308,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           children: [
             CircularProgressIndicator(color: Color(0xFF00E5FF)),
             SizedBox(width: 20),
-            Text("Scanning page for text...", style: TextStyle(color: Colors.white)),
+            Text("Scanning page for text...",
+                style: TextStyle(color: Colors.white)),
           ],
         ),
       ),
@@ -1271,7 +1336,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           context,
           MaterialPageRoute(
             builder: (context) => FullScreenAIChat(
-              initialMessage: 'Extract and summarize all readable text from this webpage. Here is what I found:\n\n$pageText\n\nPlease organize this information clearly.',
+              initialMessage:
+                  'Extract and summarize all readable text from this webpage. Here is what I found:\n\n$pageText\n\nPlease organize this information clearly.',
             ),
           ),
         );
@@ -1289,7 +1355,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
   void _extractPageContent() async {
     final webViewModel = Provider.of<WebViewModel>(context, listen: false);
     final controller = webViewModel.webViewController;
-    
+
     if (controller == null) return;
 
     showDialog(
@@ -1301,7 +1367,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           children: [
             CircularProgressIndicator(color: Color(0xFF00E5FF)),
             SizedBox(width: 20),
-            Text("Extracting DOM content...", style: TextStyle(color: Colors.white)),
+            Text("Extracting DOM content...",
+                style: TextStyle(color: Colors.white)),
           ],
         ),
       ),
@@ -1330,7 +1397,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           context,
           MaterialPageRoute(
             builder: (context) => FullScreenAIChat(
-              initialMessage: 'Here is the structured DOM data from the current webpage:\n\n$domContent\n\nPlease provide insights about this page structure.',
+              initialMessage:
+                  'Here is the structured DOM data from the current webpage:\n\n$domContent\n\nPlease provide insights about this page structure.',
             ),
           ),
         );
@@ -1461,12 +1529,6 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                   leading: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      // CachedNetworkImage(
-                      //   placeholder: (context, url) =>
-                      //       CircularProgressIndicator(),
-                      //   imageUrl: faviconUrl,
-                      //   height: 30,
-                      // )
                       CustomImage(
                         url: faviconUrl,
                         maxWidth: 30.0,
@@ -1486,10 +1548,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                   ),
                   isThreeLine: true,
                   onTap: () {
-                    setState(() {
-                      addNewTab(url: favorite.url);
-                      Navigator.pop(context);
-                    });
+                    addNewTab(url: favorite.url);
+                    Navigator.pop(context);
                   },
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1542,12 +1602,6 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                           leading: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: <Widget>[
-                              // CachedNetworkImage(
-                              //   placeholder: (context, url) =>
-                              //       CircularProgressIndicator(),
-                              //   imageUrl: (url?.origin ?? "") + "/favicon.ico",
-                              //   height: 30,
-                              // )
                               CustomImage(
                                 url: WebUri("${url?.origin ?? ""}/favicon.ico"),
                                 maxWidth: 30.0,
@@ -1594,8 +1648,6 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
         var listViewChildren = <Widget>[];
         webArchives.forEach((key, webArchive) {
           var path = webArchive.path;
-          // String fileName = path.substring(path.lastIndexOf('/') + 1);
-
           var url = webArchive.url;
 
           listViewChildren.add(
@@ -1603,11 +1655,6 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
               leading: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  // CachedNetworkImage(
-                  //   placeholder: (context, url) => CircularProgressIndicator(),
-                  //   imageUrl: (url?.origin ?? "") + "/favicon.ico",
-                  //   height: 30,
-                  // )
                   CustomImage(
                     url: WebUri("${url?.origin ?? ""}/favicon.ico"),
                     maxWidth: 30.0,
@@ -1791,89 +1838,6 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
 
       file.delete();
     }
-  }
-
-  void _showAIAssistant() {
-    final windowModel = Provider.of<WindowModel>(context, listen: false);
-    final webViewModel = windowModel.getCurrentTab()?.webViewModel;
-    final webViewController = webViewModel?.webViewController;
-
-    if (webViewController == null) return;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.all(20.0),
-                child: Text(
-                  "Comet AI Intelligence",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF00E5FF),
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.summarize, color: Colors.blue),
-                title: const Text("Summarize Page"),
-                subtitle: const Text("Get a quick overview of this content"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _runAIAction("summarize");
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.psychology, color: Colors.orange),
-                title: const Text("Explain Content"),
-                subtitle: const Text("Deep dive analysis of the current page"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _runAIAction("explain");
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.translate, color: Colors.green),
-                title: const Text("Translate & Simplify"),
-                subtitle: const Text("Make the content easier to read"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _runAIAction("simplify");
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.touch_app, color: Color(0xFFD500F9)),
-                title: const Text("Smart Click"),
-                subtitle: const Text("Tell the agent what to click on screen"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showClickDialog();
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   void _runAIAction(String action) async {
@@ -2066,6 +2030,168 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     );
   }
 
+  void _showAIAssistant() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Ask Comet-AI",
+                style: TextStyle(
+                    color: Color(0xFF00E5FF),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            _buildAIActionItem(Icons.summarize, "Summarize Page", () {
+              Navigator.pop(context);
+              _runAIAction("summarize");
+            }),
+            _buildAIActionItem(Icons.help_outline, "Explain Content", () {
+              Navigator.pop(context);
+              _runAIAction("explain");
+            }),
+            _buildAIActionItem(Icons.translate, "Translate & Simplify", () {
+              Navigator.pop(context);
+              _runAIAction("simplify");
+            }),
+            _buildAIActionItem(Icons.language, "Neural Translation (India)",
+                () {
+              Navigator.pop(context);
+              _showTranslationDialog();
+            }),
+            _buildAIActionItem(Icons.mouse, "Smart Click", () {
+              Navigator.pop(context);
+              _showClickDialog();
+            }),
+            _buildAIActionItem(Icons.analytics, "Analyze Page", () {
+              Navigator.pop(context);
+              _analyzePageWithAI();
+            }),
+            _buildAIActionItem(Icons.document_scanner, "OCR Scan", () {
+              Navigator.pop(context);
+              _ocrScanPage();
+            }),
+            _buildAIActionItem(Icons.code, "Extract DOM Content", () {
+              Navigator.pop(context);
+              _extractPageContent();
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAIActionItem(IconData icon, String title, VoidCallback onTap) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF00E5FF)),
+      title: Text(title, style: const TextStyle(color: Colors.white)),
+      onTap: onTap,
+    );
+  }
+
+  void _addToHomeScreen() {
+    _showErrorSnackBar(
+        "Add to Home Screen is not yet implemented for this platform.");
+  }
+
+  void _showTranslationDialog() async {
+    final languages = {
+      'Hindi': 'hi',
+      'Bengali': 'bn',
+      'Marathi': 'mr',
+      'Telugu': 'te',
+      'Tamil': 'ta',
+      'Gujarati': 'gu',
+      'Kannada': 'kn',
+      'Malayalam': 'ml',
+      'Punjabi': 'pa',
+    };
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Translate to Indian Language",
+                style: TextStyle(
+                    color: Color(0xFF00E5FF),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView(
+                children: languages.entries.map((e) {
+                  return ListTile(
+                    leading: const Icon(Icons.translate, color: Colors.white54),
+                    title: Text(e.key,
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _performTranslation(e.value, e.key);
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _performTranslation(String langCode, String langName) async {
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final webViewModel = windowModel.getCurrentTab()?.webViewModel;
+    final webViewController = webViewModel?.webViewController;
+
+    if (webViewController == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+      ),
+    );
+
+    try {
+      // Extract page text
+      final String text = await webViewController.evaluateJavascript(source: """
+        (function() {
+          return document.body.innerText.substring(0, 5000); 
+        })()
+      """) ?? "";
+
+      if (text.isEmpty) {
+        if (mounted) Navigator.pop(context);
+        _showErrorSnackBar("No content found to translate.");
+        return;
+      }
+
+      final translator = GoogleTranslator();
+      var translation = await translator.translate(text, to: langCode);
+
+      if (mounted) Navigator.pop(context);
+      _showAIResultDialog("Translation ($langName)", translation.text);
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      _showErrorSnackBar("Translation failed: $e");
+    }
+  }
+
   void _showSyncDialog() {
     Navigator.push(
       context,
@@ -2124,7 +2250,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     final webViewModel = windowModel.getCurrentTab()?.webViewModel;
     var webViewController = webViewModel?.webViewController;
     var currentUrl = (await webViewController?.getUrl())?.toString() ?? "";
-    
+
     if (mounted && currentUrl.isNotEmpty) {
       setState(() {
         if (!_suggestions.contains(currentUrl)) {

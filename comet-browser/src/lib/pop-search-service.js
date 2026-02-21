@@ -2,7 +2,7 @@ const { BrowserWindow, screen, ipcMain, dialog, clipboard, shell, app } = requir
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const { log } = require('electron-log');
+const log = require('electron-log');
 
 const IPC_CHANNELS = {
     SHOW_POPUP: 'pop-search:show-popup',
@@ -62,7 +62,7 @@ class PopSearchService {
         mainWindow = parentWindow;
         this.loadConfig();
         this.registerIpcHandlers();
-        log('[PopSearch] Service initialized');
+        log.info('[PopSearch] Service initialized');
     }
 
     getConfigPath() {
@@ -84,7 +84,7 @@ class PopSearchService {
                 this.saveConfig();
             }
         } catch (err) {
-            log('[PopSearch] Config load error:', err.message);
+            log.error('[PopSearch] Config load error:', err.message);
             this.config = { ...DEFAULT_CONFIG };
         }
     }
@@ -93,9 +93,9 @@ class PopSearchService {
         try {
             const configPath = this.getConfigPath();
             fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8');
-            log('[PopSearch] Config saved');
+            log.info('[PopSearch] Config saved');
         } catch (err) {
-            log('[PopSearch] Config save error:', err.message);
+            log.error('[PopSearch] Config save error:', err.message);
         }
     }
 
@@ -157,7 +157,7 @@ class PopSearchService {
                 const data = fs.readFileSync(filePath);
                 return `data:${mime};base64,${data.toString('base64')}`;
             } catch (err) {
-                log('[PopSearch] read-local-icon error:', err.message);
+                log.error('[PopSearch] read-local-icon error:', err.message);
                 return null;
             }
         });
@@ -201,7 +201,7 @@ class PopSearchService {
 
         ipcMain.on(IPC_CHANNELS.OPEN_EXTERNAL, (event, url) => {
             shell.openExternal(url).catch(err => {
-                log('[PopSearch] openExternal error:', err.message);
+                log.error('[PopSearch] openExternal error:', err.message);
             });
         });
     }
@@ -234,8 +234,8 @@ class PopSearchService {
             skipTaskbar: true,
             focusable: true,
             webPreferences: {
-                nodeIntegration: false,
-                contextIsolation: true
+                nodeIntegration: true,
+                contextIsolation: false
             }
         });
 
@@ -250,7 +250,7 @@ class PopSearchService {
             this.closePopup();
         });
 
-        log('[PopSearch] Popup created');
+        log.info('[PopSearch] Popup created');
     }
 
     generatePopupHtml(selectedText) {
@@ -273,7 +273,7 @@ class PopSearchService {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: rgba(30, 30, 46, 0.95);
+            background: rgba(30,30,46,0.95);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -414,11 +414,11 @@ class PopSearchService {
         if (type === 'url') {
             const searchUrl = target.replace(/%s|{query}/g, encodeURIComponent(query));
             shell.openExternal(searchUrl).catch(err => {
-                log('[PopSearch] openExternal error:', err.message);
+                log.error('[PopSearch] openExternal error:', err.message);
             });
         } else if (type === 'file') {
             shell.openPath(target).catch(err => {
-                log('[PopSearch] openPath error:', err.message);
+                log.error('[PopSearch] openPath error:', err.message);
             });
         } else if (type === 'cmd') {
             let command = target;
@@ -433,7 +433,7 @@ class PopSearchService {
             }
             exec(command, (error) => {
                 if (error) {
-                    log('[PopSearch] exec error:', error.message);
+                    log.error('[PopSearch] exec error:', error.message);
                 }
             });
         }

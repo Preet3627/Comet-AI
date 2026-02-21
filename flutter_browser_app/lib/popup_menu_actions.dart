@@ -22,7 +22,7 @@ class PopupMenuActions {
   // ignore: constant_identifier_names
   static const String FIND_ON_PAGE = "Find on page";
   // ignore: constant_identifier_names
-  static const String DESKTOP_MODE = "Desktop mode";
+  static const String DESKTOP_MODE = "Desktop site";
   // ignore: constant_identifier_names
   static const String SETTINGS = "Settings";
   // ignore: constant_identifier_names
@@ -30,34 +30,36 @@ class PopupMenuActions {
   // ignore: constant_identifier_names
   static const String INAPPWEBVIEW_PROJECT = "InAppWebView Project";
   // ignore: constant_identifier_names
-  static const String AI_ASSISTANT = "AI Assistant";
+  static const String ASK_AI = "Ask AI";
   // ignore: constant_identifier_names
   static const String SYNC_WITH_DESKTOP = "Sync with Desktop";
   // ignore: constant_identifier_names
-  static const String ANALYZE_PAGE = "Analyze Page with AI";
+  static const String ADD_TO_HOME_SCREEN = "Add to Home screen";
   // ignore: constant_identifier_names
-  static const String OCR_SCAN = "OCR Scan Page";
+  static const String DOWNLOAD = "Download Screenshot";
   // ignore: constant_identifier_names
-  static const String EXTRACT_DOM = "Extract Page Content";
+  static const String ANALYZE_PAGE = "Analyze Page";
+  // ignore: constant_identifier_names
+  static const String OCR_SCAN = "OCR Scan";
+  // ignore: constant_identifier_names
+  static const String EXTRACT_DOM = "Extract DOM";
 
   static List<String> get choices {
     if (Util.isMobile()) {
       return [
         NEW_TAB,
         NEW_INCOGNITO_TAB,
-        AI_ASSISTANT,
+        ASK_AI,
         SYNC_WITH_DESKTOP,
-        FAVORITES,
         HISTORY,
-        WEB_ARCHIVES,
+        FAVORITES,
         SHARE,
+        DESKTOP_MODE,
+        ADD_TO_HOME_SCREEN,
+        DOWNLOAD,
         FIND_ON_PAGE,
-        ANALYZE_PAGE,
-        OCR_SCAN,
-        EXTRACT_DOM,
         SETTINGS,
         DEVELOPERS,
-        INAPPWEBVIEW_PROJECT,
       ];
     }
     return [
@@ -66,19 +68,15 @@ class PopupMenuActions {
       SAVED_WINDOWS,
       NEW_TAB,
       NEW_INCOGNITO_TAB,
-      AI_ASSISTANT,
+      ASK_AI,
       SYNC_WITH_DESKTOP,
-      FAVORITES,
       HISTORY,
-      WEB_ARCHIVES,
+      FAVORITES,
       SHARE,
+      DESKTOP_MODE,
       FIND_ON_PAGE,
-      ANALYZE_PAGE,
-      OCR_SCAN,
-      EXTRACT_DOM,
       SETTINGS,
       DEVELOPERS,
-      INAPPWEBVIEW_PROJECT,
     ];
   }
 }

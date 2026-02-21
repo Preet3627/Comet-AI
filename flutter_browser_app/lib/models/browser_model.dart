@@ -40,6 +40,7 @@ class BrowserSettings {
   bool trackingPreventionEnabled;
   bool adBlockingEnabled;
   bool performanceModeEnabled;
+  bool urlPredictorEnabled;
 
   BrowserSettings({
     this.searchEngine = GoogleSearchEngine,
@@ -56,7 +57,7 @@ class BrowserSettings {
     this.aiProvider = "Google",
     this.showQuickActions = true,
     this.showSocialShortcuts = true,
-    this.homePageWelcomeMessage = "Comet-AI Browser",
+    this.homePageWelcomeMessage = "Comet-AI",
     this.homePageBgColor = "0xFF000000",
     this.logoUrl = "",
     this.logoName = "Comet-AI",
@@ -67,6 +68,7 @@ class BrowserSettings {
     this.trackingPreventionEnabled = true,
     this.adBlockingEnabled = true,
     this.performanceModeEnabled = false,
+    this.urlPredictorEnabled = false,
   });
 
   BrowserSettings copy() {
@@ -94,6 +96,7 @@ class BrowserSettings {
       trackingPreventionEnabled: trackingPreventionEnabled,
       adBlockingEnabled: adBlockingEnabled,
       performanceModeEnabled: performanceModeEnabled,
+      urlPredictorEnabled: urlPredictorEnabled,
     );
   }
 
@@ -129,6 +132,7 @@ class BrowserSettings {
             trackingPreventionEnabled: map["trackingPreventionEnabled"] ?? true,
             adBlockingEnabled: map["adBlockingEnabled"] ?? true,
             performanceModeEnabled: map["performanceModeEnabled"] ?? false,
+            urlPredictorEnabled: map["urlPredictorEnabled"] ?? false,
           )
         : null;
   }
@@ -160,6 +164,7 @@ class BrowserSettings {
       "trackingPreventionEnabled": trackingPreventionEnabled,
       "adBlockingEnabled": adBlockingEnabled,
       "performanceModeEnabled": performanceModeEnabled,
+      "urlPredictorEnabled": urlPredictorEnabled,
     };
   }
 
@@ -353,7 +358,7 @@ class BrowserModel extends ChangeNotifier {
       1,
     ]);
     int? count;
-    if (browser == null || browser.length == 0) {
+    if (browser == null || browser.isEmpty) {
       count = await db?.rawInsert(
         'INSERT INTO browser(id, json) VALUES(?, ?)',
         [1, json.encode(toJson())],
@@ -374,7 +379,7 @@ class BrowserModel extends ChangeNotifier {
     final browsers = await db?.rawQuery('SELECT * FROM browser WHERE id = ?', [
       1,
     ]);
-    if (browsers == null || browsers.length == 0) {
+    if (browsers == null || browsers.isEmpty) {
       return;
     }
     final browser = browsers[0];

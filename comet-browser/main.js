@@ -113,6 +113,17 @@ contextMenu({
     }
   ]
 });
+
+ipcMain.handle('set-as-default-browser', async () => {
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    app.setAsDefaultProtocolClient('http');
+    app.setAsDefaultProtocolClient('https');
+    return true;
+  }
+  return false;
+});
+  ]
+});
 let mcpServerPort = MCP_SERVER_PORT;
 // Custom protocol for authentication
 const PROTOCOL = 'comet-browser';
