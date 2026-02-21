@@ -63,6 +63,7 @@ declare global {
             minimizeWindow: () => void;
             maximizeWindow: () => void;
             closeWindow: () => void;
+            bringWindowToTop: () => Promise<void>;
             toggleFullscreen: () => void;
             showWebview: () => void;
             hideWebview: () => void;
