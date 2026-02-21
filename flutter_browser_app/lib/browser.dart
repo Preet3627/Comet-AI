@@ -9,10 +9,12 @@ import 'package:flutter_browser/app_bar/browser_app_bar.dart';
 import 'package:flutter_browser/models/webview_model.dart';
 import 'package:flutter_browser/util.dart';
 import 'package:flutter_browser/webview_tab.dart';
+import 'package:flutter_browser/clipboard_monitor.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
 import 'pages/comet_home_page.dart';
+import 'pages/ai_chat_page.dart';
 import 'app_bar/tab_viewer_app_bar.dart';
 import 'models/browser_model.dart';
 import 'models/window_model.dart';
@@ -29,11 +31,54 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
       MethodChannel('com.comet_ai_com.comet_ai.intent_data');
 
   var _isRestored = false;
+  final ClipboardMonitor _clipboardMonitor = ClipboardMonitor();
+  String? _copiedText;
+  bool _showCopiedBanner = false;
 
   @override
   void initState() {
     super.initState();
     getIntentData();
+    _startClipboardMonitoring();
+  }
+
+  void _startClipboardMonitoring() {
+    _clipboardMonitor.startMonitoring();
+    _clipboardMonitor.clipboardStream.listen((text) {
+      if (mounted && text.isNotEmpty) {
+        setState(() {
+          _copiedText = text;
+          _showCopiedBanner = true;
+        });
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted) {
+            setState(() {
+              _showCopiedBanner = false;
+            });
+          }
+        });
+      }
+    });
+  }
+
+  void _processCopiedTextWithAI() {
+    if (_copiedText != null && _copiedText!.isNotEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FullScreenAIChat(initialMessage: _copiedText!),
+        ),
+      );
+    }
+    setState(() {
+      _showCopiedBanner = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _clipboardMonitor.stopMonitoring();
+    super.dispose();
   }
 
   getIntentData() async {
@@ -138,8 +183,96 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
             }
           },
           child: Scaffold(
-              appBar: BrowserAppBar(), body: _buildWebViewTabsContent()),
+              appBar: BrowserAppBar(), 
+              body: Stack(
+                children: [
+                  _buildWebViewTabsContent(),
+                  if (_showCopiedBanner && _copiedText != null)
+                    Positioned(
+                      bottom: 100,
+                      left: 20,
+                      right: 20,
+                      child: _buildClipboardBanner(),
+                    ),
+                ],
+              ),
+            ),
         ));
+  }
+
+  Widget _buildClipboardBanner() {
+    return Material(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF00E5FF).withOpacity(0.9),
+              const Color(0xFFD500F9).withOpacity(0.9),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF00E5FF).withOpacity(0.4),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: Colors.white, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Text copied!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    _copiedText!.length > 50 
+                        ? '${_copiedText!.substring(0, 50)}...' 
+                        : _copiedText!,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _processCopiedTextWithAI,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF00E5FF),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: const Text('Ask AI'),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+              onPressed: () => setState(() => _showCopiedBanner = false),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildWebViewTabsContent() {
@@ -208,11 +341,34 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
               preferredSize: const Size(double.infinity, 4.0),
               child: SizedBox(
                   height: 4.0,
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.white.withOpacity(0.1),
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(Color(0xFFD500F9)),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF00E5FF), Color(0xFFD500F9), Color(0xFF00E5FF)],
+                        stops: [0.0, 0.5, 1.0],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00E5FF).withOpacity(0.5),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: progress,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xFF00E5FF),
+                              Color.lerp(const Color(0xFF00E5FF), const Color(0xFFD500F9), progress)!,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   )));
         });
   }

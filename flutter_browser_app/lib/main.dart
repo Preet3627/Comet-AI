@@ -20,6 +20,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager_plus/window_manager_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:firebase_core/firebase_core.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'sync_service.dart';
 
 import 'browser.dart';
@@ -55,8 +56,38 @@ Database? db;
 int windowId = 0;
 String? windowModelId;
 
+// Global key to handle navigation from sharing intents
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+void _handleSharedMedia(List<SharedMediaFile> sharedFiles) {
+  if (sharedFiles.isEmpty) return;
+  
+  final file = sharedFiles.first;
+  final path = file.path;
+  
+  // Navigate to AI chat with the shared image
+  Future.delayed(const Duration(milliseconds: 500), () {
+    navigatorKey.currentState?.pushNamed('/ai-chat', arguments: {'imagePath': path});
+  });
+  
+  // Clear the sharing intent
+  ReceiveSharingIntent.instance.reset();
+}
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Handle sharing intents for receiving images from other apps
+  List<SharedMediaFile>? sharedFiles;
+  if (!Util.isDesktop()) {
+    sharedFiles = await ReceiveSharingIntent.instance.getInitialMedia();
+    if (sharedFiles.isNotEmpty) {
+      _handleSharedMedia(sharedFiles);
+    }
+    ReceiveSharingIntent.instance.getMediaStream().listen((sharedFiles) {
+      _handleSharedMedia(sharedFiles);
+    });
+  }
 
   if (Util.isDesktop()) {
     windowId = args.isNotEmpty ? int.tryParse(args[0]) ?? 0 : 0;

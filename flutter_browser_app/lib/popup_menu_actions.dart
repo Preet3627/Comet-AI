@@ -33,6 +33,12 @@ class PopupMenuActions {
   static const String AI_ASSISTANT = "AI Assistant";
   // ignore: constant_identifier_names
   static const String SYNC_WITH_DESKTOP = "Sync with Desktop";
+  // ignore: constant_identifier_names
+  static const String ANALYZE_PAGE = "Analyze Page with AI";
+  // ignore: constant_identifier_names
+  static const String OCR_SCAN = "OCR Scan Page";
+  // ignore: constant_identifier_names
+  static const String EXTRACT_DOM = "Extract Page Content";
 
   static List<String> get choices {
     if (Util.isMobile()) {
@@ -46,6 +52,9 @@ class PopupMenuActions {
         WEB_ARCHIVES,
         SHARE,
         FIND_ON_PAGE,
+        ANALYZE_PAGE,
+        OCR_SCAN,
+        EXTRACT_DOM,
         SETTINGS,
         DEVELOPERS,
         INAPPWEBVIEW_PROJECT,
@@ -64,6 +73,9 @@ class PopupMenuActions {
       WEB_ARCHIVES,
       SHARE,
       FIND_ON_PAGE,
+      ANALYZE_PAGE,
+      OCR_SCAN,
+      EXTRACT_DOM,
       SETTINGS,
       DEVELOPERS,
       INAPPWEBVIEW_PROJECT,

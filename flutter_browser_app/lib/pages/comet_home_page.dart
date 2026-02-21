@@ -199,8 +199,15 @@ class _CometHomePageState extends State<CometHomePage>
               ),
             ],
           ),
-          child: const Center(
-            child: Icon(Icons.rocket_launch, size: 40, color: Colors.white),
+          child: Center(
+            child: Image.asset(
+              'assets/icon/icon.png',
+              width: 40,
+              height: 40,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.rocket_launch, size: 40, color: Colors.white),
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -228,11 +235,7 @@ class _CometHomePageState extends State<CometHomePage>
       child: Row(
         children: [
           const SizedBox(width: 20),
-          GestureDetector(
-            onTap: () => _showAgentDialog(),
-            child: const Icon(Icons.auto_awesome,
-                color: Color(0xFF00E5FF), size: 24),
-          ),
+          const Icon(Icons.search, color: Colors.white54, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: TextField(
@@ -337,8 +340,10 @@ class _CometHomePageState extends State<CometHomePage>
   }
 
   Widget _buildBookmarkItem(Map<String, String> shortcut) {
+    final customLogo = shortcut['logo'];
     return GestureDetector(
       onTap: () => _handleSearch(shortcut['url']),
+      onLongPress: () => _showEditShortcutDialog(shortcut),
       child: Column(
         children: [
           Container(
@@ -349,8 +354,20 @@ class _CometHomePageState extends State<CometHomePage>
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white.withOpacity(0.05)),
             ),
-            child: const Center(
-              child: Icon(Icons.public, color: Colors.white54, size: 24),
+            child: Center(
+              child: customLogo != null && customLogo.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        customLogo,
+                        width: 36,
+                        height: 36,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.public, color: Colors.white54, size: 24),
+                      ),
+                    )
+                  : const Icon(Icons.public, color: Colors.white54, size: 24),
             ),
           ),
           const SizedBox(height: 8),
@@ -370,10 +387,11 @@ class _CometHomePageState extends State<CometHomePage>
       children: [
         _buildFeatureIcon(Icons.history, "History",
             () => Navigator.pushNamed(context, '/settings')),
+        _buildFeatureIcon(Icons.bookmark, "Bookmarks",
+            () => Navigator.pushNamed(context, '/bookmarks')),
+        _buildFeatureIcon(Icons.download, "Downloads", () {}),
         _buildFeatureIcon(Icons.qr_code, "Sync",
             () => Navigator.pushNamed(context, '/connect-desktop')),
-        _buildFeatureIcon(Icons.shield, "Safe", () {}),
-        _buildFeatureIcon(Icons.psychology, "Gemini", () => _showAgentDialog()),
       ],
     );
   }
@@ -435,6 +453,7 @@ class _CometHomePageState extends State<CometHomePage>
       BrowserSettings settings, BrowserModel browserModel) {
     final nameController = TextEditingController();
     final urlController = TextEditingController();
+    final logoController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -452,6 +471,10 @@ class _CometHomePageState extends State<CometHomePage>
                 controller: urlController,
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(labelText: "URL")),
+            TextField(
+                controller: logoController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: "Logo URL (optional)")),
           ],
         ),
         actions: [
@@ -461,8 +484,11 @@ class _CometHomePageState extends State<CometHomePage>
                   urlController.text.isNotEmpty) {
                 final newShortcuts =
                     List<Map<String, String>>.from(settings.homePageShortcuts);
-                newShortcuts.add(
-                    {'name': nameController.text, 'url': urlController.text});
+                newShortcuts.add({
+                  'name': nameController.text,
+                  'url': urlController.text,
+                  'logo': logoController.text,
+                });
                 settings.homePageShortcuts = newShortcuts;
                 browserModel.updateSettings(settings);
                 browserModel.save();
@@ -471,6 +497,74 @@ class _CometHomePageState extends State<CometHomePage>
               }
             },
             child: const Text("Add"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditShortcutDialog(Map<String, String> shortcut) {
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final settings = browserModel.getSettings();
+    final nameController = TextEditingController(text: shortcut['name']);
+    final urlController = TextEditingController(text: shortcut['url']);
+    final logoController = TextEditingController(text: shortcut['logo'] ?? '');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text("Edit Shortcut", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: "Name")),
+            TextField(
+                controller: urlController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: "URL")),
+            TextField(
+                controller: logoController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: "Logo URL (optional)")),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              final index = settings.homePageShortcuts.indexOf(shortcut);
+              if (index != -1) {
+                settings.homePageShortcuts.removeAt(index);
+                browserModel.updateSettings(settings);
+                browserModel.save();
+              }
+              Navigator.pop(context);
+              setState(() {});
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty &&
+                  urlController.text.isNotEmpty) {
+                final index = settings.homePageShortcuts.indexOf(shortcut);
+                if (index != -1) {
+                  settings.homePageShortcuts[index] = {
+                    'name': nameController.text,
+                    'url': urlController.text,
+                    'logo': logoController.text,
+                  };
+                  browserModel.updateSettings(settings);
+                  browserModel.save();
+                }
+                Navigator.pop(context);
+                setState(() {});
+              }
+            },
+            child: const Text("Save"),
           ),
         ],
       ),

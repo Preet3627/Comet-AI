@@ -168,7 +168,7 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
       initialSettings.userAgent =
           "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36";
     }
-    initialSettings.transparentBackground = true;
+    initialSettings.transparentBackground = false;
 
     initialSettings.safeBrowsingEnabled = true;
     initialSettings.disableDefaultErrorPage = true;
@@ -529,6 +529,38 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
             password: _httpAuthPasswordController.text,
             action: action,
             permanentPersistence: true);
+      },
+      onRenderProcessGone: (controller, detail) async {
+        if (kDebugMode) {
+          print("WebView render process gone, crashed: ${detail.didCrash}");
+        }
+        _pullToRefreshController?.endRefreshing();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text("Page crashed, reloading..."),
+              action: SnackBarAction(
+                label: "Reload",
+                onPressed: () async {
+                  if (widget.webViewModel.webViewController != null) {
+                    await widget.webViewModel.webViewController?.reload();
+                  }
+                },
+              ),
+            ),
+          );
+        }
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (widget.webViewModel.webViewController != null) {
+          await widget.webViewModel.webViewController?.reload();
+        }
+      },
+      onReceivedHttpError: (controller, request, error) async {
+        if (request.isForMainFrame ?? false) {
+          if (kDebugMode) {
+            print("HTTP error status: ${error.statusCode}");
+          }
+        }
       },
     );
   }

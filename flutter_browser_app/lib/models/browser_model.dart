@@ -34,6 +34,7 @@ class BrowserSettings {
   String logoName;
   String theme;
   String layout;
+  String aiProvider;
   List<Map<String, String>> homePageShortcuts;
   bool safeBrowsingEnabled;
   bool trackingPreventionEnabled;
@@ -46,12 +47,13 @@ class BrowserSettings {
     this.customUrlHomePage = "",
     this.debuggingEnabled = false,
     this.geminiApiKey = "",
-    this.geminiModel = "gemini-3.1-pro-preview",
+    this.geminiModel = "gemini-2.5-flash",
     this.openaiApiKey = "",
     this.claudeApiKey = "",
     this.openRouterApiKey = "",
     this.ollamaBaseUrl = "http://localhost:11434",
     this.ollamaModel = "llama3.3",
+    this.aiProvider = "Google",
     this.showQuickActions = true,
     this.showSocialShortcuts = true,
     this.homePageWelcomeMessage = "Comet-AI Browser",
@@ -118,6 +120,7 @@ class BrowserSettings {
             logoName: map["logoName"] ?? "Comet-AI",
             theme: map["theme"] ?? "Dark",
             layout: map["layout"] ?? "Default",
+            aiProvider: map["aiProvider"] ?? "Google",
             homePageShortcuts: (map["homePageShortcuts"] as List?)
                     ?.map((e) => Map<String, String>.from(e as Map))
                     .toList() ??
@@ -151,6 +154,7 @@ class BrowserSettings {
       "logoName": logoName,
       "theme": theme,
       "layout": layout,
+      "aiProvider": aiProvider,
       "homePageShortcuts": homePageShortcuts,
       "safeBrowsingEnabled": safeBrowsingEnabled,
       "trackingPreventionEnabled": trackingPreventionEnabled,

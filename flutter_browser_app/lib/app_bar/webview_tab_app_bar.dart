@@ -138,17 +138,17 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
             final isVibrant = settings.theme == "Vibrant";
 
             return PreferredSize(
-              preferredSize: const Size.fromHeight(80),
+              preferredSize: const Size.fromHeight(100),
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: const BoxDecoration(color: Colors.transparent),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(30),
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                     child: Container(
-                      height: 60,
+                      height: 72,
                       decoration: BoxDecoration(
                         color: isVibrant
                             ? Colors.white.withOpacity(0.1)
@@ -305,16 +305,9 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           _onSubmitted(value);
         },
         onTap: () {
-          if (!shouldSelectText ||
-              _searchController == null ||
-              _searchController!.text.isEmpty) {
-            return;
+          if (_searchController != null) {
+            _searchController!.text = "";
           }
-          shouldSelectText = false;
-          _searchController!.selection = TextSelection(
-            baseOffset: 0,
-            extentOffset: _searchController!.text.length,
-          );
         },
         onTapOutside: (event) {
           shouldSelectText = true;
@@ -332,7 +325,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
             fontSize: 14.0,
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(vertical: 16),
         ),
         style: const TextStyle(
           color: Colors.white,
@@ -786,6 +779,35 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                       child: IconButton(
                         padding: const EdgeInsets.all(0.0),
                         icon: const Icon(
+                          Icons.share,
+                          color: Colors.black,
+                        ),
+                        onPressed: () async {
+                          Navigator.pop(popupMenuContext);
+                          if (webViewModel.url != null) {
+                            try {
+                              await Share.share(
+                                webViewModel.url.toString(),
+                                subject: webViewModel.title,
+                              );
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("Unable to share!"),
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 35.0,
+                      child: IconButton(
+                        padding: const EdgeInsets.all(0.0),
+                        icon: const Icon(
                           Icons.info_outline,
                           color: Colors.black,
                         ),
@@ -1140,6 +1162,186 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           openProjectPopup();
         });
         break;
+      case PopupMenuActions.ANALYZE_PAGE:
+        _analyzePageWithAI();
+        break;
+      case PopupMenuActions.OCR_SCAN:
+        _ocrScanPage();
+        break;
+      case PopupMenuActions.EXTRACT_DOM:
+        _extractPageContent();
+        break;
+    }
+  }
+
+  void _analyzePageWithAI() async {
+    final webViewModel = Provider.of<WebViewModel>(context, listen: false);
+    final controller = webViewModel.webViewController;
+    
+    if (controller == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF1A1A1A),
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            SizedBox(width: 20),
+            Text("Analyzing page with AI...", style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final title = await controller.getTitle() ?? '';
+      final url = await controller.getUrl() ?? '';
+      
+      final pageContent = await controller.evaluateJavascript(source: '''
+        (function() {
+          var text = document.body.innerText.substring(0, 5000);
+          var title = document.title || '';
+          var metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+          return {title: title, url: window.location.href, text: text, description: metaDesc};
+        })();
+      ''');
+
+      if (mounted) {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FullScreenAIChat(
+              initialMessage: 'Analyze this webpage:\n\nURL: $url\n\nTitle: $title\n\nContent: $pageContent\n\nPlease provide a summary and key information from this page.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  void _ocrScanPage() async {
+    final webViewModel = Provider.of<WebViewModel>(context, listen: false);
+    final controller = webViewModel.webViewController;
+    
+    if (controller == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF1A1A1A),
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            SizedBox(width: 20),
+            Text("Scanning page for text...", style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final pageText = await controller.evaluateJavascript(source: '''
+        (function() {
+          var allText = [];
+          var elements = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, span, div, a, button, label, article, section');
+          elements.forEach(function(el) {
+            var text = el.innerText.trim();
+            if (text.length > 0 && text.length < 500) {
+              allText.push(text);
+            }
+          });
+          return allText.slice(0, 100).join('\\n');
+        })();
+      ''');
+
+      if (mounted) {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FullScreenAIChat(
+              initialMessage: 'Extract and summarize all readable text from this webpage. Here is what I found:\n\n$pageText\n\nPlease organize this information clearly.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  void _extractPageContent() async {
+    final webViewModel = Provider.of<WebViewModel>(context, listen: false);
+    final controller = webViewModel.webViewController;
+    
+    if (controller == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF1A1A1A),
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            SizedBox(width: 20),
+            Text("Extracting DOM content...", style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final domContent = await controller.evaluateJavascript(source: '''
+        (function() {
+          return {
+            title: document.title,
+            url: window.location.href,
+            headings: Array.from(document.querySelectorAll('h1, h2, h3')).map(h => h.innerText),
+            links: Array.from(document.querySelectorAll('a')).slice(0, 20).map(a => ({text: a.innerText, href: a.href})),
+            images: Array.from(document.querySelectorAll('img')).slice(0, 10).map(img => ({src: img.src, alt: img.alt})),
+            meta: {
+              description: document.querySelector('meta[name="description"]')?.content || '',
+              keywords: document.querySelector('meta[name="keywords"]')?.content || '',
+            }
+          };
+        })();
+      ''');
+
+      if (mounted) {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FullScreenAIChat(
+              initialMessage: 'Here is the structured DOM data from the current webpage:\n\n$domContent\n\nPlease provide insights about this page structure.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
@@ -1917,7 +2119,19 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     _focusNode?.unfocus();
   }
 
-  void _showSuggestionsOverlay() {
+  void _showSuggestionsOverlay() async {
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final webViewModel = windowModel.getCurrentTab()?.webViewModel;
+    var webViewController = webViewModel?.webViewController;
+    var currentUrl = (await webViewController?.getUrl())?.toString() ?? "";
+    
+    if (mounted && currentUrl.isNotEmpty) {
+      setState(() {
+        if (!_suggestions.contains(currentUrl)) {
+          _suggestions = [currentUrl, ..._suggestions];
+        }
+      });
+    }
     _overlayEntry = _createOverlayEntry();
     Overlay.of(context).insert(_overlayEntry!);
   }

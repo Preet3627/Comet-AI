@@ -244,13 +244,12 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
                   dropdownColor: Colors.black,
                   underline: Container(),
                   items: [
-                    'gemini-3.1-pro-preview',
-                    'gemini-3.0-ultra',
-                    'gemini-2.5-flash',
-                    'gemini-2.0-pro-exp',
-                    'gemini-2.0-flash-thinking-exp',
+                    'gemini-2.0-flash',
+                    'gemini-2.0-flash-lite',
+                    'gemini-2.0-pro',
                     'gemini-1.5-pro',
                     'gemini-1.5-flash',
+                    'gemini-1.5-flash-8b',
                   ]
                       .map((m) => DropdownMenuItem(
                           value: m, child: Text(m.toUpperCase())))
@@ -456,7 +455,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
         leading: const Icon(Icons.style, color: Colors.cyan),
         trailing: DropdownButton<String>(
           value: settings.theme,
-          items: ["Dark", "Vibrant", "Glass", "Minimal"]
+          items: ["Dark", "Vibrant", "Glass", "Minimal", "Ocean", "Sunset", "Forest", "Purple"]
               .map((t) => DropdownMenuItem(value: t, child: Text(t)))
               .toList(),
           onChanged: (val) {
