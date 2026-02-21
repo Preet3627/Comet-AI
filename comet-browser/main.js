@@ -219,7 +219,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
   const apiKey = options.apiKey || config.apiKey;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), providerId === 'ollama' ? 30000 : 90000); // 30s for local Ollama, 90s for reasoning
+  const timeoutId = setTimeout(() => controller.abort(), providerId === 'ollama' ? 120000 : 180000); // 120s for local Ollama, 180s for reasoning
 
   try {
     let result;
@@ -229,7 +229,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
 
       const genAI = new GoogleGenAI(gKey);
 
-      let modelName = 'gemini-2.0-flash';
+      let modelName = 'gemini-1.5-flash';
       let thinkingConfig = null;
 
       // Gemini 3.1 & 3.0 series (Latest 2026)
@@ -238,21 +238,22 @@ const llmGenerateHandler = async (messages, options = {}) => {
         thinkingConfig = { includeThought: true };
       } else if (providerId.includes('3.1-flash')) {
         modelName = 'gemini-3.1-flash-preview';
+      } else if (providerId.includes('3.0-pro') || providerId.includes('3-pro')) {
+        modelName = 'gemini-3.0-pro-preview';
+        thinkingConfig = { includeThought: true };
+      } else if (providerId.includes('3.0-flash') || providerId.includes('3-flash')) {
+        modelName = 'gemini-3.0-flash-preview';
       } else if (providerId.includes('3-deep-think')) {
         modelName = 'gemini-3-deep-think';
         thinkingConfig = { includeThought: true };
-      } else if (providerId.includes('3-pro')) {
-        modelName = 'gemini-3.1-pro-preview'; // Forward compatibility
-      } else if (providerId.includes('3-flash')) {
-        modelName = 'gemini-3-flash-preview';
         // 2.5 series
       } else if (providerId.includes('2.5-pro')) {
-        modelName = 'gemini-2.5-pro';
-        thinkingConfig = { thinkingBudget: "4096" }; // Reasoning budget for 2.5 series
+        modelName = 'gemini-2.5-pro-preview';
+        thinkingConfig = { thinkingBudget: "4096" };
       } else if (providerId.includes('2.5-flash-lite')) {
-        modelName = 'gemini-2.5-flash-lite';
+        modelName = 'gemini-2.5-flash-lite-preview';
       } else if (providerId.includes('2.5-flash')) {
-        modelName = 'gemini-2.5-flash';
+        modelName = 'gemini-2.5-flash-preview';
         // Legacy and Experimental
       } else if (providerId.includes('2.0-pro')) {
         modelName = 'gemini-2.0-pro-exp-02-05';
@@ -265,7 +266,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
       } else if (providerId.includes('1.5-flash')) {
         modelName = 'gemini-1.5-flash';
       } else {
-        modelName = 'gemini-2.0-flash';
+        modelName = options.model || config.model || 'gemini-1.5-flash';
       }
 
       const systemMessage = messages.find(m => m.role === 'system');
@@ -381,10 +382,10 @@ const llmGenerateHandler = async (messages, options = {}) => {
 
     } else if (providerId === 'ollama') {
       const baseUrl = config.baseUrl || 'http://localhost:11434';
-      let model = config.model || 'llama3.2'; // Default to a lightweight modern model
+      let model = options.model || config.model || 'llama3.2'; // Default to a lightweight modern model
 
-      // Override model based on selected intensity mode
-      if (options.localLlmMode || config.localLlmMode) {
+      // Override model based on selected intensity mode ONLY if no specific model is provided
+      if (!(options.model || config.model) && (options.localLlmMode || config.localLlmMode)) {
         const mode = options.localLlmMode || config.localLlmMode;
         if (mode === 'light') model = 'llama3.2:1b';
         else if (mode === 'normal') model = 'llama3.2:3b';
@@ -2360,6 +2361,12 @@ app.whenReady().then(() => {
     return wifiSyncService ? wifiSyncService.getConnectUri() : null;
   });
 
+  ipcMain.handle('wifi-sync-broadcast', async (event, message) => {
+    if (!wifiSyncService) return { success: false, error: 'WiFi Sync not initialized' };
+    wifiSyncService.broadcast(message);
+    return { success: true };
+  });
+
   ipcMain.handle('get-wifi-sync-qr', async () => {
     if (!wifiSyncService) return null;
     const uri = wifiSyncService.getConnectUri();
@@ -4165,6 +4172,10 @@ app.whenReady().then(() => {
         }
       });
       console.log('[Hotkey] Registered Ctrl+Shift+S for PopSearch');
+
+      globalShortcut.register('Alt+Shift+S', () => {
+        if (popSearch) popSearch.showPopupWithText('');
+      });
 
       // Ctrl+P for Printing
       globalShortcut.register('CommandOrControl+P', () => {

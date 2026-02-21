@@ -478,6 +478,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   popSearchSaveConfig: (data) => ipcRenderer.invoke('pop-search-save-config', data),
   popSearchLoadConfig: () => ipcRenderer.invoke('pop-search-load-config'),
 
+  // WiFi Sync
+  wifiSyncBroadcast: (message) => ipcRenderer.invoke('wifi-sync-broadcast', message),
+  getWifiSyncUri: () => ipcRenderer.invoke('get-wifi-sync-uri'),
+  getWifiSyncQr: () => ipcRenderer.invoke('get-wifi-sync-qr'),
+  getWifiSyncInfo: () => ipcRenderer.invoke('get-wifi-sync-info'),
+
   // Window utilities
   bringWindowToTop: () => ipcRenderer.invoke('bring-window-to-top'),
 });

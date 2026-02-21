@@ -98,6 +98,8 @@ interface BrowserState {
     setEnableAIAssist: (enable: boolean) => void;
     setOpenaiApiKey: (key: string) => void;
     setGeminiApiKey: (key: string) => void;
+    geminiModel: string;
+    setGeminiModel: (model: string) => void;
     setAnthropicApiKey: (key: string) => void;
     setGroqApiKey: (key: string) => void;
     setAIProvider: (provider: string) => void;
@@ -292,6 +294,7 @@ export const useAppStore = create<BrowserState>()(
             enableAIAssist: true,
             openaiApiKey: '',
             geminiApiKey: '',
+            geminiModel: 'gemini-2.0-flash',
             anthropicApiKey: '',
             groqApiKey: '',
             aiProvider: 'ollama',
@@ -496,6 +499,7 @@ export const useAppStore = create<BrowserState>()(
             setEnableAIAssist: (enable) => set({ enableAIAssist: enable }),
             setOpenaiApiKey: (key) => set({ openaiApiKey: key }),
             setGeminiApiKey: (key) => set({ geminiApiKey: key }),
+            setGeminiModel: (model) => set({ geminiModel: model }),
             setAnthropicApiKey: (key) => set({ anthropicApiKey: key }),
             setGroqApiKey: (key) => set({ groqApiKey: key }),
             setAIProvider: (provider) => set({ aiProvider: provider }),

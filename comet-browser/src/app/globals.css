@@ -255,3 +255,20 @@ body {
     background-position: 0% 0%;
   }
 }
+
+.gradient-progressbar {
+  background: linear-gradient(90deg, #38BDF8, #818CF8, #C084FC, #f472b6);
+  background-size: 200% auto;
+  animation: progress-gradient 2s linear infinite;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+@keyframes progress-gradient {
+  from {
+    background-position: 0% 50%;
+  }
+
+  to {
+    background-position: 200% 50%;
+  }
+}

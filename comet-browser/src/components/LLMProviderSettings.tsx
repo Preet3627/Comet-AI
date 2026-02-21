@@ -104,8 +104,8 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
     } else if (activeProviderId === 'openai-compatible') {
       config = { apiKey: store.openaiApiKey, baseUrl: store.localLLMBaseUrl, model: store.localLLMModel };
     } else if (activeProviderId.startsWith('gemini')) {
-      config = { apiKey: store.geminiApiKey };
-    } else if (activeProviderId === 'claude' || activeProviderId === 'anthropic' || activeProviderId.startsWith('claude')) {
+      config = { apiKey: store.geminiApiKey, model: store.geminiModel || activeProviderId };
+    } else if (activeProviderId === 'claude' || activeProviderId === 'anthropic' || activeProviderId?.startsWith('claude')) {
       config = { apiKey: store.anthropicApiKey, model: store.localLLMModel };
     } else if (activeProviderId === 'groq' || activeProviderId === 'mixtral-8x7b-groq' || activeProviderId?.startsWith('groq')) {
       config = { apiKey: store.groqApiKey, model: store.localLLMModel };
@@ -425,6 +425,26 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                           value={store.geminiApiKey || ''}
                           onChange={(e) => store.setGeminiApiKey(e.target.value)}
                         />
+                        <select
+                          id="gemini-model-select"
+                          aria-label="Gemini Model Selection"
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                          value={store.geminiModel || 'gemini-2.0-flash'}
+                          onChange={(e) => store.setGeminiModel(e.target.value)}
+                        >
+                          <option value="gemini-3.1-pro">Gemini 3.1 Pro (Latest Reasoning)</option>
+                          <option value="gemini-3.1-flash">Gemini 3.1 Flash (High Speed)</option>
+                          <option value="gemini-3.0-pro">Gemini 3.0 Pro</option>
+                          <option value="gemini-3.0-flash">Gemini 3.0 Flash</option>
+                          <option value="gemini-3-deep-think">Gemini 3 Deep Think</option>
+                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (2M Context)</option>
+                          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                          <option value="gemini-2.0-pro">Gemini 2.0 Pro</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                        </select>
                         <button
                           onClick={async () => {
                             if (window.electronAPI) {
@@ -443,7 +463,7 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                           <Check size={12} />
                           Test Gemini API
                         </button>
-                        <p className="text-[10px] text-white/30 italic">Targeting latest {activeProviderId?.includes('pro') ? 'Pro' : 'Flash'} v3.1 model.</p>
+                        <p className="text-[10px] text-white/30 italic">Selected model: <span className="text-deep-space-accent-neon">{store.geminiModel || 'gemini-2.0-flash'}</span></p>
                       </div>
                     )}
 

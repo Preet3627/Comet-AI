@@ -29,6 +29,7 @@ import 'pages/connect_desktop_page.dart';
 import 'pages/settings/main.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pages/ai_chat_page.dart';
+import 'pages/agent_chat_page.dart';
 
 // ignore: non_constant_identifier_names
 late final String WEB_ARCHIVE_DIR;
@@ -70,8 +71,13 @@ void _handleSharedMedia(List<SharedMediaFile> sharedFiles) {
           arguments: {'initialMessage': 'Explain this image: ${file.path}'});
     } else {
       String message = file.path;
-      navigatorKey.currentState
-          ?.pushNamed('/ai-chat', arguments: {'initialMessage': message});
+      if (message.startsWith('>>')) {
+        navigatorKey.currentState?.pushNamed('/agent-chat',
+            arguments: {'task': message.substring(2).trim()});
+      } else {
+        navigatorKey.currentState
+            ?.pushNamed('/ai-chat', arguments: {'initialMessage': message});
+      }
     }
   });
 
@@ -287,6 +293,12 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
               as Map<String, dynamic>?;
           final message = args?['initialMessage'] ?? "Hello, how can I help?";
           return FullScreenAIChat(initialMessage: message);
+        },
+        '/agent-chat': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
+          final task = args?['task'] ?? "";
+          return AgentChatPage(initialTask: task);
         },
       },
     );

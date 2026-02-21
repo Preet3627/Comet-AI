@@ -10,7 +10,8 @@ import {
   RotateCw, AlertTriangle, ShieldCheck, DownloadCloud, ShoppingCart, Copy as CopyIcon,
   Terminal, Settings as GhostSettings, FolderOpen, Sparkles, ScanLine, Search, X,
   Puzzle, Code2, Briefcase, Image as ImageIcon, User as UserIcon, Maximize2, Minimize2, RefreshCcw, Download as DownloadIcon,
-  Layout, MoreVertical, CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves, Presentation, Package
+  Layout, MoreVertical, MoreHorizontal, CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves, Presentation, Package,
+  Zap, Check, Paperclip, MousePointer2
 } from 'lucide-react';
 import AIChatSidebar from '@/components/AIChatSidebar';
 import LandingPage from '@/components/LandingPage';
@@ -138,13 +139,9 @@ export default function Home() {
   const [activeExtensions, setActiveExtensions] = useState<any[]>([]);
 
   const handleSettingsClose = useCallback(() => {
-    if (isPopupWindow && window.electronAPI) {
-      window.electronAPI.closeWindow();
-    } else {
-      setShowSettings(false);
-      setSettingsSection('profile');
-    }
-  }, [isPopupWindow]);
+    setShowSettings(false);
+    setSettingsSection('profile');
+  }, []);
 
   // Synchronize inputValue with store.currentUrl
   useEffect(() => {
@@ -171,27 +168,27 @@ export default function Home() {
     { icon: <Puzzle size={20} />, label: 'Extensions', popup: 'plugins' },
   ];
 
-  // Handle sidebar item clicks
+  // Handle sidebar item clicks - now mostly using local panels
   const handleSidebarClick = (item: any) => {
     if (item.view) {
       store.setActiveView(item.view);
       setActiveManager(null);
       setShowClipboard(false);
+      setShowSettings(false);
     } else if (item.manager) {
       setActiveManager(item.manager);
       store.setActiveView('browser');
       setShowClipboard(false);
+      setShowSettings(false);
     } else if (item.popup) {
-      if (window.electronAPI) {
-        switch (item.popup) {
-          case 'plugins': window.electronAPI.openPluginsPopup(); break;
-          case 'settings': window.electronAPI.openSettingsPopup(); break;
-          case 'clipboard': window.electronAPI.openClipboardPopup(); break;
-          case 'translate': window.electronAPI.openTranslatePopup(); break;
-          case 'search': window.electronAPI.openSearchPopup(); break;
-          case 'downloads': window.electronAPI.openDownloadsPopup(); break;
-          case 'cart': window.electronAPI.openCartPopup(); break;
-        }
+      switch (item.popup) {
+        case 'plugins': setShowExtensionsPopup(true); break;
+        case 'settings': setShowSettings(true); break;
+        case 'clipboard': setShowClipboard(true); break;
+        case 'translate': setShowTranslateDialog(true); break;
+        case 'search': setShowSpotlightSearch(true); break;
+        case 'downloads': setShowDownloads(true); break;
+        case 'cart': setShowCart(true); break;
       }
     }
   };
@@ -404,6 +401,23 @@ export default function Home() {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  const rightClickTimerRef = useRef<any>(null);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 2) { // Right click
+      rightClickTimerRef.current = setTimeout(() => {
+        handlePopSearch();
+      }, 500); // 500ms hold
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (rightClickTimerRef.current) {
+      clearTimeout(rightClickTimerRef.current);
+      rightClickTimerRef.current = null;
+    }
+  };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -766,7 +780,13 @@ export default function Home() {
     let url = urlToNavigate || inputValue.trim(); // Use inputValue if no specific URL provided
     if (!url) return;
 
-    if (!url) return;
+    if (url.startsWith('>>')) {
+      if (window.electronAPI) {
+        window.electronAPI.wifiSyncBroadcast({ type: 'agent-task', task: url.substring(2).trim() });
+        setInputValue('');
+        return;
+      }
+    }
 
     const isAuthUrl = (testUrl: string) => {
       try {
@@ -1172,7 +1192,12 @@ export default function Home() {
         onToggleSpotlightSearch={() => setShowSpotlightSearch(prev => !prev)}
         onOpenSettings={() => setShowSettings(true)}
       />
-      <div className={`flex flex-1 overflow-hidden relative pt-10 bg-[#020205]`} onContextMenu={handleContextMenu}>
+      <div
+        className={`flex flex-1 overflow-hidden relative pt-10 bg-[#020205]`}
+        onContextMenu={handleContextMenu}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+      >
         {/* Navigation Sidebar (Rail) */}
         <AnimatePresence>
           {railVisible && (
@@ -1318,17 +1343,33 @@ export default function Home() {
                     </div>
                   )}
                   <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden pointer-events-none rounded-t-2xl">
-                    <motion.div animate={{ x: ['-100%', '100%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="w-1/2 h-full bg-gradient-to-r from-transparent via-primary-text/10 to-transparent" />
+                    <motion.div animate={{ x: ['-100%', '100%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="w-1/2 h-full gradient-progressbar" />
                   </div>
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 no-drag-region z-20 flex items-center gap-2">
-                    <MusicVisualizer color={aiPickColor} isPlaying={isAudioPlaying || isAmbientPlaying} />
-                    <button onClick={handleMusicUpload} className="p-1.5 rounded-lg hover:bg-white/10 text-white/20 hover:text-white/60 transition-all" title="Upload Ambient Music">
-                      <Music2 size={12} />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 no-drag-region z-20 flex items-center gap-1.5">
+                    <button
+                      onClick={() => setShowDownloads(!showDownloads)}
+                      className={`p-1.5 rounded-lg transition-all 
+                                   ${isDownloading ? 'text-accent animate-pulse' : ''}
+                                   ${downloadStatus === 'completed' ? 'text-green-400' : ''}
+                                   ${downloadStatus === 'failed' ? 'text-red-400' : ''}
+                                   ${downloadStatus === 'idle' ? 'text-secondary-text hover:text-sky-400' : ''}
+                                   ${showDownloads ? 'bg-sky-500/10 text-sky-400' : ''}
+                                   hover:bg-white/5`}
+                      title="Downloads"
+                    >
+                      <DownloadCloud size={14} />
                     </button>
-                    <button onClick={() => store.setEnableAmbientMusic(!store.enableAmbientMusic)} className={`p-1.5 rounded-lg hover:bg-white/10 transition-all ${store.enableAmbientMusic ? 'text-accent' : 'text-white/20'}`} title="Ambient Mode">
-                      <Waves size={12} />
+                    <button onClick={() => setShowClipboard(!showClipboard)} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'} hover:bg-white/5`} title="Clipboard">
+                      <CopyIcon size={14} />
                     </button>
-                    <button onClick={handlePopSearch} className="p-1.5 rounded-lg hover:bg-white/10 text-white/20 hover:text-white/60 transition-all" title="Quick Search (Ctrl+Shift+S)">
+                    <button onClick={() => setShowCart(!showCart)} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'} hover:bg-white/5`} title="Unified Cart">
+                      <ShoppingCart size={14} />
+                    </button>
+                    <button onClick={() => setShowExtensionsPopup(!showExtensionsPopup)} className={`p-1.5 rounded-lg transition-all ${showExtensionsPopup ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'} hover:bg-white/5`} title="Extensions">
+                      <Puzzle size={14} />
+                    </button>
+                    <div className="w-[1px] h-3 bg-white/10 mx-0.5" />
+                    <button onClick={handlePopSearch} className="p-1.5 rounded-lg hover:bg-white/10 text-white/20 hover:text-sky-400 transition-all" title="Quick Search">
                       <Search size={12} />
                     </button>
                   </div>
@@ -1358,34 +1399,12 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowDownloads(!showDownloads)}
-                  className={`p-1.5 rounded-lg transition-all 
-                               ${isDownloading ? 'text-accent animate-pulse' : ''}
-                               ${downloadStatus === 'completed' ? 'text-green-400' : ''}
-                               ${downloadStatus === 'failed' ? 'text-red-400' : ''}
-                               ${downloadStatus === 'idle' ? 'text-secondary-text hover:text-primary-text' : ''}
-                               ${showDownloads ? 'bg-primary-bg/10 text-accent' : ''}
-                               hover:bg-primary-bg/10`}
-                  title="Downloads"
-                >
-                  <DownloadCloud size={14} />
-                </button>
-                <button onClick={() => { setSettingsSection('history'); setShowSettings(true); }} className="p-1.5 rounded-lg text-secondary-text hover:text-primary-text transition-all" title="Browsing History">
+              <div className="flex items-center gap-1">
+                <button onClick={() => { setSettingsSection('history'); setShowSettings(true); }} className="p-1.5 rounded-lg text-secondary-text hover:text-primary-text transition-all" title="History">
                   <RefreshCcw size={14} />
-                </button>
-                <button onClick={() => setShowClipboard(!showClipboard)} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Clipboard Manager">
-                  <CopyIcon size={14} />
                 </button>
                 <button onClick={handleReadAloud} className={`p-1.5 rounded-lg transition-all ${isReadingAloud ? 'text-accent animate-pulse' : 'text-secondary-text hover:text-primary-text'}`} title="Read Aloud">
                   {isReadingAloud ? <Square size={14} /> : <Volume2 size={14} />}
-                </button>
-                <button onClick={() => setShowCart(!showCart)} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Scan Shopping Cart">
-                  <ShoppingCart size={14} />
-                </button>
-                <button onClick={() => setShowExtensionsPopup(!showExtensionsPopup)} className={`p-1.5 rounded-lg transition-all ${showExtensionsPopup ? 'text-accent bg-primary-bg/10' : 'text-secondary-text hover:text-primary-text'}`} title="Extensions">
-                  <Puzzle size={14} />
                 </button>
 
                 <div className="w-[1px] h-6 bg-border-color mx-1" />
@@ -1731,6 +1750,105 @@ export default function Home() {
       </AnimatePresence>
 
       <audio ref={ambientAudioRef} src={store.ambientMusicUrl} loop hidden />
+      <AnimatePresence>
+        {showSettings && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-10">
+            <SettingsPanel onClose={() => setShowSettings(false)} defaultSection={settingsSection} />
+          </div>
+        )}
+        {showDownloads && (
+          <div className="fixed top-24 right-10 z-[100] w-[400px] h-[600px] glass-dark rounded-3xl border border-white/10 shadow-2xl p-6 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-sm font-black uppercase tracking-widest text-sky-400">Downloads</h3>
+              <button onClick={() => setShowDownloads(false)} className="p-2 hover:bg-white/10 rounded-full transition-all text-white/40"><X size={16} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4">
+              {downloads.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center opacity-30 gap-4">
+                  <DownloadCloud size={40} />
+                  <p className="text-xs font-bold uppercase tracking-widest">No Active Downloads</p>
+                </div>
+              ) : (
+                downloads.map((d, i) => (
+                  <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between group hover:border-sky-400/30 transition-all">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs font-bold text-white truncate max-w-[200px]">{d.name}</span>
+                      <span className="text-[10px] uppercase font-black tracking-tighter text-sky-400/60">{d.status}</span>
+                    </div>
+                    <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+                      <motion.div initial={{ width: 0 }} animate={{ width: d.status === 'completed' ? '100%' : '50%' }} className="h-full bg-sky-400" />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+        {showClipboard && (
+          <div className="fixed top-24 right-10 z-[100] w-[450px] h-[650px] overflow-hidden">
+            <ClipboardManager onClose={() => setShowClipboard(false)} />
+          </div>
+        )}
+        {showCart && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md">
+            <UnifiedCartPanel onClose={() => setShowCart(false)} onScan={handleCartScan} />
+          </div>
+        )}
+        {showExtensionsPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-10">
+            <div className="w-full max-w-4xl h-full max-h-[800px] glass-dark rounded-[40px] border border-white/10 shadow-2xl p-8 overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-400/20 flex items-center justify-center text-sky-400 shadow-[0_0_20px_rgba(56,189,248,0.3)]">
+                    <Puzzle size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-tighter text-white">Extension Forge</h2>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400/60">Manage your neural plugins</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowExtensionsPopup(false)} className="p-3 hover:bg-white/10 rounded-full transition-all group">
+                  <X size={20} className="text-white/40 group-hover:text-white" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 pb-10">
+                <div className="grid grid-cols-2 gap-6">
+                  {activeExtensions.length === 0 ? (
+                    <div className="col-span-2 py-20 text-center opacity-20">
+                      <Puzzle size={64} className="mx-auto mb-6" />
+                      <p className="text-sm font-black uppercase tracking-[0.3em]">No Extensions Installed</p>
+                    </div>
+                  ) : (
+                    activeExtensions.map(ext => (
+                      <div key={ext.id} className="p-6 bg-white/5 rounded-3xl border border-white/10 hover:border-sky-400/30 transition-all group">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center overflow-hidden border border-white/5">
+                              {ext.icon ? <img src={ext.icon} className="w-full h-full object-cover" /> : <Puzzle size={20} className="text-white/20" />}
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-black text-white">{ext.name}</h4>
+                              <p className="text-[10px] text-white/40">{ext.id}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => window.electronAPI?.toggleExtension(ext.id)} className={`p-2 rounded-lg transition-all ${ext.enabled ? 'bg-sky-500/10 text-sky-400' : 'bg-white/5 text-white/20'}`}>
+                              <Zap size={14} />
+                            </button>
+                            <button onClick={() => window.electronAPI?.uninstallExtension(ext.id)} className="p-2 hover:bg-red-500/10 hover:text-red-400 text-white/20 rounded-lg transition-all">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
       <SpotlightSearchOverlay show={showSpotlightSearch} onClose={() => setShowSpotlightSearch(false)} />
     </div>
   );

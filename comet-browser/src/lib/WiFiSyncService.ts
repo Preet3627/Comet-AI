@@ -8,7 +8,7 @@ export class WiFiSyncService extends EventEmitter {
     private port: number;
     private wss: WebSocketServer | null = null;
     private discoverySocket: dgram.Socket | null = null;
-    private discoveryInterval: NodeJS.Timeout | null = null;
+    private discoveryInterval: any = null;
     private clients: Set<WebSocket> = new Set();
     private deviceId: string;
     private pairingCode: string;
@@ -189,6 +189,16 @@ export class WiFiSyncService extends EventEmitter {
 
     public getPairingCode(): string {
         return this.pairingCode;
+    }
+
+    public broadcast(message: any) {
+        if (!this.wss) return;
+        const data = JSON.stringify(message);
+        this.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(data);
+            }
+        });
     }
 }
 

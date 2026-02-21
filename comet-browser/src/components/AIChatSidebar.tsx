@@ -648,14 +648,14 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
           case 'EXPLAIN_CAPABILITIES':
             setMessages(prev => [...prev, { role: 'model', content: "🚀 **I am the Comet AI Agent.** Let me demonstrate my advanced capabilities for you!" }]);
             await delay(1500);
-            
+
             setMessages(prev => [...prev, { role: 'model', content: "📄 **1. Document Generation:** I can create PDFs dynamically. Let me generate a capabilities overview PDF for you now..." }]);
             if (window.electronAPI) {
               try {
                 const pdfContent = "<h1>Comet AI Capabilities</h1><p>Here is a summary of what I can do:</p><ul><li>Autonomous Browsing</li><li>Desktop Automation</li><li>File Generation</li><li>Omnipresent AI Assistant</li><li>Local Memory Integration</li></ul>";
                 const pdfRes = await window.electronAPI.generatePDF("Comet_Capabilities_Demo", pdfContent);
                 if (pdfRes.success) {
-                   setMessages(prev => [...prev, { role: 'model', content: `✅ [PDF_GENERATED]: Document "Comet_Capabilities_Demo.pdf" has been saved to your Downloads.` }]);
+                  setMessages(prev => [...prev, { role: 'model', content: `✅ [PDF_GENERATED]: Document "Comet_Capabilities_Demo.pdf" has been saved to your Downloads.` }]);
                 }
               } catch (e) {
                 console.error('Failed to generate PDF in capabilities demo', e);
@@ -666,12 +666,12 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
             setMessages(prev => [...prev, { role: 'model', content: "⚙️ **2. OS Automation:** I can interact with your operating system. I will now open your system calculator..." }]);
             if (window.electronAPI) {
               try {
-                 const platform = navigator.platform;
-                 let calcApp = platform.includes('Win') ? 'calc.exe' : (platform.includes('Mac') ? 'Calculator.app' : 'gnome-calculator');
-                 const appRes = await window.electronAPI.openExternalApp(calcApp);
-                 if (appRes?.success) {
-                   setMessages(prev => [...prev, { role: 'model', content: `✅ [APP_OPENED]: The Calculator application has been launched.` }]);
-                 }
+                const platform = navigator.platform;
+                let calcApp = platform.includes('Win') ? 'calc.exe' : (platform.includes('Mac') ? 'Calculator.app' : 'gnome-calculator');
+                const appRes = await window.electronAPI.openExternalApp(calcApp);
+                if (appRes?.success) {
+                  setMessages(prev => [...prev, { role: 'model', content: `✅ [APP_OPENED]: The Calculator application has been launched.` }]);
+                }
               } catch (e) {
                 console.error('Failed to open app in capabilities demo', e);
               }
@@ -682,7 +682,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
             await delay(2000);
 
             setMessages(prev => [...prev, { role: 'model', content: "🎯 **4. Action-Oriented:** I don't just chat, I *do*. I can change browser themes, adjust your volume, manage emails, or navigate pages autonomously. Just ask!" }]);
-            
+
             result = 'Capabilities explained comprehensively';
             break;
 
@@ -1703,6 +1703,21 @@ ${pageContext || "Content not loaded. Use [READ_PAGE_CONTENT] command to read fu
               )}
             </div>
           </div>
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.preventDefault();
+              if (inputMessage.trim() && (window as any).electronAPI) {
+                await (window as any).electronAPI.wifiSyncBroadcast({ type: 'agent-task', task: inputMessage });
+                setInputMessage('');
+              }
+            }}
+            disabled={inputMessage.trim() === '' || isLoading}
+            className="p-2.5 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 transition-all border border-accent/30"
+            title="Send Task to Mobile Agent"
+          >
+            <Zap size={16} className="animate-pulse" />
+          </button>
           <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
           <button
             type="button"

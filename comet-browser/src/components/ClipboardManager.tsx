@@ -5,9 +5,14 @@ import { useAppStore } from '@/store/useAppStore';
 import { Clipboard, Trash2, Copy, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ClipboardManager = () => {
+const ClipboardManager = ({ onClose }: { onClose?: () => void }) => {
     const { clipboard, addClipboardItem, clearClipboard } = useAppStore();
     const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
+
+    const handleClose = () => {
+        if (onClose) onClose();
+        else window.close();
+    };
 
     const handleCopy = (text: string, index: number) => {
         navigator.clipboard.writeText(text);
@@ -19,7 +24,7 @@ const ClipboardManager = () => {
         <div className="flex flex-col h-full bg-black/20 rounded-2xl border border-white/5 overflow-hidden relative z-[1000]">
             <header className="p-4 border-b border-white/5 flex items-center justify-between bg-white/5 drag-region">
                 <div className="flex items-center gap-2">
-                    <Clipboard size={16} className="text-deep-space-accent-neon" />
+                    <Clipboard size={16} className="text-secondary-text" />
                     <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Clipboard History</span>
                 </div>
                 <div className="flex items-center gap-2 no-drag-region">
@@ -31,7 +36,7 @@ const ClipboardManager = () => {
                         <Trash2 size={14} />
                     </button>
                     <button
-                        onClick={() => window.close()}
+                        onClick={handleClose}
                         className="p-1.5 hover:bg-white/10 text-white/40 hover:text-white rounded-lg transition-all"
                         title="Close"
                     >

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'main.dart';
 
 class SyncService {
   static final SyncService _instance = SyncService._internal();
@@ -323,6 +324,12 @@ class SyncService {
         _lastSentClipboard = msg['text'];
         Clipboard.setData(ClipboardData(text: msg['text']));
         _clipboardController.add(msg['text']);
+      } else if (msg['type'] == 'agent-task') {
+        final task = msg['task'];
+        if (task != null) {
+          navigatorKey.currentState
+              ?.pushNamed('/agent-chat', arguments: {'task': task});
+        }
       } else if (msg['type'] == 'error' && msg['code'] == 'AUTH_FAILED') {
         isConnectedToDesktop = false;
         print('[Sync] Authentication failed: ${msg['message']}');

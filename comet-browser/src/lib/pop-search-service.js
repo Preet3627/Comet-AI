@@ -215,10 +215,10 @@ class PopSearchService {
         const bounds = display.workArea;
 
         const popupWidth = 400;
-        const popupHeight = 60;
+        const popupHeight = 280; // Increased height to show providers and hint
 
-        let popupX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width - popupWidth));
-        let popupY = Math.max(bounds.y, Math.min(y + 5, bounds.y + bounds.height - popupHeight));
+        let popupX = Math.max(bounds.x, Math.min(x - 200, bounds.x + bounds.width - popupWidth));
+        let popupY = Math.max(bounds.y, Math.min(y + 10, bounds.y + bounds.height - popupHeight));
 
         popupWindow = new BrowserWindow({
             width: popupWidth,
