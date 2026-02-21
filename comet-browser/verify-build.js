@@ -14,7 +14,7 @@ const checks = [
     { name: 'preload.js', path: './preload.js', type: 'file' },
     { name: 'view_preload.js', path: './view_preload.js', type: 'file' },
     { name: 'package.json', path: './package.json', type: 'file' },
-    { name: 'icon.ico', path: './icon.ico', type: 'file' },
+    { name: 'icon.ico', path: './assets/icon.ico', type: 'file' },
     { name: 'out directory', path: './out', type: 'directory' },
     { name: 'out/index.html', path: './out/index.html', type: 'file' },
     { name: 'node_modules', path: './node_modules', type: 'directory' },

@@ -1709,46 +1709,8 @@ ipcMain.handle('llm-configure-provider', (event, providerId, options) => {
   return true;
 });
 
-ipcMain.handle('search-applications', async (event, query) => {
-  const results = [];
-  const normalizedQuery = query.toLowerCase();
+// Redundant search-applications handler removed (see line 3387)
 
-  try {
-    if (process.platform === 'win32') {
-      const searchDirs = [
-        path.join(process.env.ProgramData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
-        path.join(process.env.AppData, 'Microsoft', 'Windows', 'Start Menu', 'Programs')
-      ];
-
-      for (const dir of searchDirs) {
-        if (!fs.existsSync(dir)) continue;
-
-        const files = fs.readdirSync(dir, { recursive: true });
-        for (const file of files) {
-          if (file.toLowerCase().endsWith('.lnk') && file.toLowerCase().includes(normalizedQuery)) {
-            const name = path.basename(file, '.lnk');
-            results.push({ name, path: path.join(dir, file) });
-          }
-        }
-      }
-    } else if (process.platform === 'darwin') {
-      const { execSync } = require('child_process');
-      try {
-        const output = execSync(`mdfind "kMDItemContentType == 'com.apple.application-bundle' && kMDItemFSName == '*${query}*'"`).toString();
-        const paths = output.split('\n').filter(p => p.trim());
-        for (const p of paths) {
-          results.push({ name: path.basename(p, '.app'), path: p });
-        }
-      } catch (e) {
-        console.error('macOS mdfind failed:', e);
-      }
-    }
-    return { success: true, results: results.slice(0, 10) };
-  } catch (err) {
-    console.error('App Search Error:', err);
-    return { success: false, error: err.message };
-  }
-});
 
 // IPC handler to set MCP server port dynamically
 ipcMain.on('set-mcp-server-port', (event, port) => {

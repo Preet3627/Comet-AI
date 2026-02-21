@@ -1,8 +1,8 @@
-import { BrowserWindow, screen, ipcMain, dialog, clipboard, shell, app } from 'electron';
-import fs from 'fs';
-import path from 'path';
-import { exec } from 'child_process';
-import { log } from 'electron-log';
+const { BrowserWindow, screen, ipcMain, dialog, clipboard, shell, app } = require('electron');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const { log } = require('electron-log');
 
 const IPC_CHANNELS = {
     SHOW_POPUP: 'pop-search:show-popup',
@@ -256,7 +256,7 @@ class PopSearchService {
     generatePopupHtml(selectedText) {
         const providers = this.config?.providers || DEFAULT_CONFIG.providers;
         const accentColor = this.config?.appearance?.accentColor || '#6366f1';
-        
+
         const providerCards = providers.slice(0, 10).map((p, i) => {
             return `
             <div class="provider-card" data-url="${p.url}" data-name="${p.name}" data-type="url" tabindex="0">

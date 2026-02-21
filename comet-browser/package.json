@@ -37,33 +37,19 @@
     "es-errors": "^1.3.0",
     "express": "^5.2.1",
     "firebase": "^12.7.0",
-    "framer-motion": "^12.23.26",
     "googleapis": "^171.4.0",
     "jimp": "^1.6.0",
-    "katex": "^0.16.27",
-    "lucide-react": "^0.562.0",
     "mysql2": "^3.11.5",
-    "next": "^16.1.3",
     "object-inspect": "^1.13.3",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "qrcode": "^1.5.4",
     "qs": "^6.13.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-markdown": "^10.1.0",
-    "react-pdf": "^9.2.1",
-    "react-pdftotext": "^1.3.4",
-    "react-syntax-highlighter": "^16.1.0",
-    "rehype-katex": "^7.0.1",
-    "remark-gfm": "^4.0.1",
-    "remark-math": "^6.0.0",
     "screenshot-desktop": "^1.15.3",
     "side-channel": "^1.1.0",
     "tesseract.js": "^7.0.0",
     "wait-on": "^9.0.3",
-    "ws": "^8.18.0",
-    "zustand": "^5.0.9"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@eslint/compat": "^2.0.1",
@@ -81,10 +67,24 @@
     "electron": "40.1.0",
     "electron-builder": "^26.7.0",
     "eslint": "^8.0.0",
+    "framer-motion": "^12.23.26",
     "globals": "^13.24.0",
+    "katex": "^0.16.27",
+    "lucide-react": "^0.562.0",
+    "next": "^16.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "react-pdf": "^9.2.1",
+    "react-pdftotext": "^1.3.4",
+    "react-syntax-highlighter": "^16.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "typescript-eslint": "^8.53.1"
+    "typescript-eslint": "^8.53.1",
+    "zustand": "^5.0.9"
   },
   "packageManager": "npm@11.5.1",
   "build": {
@@ -98,8 +98,8 @@
       "main.js",
       "preload.js",
       "view_preload.js",
-      "src/lib/P2PFileSyncService.js",
-      "src/lib/*.js",
+      "src/lib/**/*",
+      "assets/**/*",
       "package.json",
       "LICENSE.txt"
     ],
@@ -109,7 +109,7 @@
       "license": "LICENSE.txt",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Comet Browser"
+      "shortcutName": "Comet-AI"
     },
     "win": {
       "icon": "assets/icon.ico",
@@ -136,7 +136,30 @@
     "directories": {
       "buildResources": "assets",
       "output": "release"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  },
+  "overrides": {
+    "electron": "40.1.0",
+    "@types/node": "20.19.33",
+    "debug": "4.4.3",
+    "strip-ansi": "6.0.1",
+    "@tensorflow/tfjs-core": "4.22.0",
+    "gaxios": "7.1.3",
+    "node-fetch": "2.6.13",
+    "qs": "6.13.1",
+    "tldts-experimental": "7.0.23",
+    "@ghostery/adblocker-content": "2.14.1",
+    "string-width": "5.1.2",
+    "ansi-styles": "4.3.0"
   },
   "optionalDependencies": {
     "@next/swc-win32-x64-msvc": "^16.1.6",
