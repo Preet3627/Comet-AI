@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
+import 'package:collection/collection.dart';
 import '../models/browser_model.dart';
 import 'comet_agent_service.dart';
 
@@ -179,26 +180,37 @@ class _AgentChatPageState extends State<AgentChatPage>
       _isRunning = true;
       _isDone = false;
       _steps.clear();
+      _doneMessage = null;
+      _stuckMessage = null;
     });
 
     _agentService.onStep.listen((step) {
       if (mounted) {
         setState(() {
           _steps.add(step);
-          if (step.stepStatus == AgentStepStatus.done) {
+          
+          final doneAction = step.actions.firstWhereOrNull((a) {
+            final normalized = a.trim().replaceAll('[', '').replaceAll(']', '');
+            return normalized.startsWith('DONE:');
+          });
+          
+          final stuckAction = step.actions.firstWhereOrNull((a) {
+            final normalized = a.trim().replaceAll('[', '').replaceAll(']', '');
+            return normalized.startsWith('STUCK:');
+          });
+
+          if (doneAction != null) {
             _isDone = true;
             _isRunning = false;
-            _doneMessage = step.actions
-                .firstWhere((a) => a.startsWith('DONE:'),
-                    orElse: () => 'DONE: Completed')
+            _doneMessage = doneAction
+                .replaceAll('[', '').replaceAll(']', '')
                 .replaceFirst('DONE:', '')
                 .trim()
                 .replaceAll('"', '');
-          } else if (step.stepStatus == AgentStepStatus.stuck) {
+          } else if (stuckAction != null) {
             _isRunning = false;
-            _stuckMessage = step.actions
-                .firstWhere((a) => a.startsWith('STUCK:'),
-                    orElse: () => 'STUCK: Cannot proceed')
+            _stuckMessage = stuckAction
+                .replaceAll('[', '').replaceAll(']', '')
                 .replaceFirst('STUCK:', '')
                 .trim()
                 .replaceAll('"', '');
@@ -211,12 +223,14 @@ class _AgentChatPageState extends State<AgentChatPage>
     _agentService.runTask(widget.initialTask).then((session) {
       if (mounted) {
         setState(() {
-          _isRunning = false;
-          if (session.isDone) {
-            _isDone = true;
-            _doneMessage = session.doneMessage;
-          } else if (session.stuckMessage != null) {
-            _stuckMessage = session.stuckMessage;
+          if (!_isDone && _stuckMessage == null) {
+            _isRunning = false;
+            if (session.isDone) {
+              _isDone = true;
+              _doneMessage = session.doneMessage;
+            } else if (session.stuckMessage != null) {
+              _stuckMessage = session.stuckMessage;
+            }
           }
         });
       }

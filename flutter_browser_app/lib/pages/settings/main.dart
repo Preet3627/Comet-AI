@@ -392,12 +392,41 @@ class _AIModelsSettingsTabState extends State<_AIModelsSettingsTab> {
   String _selectedProvider = 'Google';
   late BrowserModel _browserModel;
 
+  final TextEditingController _apiKeyController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _browserModel = Provider.of<BrowserModel>(context, listen: false);
+      _updateApiKeyController();
     });
+  }
+
+  void _updateApiKeyController() {
+    final settings = _browserModel.getSettings();
+    if (_selectedProvider == 'Google') {
+      _apiKeyController.text = settings.geminiApiKey;
+    } else if (_selectedProvider == 'OpenAI') {
+      _apiKeyController.text = settings.openaiApiKey;
+    } else {
+      _apiKeyController.text = settings.claudeApiKey;
+    }
+  }
+
+  void _saveApiKey(String key) {
+    if (_browserModel != null) {
+      final settings = _browserModel.getSettings();
+      if (_selectedProvider == 'Google') {
+        settings.geminiApiKey = key;
+      } else if (_selectedProvider == 'OpenAI') {
+        settings.openaiApiKey = key;
+      } else {
+        settings.claudeApiKey = key;
+      }
+      _browserModel.updateSettings(settings);
+      _browserModel.save();
+    }
   }
 
   void _saveModel(String modelId, String provider) {
@@ -431,7 +460,6 @@ class _AIModelsSettingsTabState extends State<_AIModelsSettingsTab> {
               'SELECT PROVIDER',
               style: TextStyle(color: Color(0xFF00E5FF), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
             ),
-            const SizedBox(height: 10),
             Wrap(
               spacing: 10,
               children: [
@@ -440,7 +468,32 @@ class _AIModelsSettingsTabState extends State<_AIModelsSettingsTab> {
                 _buildProviderChip('Groq', Icons.speed),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 25),
+            const Text(
+              'API KEY',
+              style: TextStyle(color: Color(0xFF00E5FF), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.2)),
+              ),
+              child: TextField(
+                controller: _apiKeyController,
+                obscureText: true,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: const InputDecoration(
+                  hintText: 'Enter your API key...',
+                  hintStyle: TextStyle(color: Colors.white24),
+                  border: InputBorder.none,
+                ),
+                onChanged: _saveApiKey,
+              ),
+            ),
+            const SizedBox(height: 25),
             if (_selectedProvider == 'Google') ...[
               const Text(
                 'GOOGLE GEMINI MODELS',
@@ -492,7 +545,10 @@ class _AIModelsSettingsTabState extends State<_AIModelsSettingsTab> {
   Widget _buildProviderChip(String provider, IconData icon) {
     final isSelected = _selectedProvider == provider;
     return GestureDetector(
-      onTap: () => setState(() => _selectedProvider = provider),
+      onTap: () {
+        setState(() => _selectedProvider = provider);
+        _updateApiKeyController();
+      },
       child: Container(
         margin: const EdgeInsets.only(right: 10),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

@@ -14,7 +14,7 @@ class BrowserAppBar extends StatefulWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize =>
-      Size.fromHeight(Util.isMobile() ? 48.0 : 90.0);
+      Size.fromHeight(Util.isMobile() ? 100.0 : 90.0);
 }
 
 class _BrowserAppBarState extends State<BrowserAppBar> {
@@ -25,7 +25,7 @@ class _BrowserAppBarState extends State<BrowserAppBar> {
     return Consumer<WebViewModel>(
       builder: (context, webViewModel, child) {
         bool isVisible = webViewModel.isAppBarVisible;
-        double height = Util.isMobile() ? 48.0 : 90.0;
+        double height = Util.isMobile() ? 100.0 : 90.0;
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),

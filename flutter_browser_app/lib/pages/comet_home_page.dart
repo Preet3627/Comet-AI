@@ -186,18 +186,9 @@ class _CometHomePageState extends State<CometHomePage>
         Container(
           width: 80,
           height: 80,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF00E5FF), Color(0xFFD500F9)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00E5FF).withOpacity(0.3),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
+            color: Colors.transparent,
           ),
           child: Center(
             child: Image.asset(

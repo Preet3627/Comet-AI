@@ -588,25 +588,48 @@ class AgentActionExecutor {
   }
 
   Future<String> _executeAction(String action) async {
-    if (action.startsWith('NAVIGATE:')) {
-      final url = action.replaceFirst('NAVIGATE:', '').trim();
+    // Clean up the action string from potential brackets or extra quotes
+    String normalizedAction = action.trim();
+    if (normalizedAction.startsWith('[') && normalizedAction.endsWith(']')) {
+      normalizedAction = normalizedAction.substring(1, normalizedAction.length - 1).trim();
+    }
+
+    if (normalizedAction.startsWith('NAVIGATE:') || 
+        normalizedAction.startsWith('NAVIGATION:') || 
+        normalizedAction.startsWith('GOTO:')) {
+      
+      final urlPart = normalizedAction.contains(':') 
+          ? normalizedAction.substring(normalizedAction.indexOf(':') + 1).trim()
+          : '';
+          
+      if (urlPart.isEmpty) return 'failed: no url provided';
+      
+      // Remove potential quotes around URL
+      String url = urlPart.replaceAll('"', '').replaceAll("'", "");
+      if (!url.startsWith('http')) url = 'https://$url';
+      
       await controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
-      await Future.delayed(const Duration(milliseconds: 2000));
+      await Future.delayed(const Duration(milliseconds: 3000));
       return 'success';
     }
 
-    if (action == 'BACK') {
+    if (normalizedAction == 'BACK' || normalizedAction == 'GO_BACK') {
       await controller.goBack();
       return 'success';
     }
 
-    if (action == 'REFRESH') {
+    if (normalizedAction == 'REFRESH' || normalizedAction == 'RELOAD') {
       await controller.reload();
       return 'success';
     }
 
-    if (action.startsWith('CLICK:')) {
-      final target = action.replaceFirst('CLICK:', '').trim();
+    if (normalizedAction.startsWith('SAY:')) {
+      final message = normalizedAction.replaceFirst('SAY:', '').trim();
+      return 'chat: $message';
+    }
+
+    if (normalizedAction.startsWith('CLICK:')) {
+      final target = normalizedAction.replaceFirst('CLICK:', '').trim();
       return await _click(target);
     }
 
@@ -621,21 +644,39 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    if (action.startsWith('TYPE:')) {
-      final parts = action.replaceFirst('TYPE:', '').split('|');
+    if (normalizedAction.startsWith('TYPE:')) {
+      final parts = normalizedAction.replaceFirst('TYPE:', '').split('|');
       if (parts.length >= 2) {
         final selector = parts[0].trim();
-        final value = parts[1].trim().replaceAll('"', '');
+        final value = parts[1].trim().replaceAll('"', '').replaceAll("'", "");
         await controller.evaluateJavascript(source: '''
           (function() {
             const el = document.querySelector(${jsonEncode(selector)});
-            if (el) {
-              el.focus();
-              el.value = '';
+            if (!el) return false;
+            
+            el.focus();
+            
+            if (el.isContentEditable) {
+              el.innerText = ${jsonEncode(value)};
+            } else {
               el.value = ${jsonEncode(value)};
-              el.dispatchEvent(new Event('input', {bubbles: true}));
-              el.dispatchEvent(new Event('change', {bubbles: true}));
             }
+            
+            // Trigger events to make the site realize something changed
+            const events = ['input', 'change', 'blur'];
+            events.forEach(type => {
+              el.dispatchEvent(new Event(type, { bubbles: true }));
+            });
+            
+            // Special handling for some frameworks
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+              const keyboardEvent = new KeyboardEvent('keydown', {
+                bubbles: true, cancelable: true, keyCode: 13
+              });
+              el.dispatchEvent(keyboardEvent);
+            }
+            
+            return true;
           })()
         ''');
         return 'success';
@@ -643,11 +684,11 @@ class AgentActionExecutor {
       return 'failed: invalid TYPE format';
     }
 
-    if (action.startsWith('SELECT:')) {
-      final parts = action.replaceFirst('SELECT:', '').split('|');
+    if (normalizedAction.startsWith('SELECT:')) {
+      final parts = normalizedAction.replaceFirst('SELECT:', '').split('|');
       if (parts.length >= 2) {
         final selector = parts[0].trim();
-        final value = parts[1].trim().replaceAll('"', '');
+        final value = parts[1].trim().replaceAll('"', '').replaceAll("'", "");
         await controller.evaluateJavascript(source: '''
           (function() {
             const el = document.querySelector(${jsonEncode(selector)});
@@ -662,10 +703,10 @@ class AgentActionExecutor {
       return 'failed: invalid SELECT format';
     }
 
-    if (action.startsWith('CHECK:') || action.startsWith('UNCHECK:')) {
-      final isCheck = action.startsWith('CHECK:');
+    if (normalizedAction.startsWith('CHECK:') || normalizedAction.startsWith('UNCHECK:')) {
+      final isCheck = normalizedAction.startsWith('CHECK:');
       final selector =
-          action.replaceFirst(isCheck ? 'CHECK:' : 'UNCHECK:', '').trim();
+          normalizedAction.replaceFirst(isCheck ? 'CHECK:' : 'UNCHECK:', '').trim();
       await controller.evaluateJavascript(source: '''
         (function() {
           const el = document.querySelector(${jsonEncode(selector)});
@@ -675,8 +716,8 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    if (action.startsWith('SCROLL:')) {
-      final params = action.replaceFirst('SCROLL:', '').trim();
+    if (normalizedAction.startsWith('SCROLL:')) {
+      final params = normalizedAction.replaceFirst('SCROLL:', '').trim();
       if (params == 'to_bottom') {
         await controller.evaluateJavascript(
             source: 'window.scrollTo(0, document.body.scrollHeight)');
@@ -701,14 +742,14 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    if (action.startsWith('WAIT:')) {
-      final ms = int.tryParse(action.replaceFirst('WAIT:', '').trim()) ?? 1000;
+    if (normalizedAction.startsWith('WAIT:')) {
+      final ms = int.tryParse(normalizedAction.replaceFirst('WAIT:', '').trim()) ?? 1000;
       await Future.delayed(Duration(milliseconds: ms.clamp(100, 10000)));
       return 'success';
     }
 
-    if (action.startsWith('WAIT_FOR:')) {
-      final parts = action.replaceFirst('WAIT_FOR:', '').split('|');
+    if (normalizedAction.startsWith('WAIT_FOR:')) {
+      final parts = normalizedAction.replaceFirst('WAIT_FOR:', '').split('|');
       final selector = parts[0].trim();
       final timeout =
           int.tryParse(parts.length > 1 ? parts[1].trim() : '5000') ?? 5000;
@@ -716,14 +757,14 @@ class AgentActionExecutor {
       return 'success';
     }
 
-    if (action.startsWith('JS:')) {
-      final code = action.replaceFirst('JS:', '').trim();
+    if (normalizedAction.startsWith('JS:')) {
+      final code = normalizedAction.replaceFirst('JS:', '').trim();
       await controller.evaluateJavascript(source: code);
       return 'success';
     }
 
-    if (action.startsWith('EXTRACT:')) {
-      final parts = action.replaceFirst('EXTRACT:', '').split('|');
+    if (normalizedAction.startsWith('EXTRACT:')) {
+      final parts = normalizedAction.replaceFirst('EXTRACT:', '').split('|');
       final selector = parts[0].trim();
       final result = await controller.evaluateJavascript(source: '''
         (function() {
@@ -733,11 +774,11 @@ class AgentActionExecutor {
       return 'extracted: $result';
     }
 
-    if (action.startsWith('DONE:') || action.startsWith('STUCK:')) {
+    if (normalizedAction.startsWith('DONE:') || normalizedAction.startsWith('STUCK:')) {
       return 'terminal';
     }
 
-    return 'unknown action: $action';
+    return 'unknown action: $normalizedAction';
   }
 
   Future<String> _click(String target) async {
