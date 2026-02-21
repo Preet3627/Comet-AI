@@ -66,6 +66,7 @@ declare global {
             toggleFullscreen: () => void;
             showWebview: () => void;
             hideWebview: () => void;
+            bringWindowToTop: () => void;
             getOpenTabs: () => Promise<any[]>;
 
             // Auth
@@ -190,7 +191,7 @@ declare global {
             onNetworkStatusChanged: (callback: (isOnline: boolean) => void) => () => void;
             onClipboardChanged: (callback: (text: string) => void) => () => void;
             onAIChatInputText: (callback: (text: string) => void) => () => void;
-            translateWebsite: (args: { targetLanguage: string }) => Promise<{ success?: boolean; error?: string }>;
+            translateWebsite: (args: { targetLanguage: string; method?: string }) => Promise<{ success?: boolean; error?: string }>;
             onTriggerTranslationDialog: (callback: () => void) => () => void;
             toggleAdblocker: (enable: boolean) => void;
             translateText: (args: { text: string; to: string; from?: string }) => Promise<{ success: boolean; translated?: string; error?: string }>;
@@ -201,6 +202,7 @@ declare global {
             openClipboardPopup: () => void;
             openCartPopup: () => void;
             openSearchPopup: (options?: any) => void;
+            popSearchShowAtCursor: (text: string) => Promise<void>;
             openTranslatePopup: (options?: any) => void;
             openContextMenuPopup: (options?: any) => void;
             openPopupWindow: (type: string, options?: any) => void;

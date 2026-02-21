@@ -766,13 +766,7 @@ export default function Home() {
     let url = urlToNavigate || inputValue.trim(); // Use inputValue if no specific URL provided
     if (!url) return;
 
-    // If newTab is requested, create a new tab first
-    if (newTab && window.electronAPI) {
-      window.electronAPI.createView({ url: '' }); // Create empty new tab
-      // The URL will be set after navigation
-    }
-
-    store.setCurrentUrl(url); // Ensure global state is updated
+    if (!url) return;
 
     const isAuthUrl = (testUrl: string) => {
       try {
@@ -816,16 +810,11 @@ export default function Home() {
       if (store.enableAIAssist) triggerAIAnalysis(store.currentUrl.trim());
     }
 
-    if (window.electronAPI) {
-      if (newTab) {
-        // For new tabs, we need to create the tab first then navigate
-        window.electronAPI.createView({ url }).then(() => {
-          if (active) {
-            // Focus the new tab
-            window.electronAPI.activateView({ tabId: store.tabs.length });
-          }
-        });
-      } else {
+    if (newTab) {
+      store.addTab(url);
+    } else {
+      store.setCurrentUrl(url); // Ensure global state is updated
+      if (window.electronAPI) {
         window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url });
       }
     }
@@ -1293,9 +1282,8 @@ export default function Home() {
                         const start = input.selectionStart || inputValue.length;
                         const newValue = inputValue.slice(0, start) + '\n' + inputValue.slice(start);
                         setInputValue(newValue);
-                        // Set cursor position after the newline
                         setTimeout(() => {
-                          input.setSelection(start + 1, start + 1);
+                          input.setSelectionRange(start + 1, start + 1);
                         }, 0);
                         return;
                       }
@@ -1684,7 +1672,7 @@ export default function Home() {
           >
             <div className="w-full max-w-sm bg-[#0a0a0f] border border-white/10 rounded-2xl shadow-3xl overflow-hidden p-6">
               <h3 className="text-sm font-black uppercase tracking-widest text-white mb-4 text-center">TRANSLATE SITE</h3>
-              
+
               {/* Method Selection */}
               <div className="flex gap-2 mb-4">
                 <button
@@ -1701,11 +1689,11 @@ export default function Home() {
                 </button>
               </div>
               <p className="text-[10px] text-white/30 text-center mb-4">
-                {translateMethod === 'google' 
+                {translateMethod === 'google'
                   ? 'Google: Fast, relies on Google servers'
                   : 'Chrome AI: On-device, private, requires Chrome 144+'}
               </p>
-              
+
               <div className="grid grid-cols-2 gap-2">
                 {store.availableLanguages.map(langCode => {
                   const names: Record<string, string> = {
