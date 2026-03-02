@@ -14,7 +14,7 @@ build-desktop:
 
           - target: macos
             os: macos-latest
-            build_cmd: npm run build && electron-builder --mac --publish never
+            build_cmd: npm run dist:mac
             artifact_path: comet-browser/release/*.dmg
 
           - target: linux
