@@ -705,6 +705,22 @@ const ThinkingPanel = memo(function ThinkingPanel({ steps, thinkText }: Thinking
   );
 });
 
+// ---------------------------------------------------------------------------
+// ConversationHistoryPanelProps — Interface definition
+// ---------------------------------------------------------------------------
+interface ConversationHistoryPanelProps {
+  show: boolean;
+  conversations: Conversation[];
+  activeId: string | null;
+  onClose: () => void;
+  onLoad: (id: string) => void;
+  onDelete: (id: string) => void;
+  onNew: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// ClickPermissionModal — shown before AI clicks on a website element or app
+
 
 // ---------------------------------------------------------------------------
 // ClickPermissionModal — shown before AI clicks on a website element or app
