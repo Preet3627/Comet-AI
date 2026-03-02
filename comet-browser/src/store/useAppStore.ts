@@ -613,7 +613,7 @@ export const useAppStore = create<BrowserState>()(
             setAiSafetyMode: (enabled: boolean) => set({ aiSafetyMode: enabled }),
 
             // Theme settings
-            setTheme: (theme: string) => set({ theme }),
+            setTheme: (theme: "light" | "dark" | "system") => set({ theme }),
 
             // Online status
             setIsOnline: (online: boolean) => set({ isOnline: online }),
