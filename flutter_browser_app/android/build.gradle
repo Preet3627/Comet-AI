@@ -6,18 +6,6 @@ allprojects {
 }
 
 rootProject.buildDir = '../build'
-subprojects { subproject ->
-    subproject.layout.buildDirectory.set(rootProject.layout.buildDirectory.dir(subproject.name))
-    
-    // Fix JVM target mismatch lazily to avoid premature project evaluation
-    subproject.plugins.withId('org.jetbrains.kotlin.android') {
-        subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions {
-                jvmTarget = '1.8'
-            }
-        }
-    }
-}
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
