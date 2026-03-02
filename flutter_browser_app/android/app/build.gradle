@@ -49,7 +49,7 @@ android {
 
     defaultConfig {
         applicationId "com.comet_ai_com.comet_ai"
-        minSdkVersion flutter.minSdkVersion
+        minSdkVersion 23
         targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
