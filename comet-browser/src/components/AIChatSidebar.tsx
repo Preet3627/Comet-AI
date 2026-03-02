@@ -2120,7 +2120,7 @@ ${sourceQualityNote}
               break;
             }
 
-
+            case 'GMAIL_AUTHORIZE': {
               if (!window.electronAPI) throw new Error('API not available');
               const res = await window.electronAPI.gmailAuthorize();
               if (!res.success) throw new Error(res.error);
