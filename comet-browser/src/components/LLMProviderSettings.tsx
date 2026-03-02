@@ -85,8 +85,11 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
     let config: LLMProviderOptions = {};
     if (activeProviderId === 'ollama') {
       config = { baseUrl: store.ollamaBaseUrl, model: store.ollamaModel, localLlmMode: store.localLlmMode };
-    } else if (activeProviderId === 'google') {
-      config = { apiKey: store.geminiApiKey, model: store.geminiModel || 'gemini-1.5-flash' };
+    } else if (activeProviderId === 'google' || activeProviderId === 'google-flash') {
+      config = {
+        apiKey: store.geminiApiKey,
+        model: activeProviderId === 'google-flash' ? 'gemini-3.0-flash' : (store.geminiModel || 'gemini-3.1-flash')
+      };
     } else if (activeProviderId === 'openai') {
       config = { apiKey: store.openaiApiKey, model: store.openaiModel || 'gpt-4o' };
     } else if (activeProviderId === 'anthropic') {
@@ -367,11 +370,13 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                       </div>
                     )}
 
-                    {activeProviderId === 'google' && (
+                    {(activeProviderId === 'google' || activeProviderId === 'google-flash') && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
                           <Sparkles size={14} />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Google Gemini</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">
+                            {activeProviderId === 'google-flash' ? 'Google Gemini 3.0 Flash' : 'Google Gemini'}
+                          </span>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[9px] text-white/30 uppercase font-bold">API Key</label>
@@ -380,19 +385,21 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props) => {
                             placeholder="Enter Gemini API Key..."
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
                             value={store.geminiApiKey || ''}
-                            onChange={(e) => store.setGeminiApiKey(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setGeminiApiKey(e.target.value)}
                           />
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">Model</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. gemini-1.5-flash"
-                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.geminiModel || ''}
-                            onChange={(e) => store.setGeminiModel(e.target.value)}
-                          />
-                        </div>
+                        {activeProviderId !== 'google-flash' && (
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-white/30 uppercase font-bold">Model Override</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. gemini-3.1-flash"
+                              className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
+                              value={store.geminiModel || ''}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setGeminiModel(e.target.value)}
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -251,12 +251,14 @@ const llmGenerateHandler = async (messages, options = {}) => {
       const ollama = createOllama({ baseURL: `${baseUrl}/api` });
       modelInstance = ollama(modelName);
     }
-    else if (providerId === 'google') {
+    else if (providerId === 'google' || providerId === 'google-flash') {
       const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
       const apiKey = config.apiKey || store.get('gemini_api_key');
       if (!apiKey) throw new Error('Google Gemini API Key is missing.');
       const google = createGoogleGenerativeAI({ apiKey });
-      modelInstance = google(options.model || config.model || 'gemini-2.0-flash');
+
+      const defaultModel = providerId === 'google-flash' ? 'gemini-3.0-flash' : 'gemini-3.1-flash';
+      modelInstance = google(options.model || config.model || defaultModel);
     }
     else if (providerId === 'openai') {
       const { createOpenAI } = await import('@ai-sdk/openai');
@@ -1549,7 +1551,8 @@ ipcMain.handle('load-vector-store', async () => {
 });
 
 const llmProviders = [
-  { id: 'google', name: 'Google Gemini (2.0/1.5)' },
+  { id: 'google', name: 'Google Gemini (3.1/2.0)' },
+  { id: 'google-flash', name: 'Google Gemini 3.0 Flash (Fast)' },
   { id: 'openai', name: 'OpenAI (o1/o3/GPT-4o)' },
   { id: 'anthropic', name: 'Anthropic Claude (3.7/3.5)' },
   { id: 'xai', name: 'xAI Grok (4/3)' },
