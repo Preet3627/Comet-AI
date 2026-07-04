@@ -74,7 +74,8 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
   });
 
   ipcMain.on('navigate-browser-view', async (event, { tabId, url }) => {
-    const view = tabViews.get(tabId);
+    const targetId = tabId || handlers.activeTabId;
+    const view = tabViews.get(targetId);
     if (view) view.webContents.loadURL(url);
   });
 

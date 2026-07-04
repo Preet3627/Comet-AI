@@ -678,7 +678,7 @@ ipcMain.handle('get-app-icon', async (event, appPath) => {
 
 
 const permissionStore = new PermissionStore();
-let cometAiEngine = null;
+let cometAiEngine = new CometAiEngine();
 let robotService = null;
 const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -2790,7 +2790,7 @@ const llmStreamHandler = async (event, messages, options = {}) => {
         message, model, systemPrompt, history, provider: providerId,
         onChunk: (chunk) => {
           if (!event.sender.isDestroyed()) {
-            event.sender.send('llm-chat-stream-part', { type: 'text-delta', textDelta: chunk });
+            event.sender.send('llm-chat-stream-part', { type: 'text-delta', text: chunk });
           }
         }
       });
@@ -5634,23 +5634,22 @@ async function generateHighRiskPairingQR(actionId, deviceName) {
       console.error('[Main] Failed to generate High-Risk QR:', err);
       return null;
     }
-  });
+}
 
-  async function generateShellApprovalQR(command) {
-    const deviceId = os.hostname();
-    const token = randomBytes(5).toString('hex');
-    const pin = String(100000 + (randomBytes(4).readUInt32BE(0) % 900000));
-    const deepLinkUrl = `comet-ai://shell-approve?id=${token}&deviceId=${encodeURIComponent(deviceId)}&pin=${pin}&cmd=${encodeURIComponent(command)}`;
-
-    try {
-      const qrImage = await QRCode.toDataURL(deepLinkUrl);
-      return { qrImage, pin, token };
-    } catch (err) {
-      console.error('[Main] Failed to generate Shell Approval QR:', err);
-      return { qrImage: null, pin, token };
-    }
+function checkAiActionPermission(actionType, target, riskLevel) {
+  const permKey = `AI_ACTION:${actionType}`;
+  if (permissionStore.isGranted(permKey)) {
+    return { allowed: true };
   }
+  const autoApproved = permissionStore.getAutoApprovedActions() || [];
+  if (autoApproved.includes(riskLevel)) {
+    permissionStore.grant(permKey, riskLevel, `AI action: ${actionType}`, true);
+    return { allowed: true };
+  }
+  return { allowed: false, error: `Action "${actionType}" not permitted.` };
+}
 
+app.whenReady().then(async () => {
   async function streamPromptToMobile(promptId, prompt, model, provider) {
     const messages = [{ role: 'user', content: prompt }];
     const streamEvent = {
@@ -8280,6 +8279,7 @@ ${tabData}`;
     ragService, voiceService, workflowRecorder, popSearch,
     flutterBridge,
   };
+  createWindow();
   registerAllHandlers(ipcMain, handlerDeps);
 }).catch(err => {
   console.error('[Main] Fatal error during app startup:', err);
