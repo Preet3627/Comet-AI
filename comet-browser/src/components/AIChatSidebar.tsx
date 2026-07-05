@@ -137,29 +137,7 @@ const parseSearchResultEntry = (result: any): SearchResultEntry | null => {
     };
   }
 
-  if (typeof result !== 'string') return null;
-
-  const trimmed = result.trim();
-  if (!trimmed) return null;
-
-  const markdownMatch = trimmed.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)\s*([\s\S]*)$/);
-  if (markdownMatch) {
-    return {
-      title: markdownMatch[1].trim(),
-      url: markdownMatch[2].trim(),
-      snippet: markdownMatch[3].trim(),
-    };
-  }
-
-  const lines = trimmed.split('\n').map(line => line.trim()).filter(Boolean);
-  const urlLine = lines.find(line => /^https?:\/\//i.test(line) || /^URL:\s*https?:\/\//i.test(line));
-  const normalizedUrl = urlLine?.replace(/^URL:\s*/i, '').trim() || '';
-
-  return {
-    title: lines[0] || 'Untitled result',
-    url: normalizedUrl,
-    snippet: lines.slice(normalizedUrl ? 2 : 1).join(' ').trim(),
-  };
+  return null;
 };
 
 const normalizeSearchResults = (results: any[]): SearchResultEntry[] => (
@@ -172,14 +150,17 @@ const formatSearchResultsForLLM = (query: string, results: SearchResultEntry[]):
   if (results.length === 0) return '';
 
   return [
-    `WEB SEARCH RESULTS FOR: ${query}`,
-    'These URLs were injected automatically. Reuse them directly instead of scraping the search results page DOM again.',
+    `🔍 LIVE WEB SEARCH: "${query}"`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'You MUST navigate to the URLs below and read the full page content.',
+    'Do NOT rely only on snippets — snippets are brief summaries.',
+    'For each result you want to use, emit: [NAVIGATE: URL] then [READ_PAGE_CONTENT]',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
     ...results.map((entry, index) => [
-      `[Result ${index + 1}]`,
-      `Title: ${entry.title}`,
-      `URL: ${entry.url}`,
-      `Snippet: ${entry.snippet || 'No snippet available.'}`,
+      `**${index + 1}. ${entry.title}**`,
+      `🔗 ${entry.url}`,
+      `📝 ${entry.snippet || 'No snippet available.'}`,
     ].join('\n')),
   ].join('\n\n');
 };
@@ -1684,9 +1665,43 @@ I couldn't schedule the task. The background service may not be running. Please 
             });
             searchContextStore.addWebSearch(originalQuery, fullSnippet);
 
-            output = `Search results for "${originalQuery}":\n${injectedResults
-              .map((entry, index) => `${index + 1}. ${entry.title}\n${entry.url}\n${entry.snippet}`)
-              .join('\n\n')}`;
+            // Auto-navigate to the top result and read its content
+            let pageContent = '';
+            const topUrl = injectedResults[0]?.url;
+            if (topUrl) {
+              try {
+                const navResult = await openTabAndWaitForLoad(topUrl, 'ai-session');
+                const activeTabId = useAppStore.getState().activeTabId;
+                const contentRes = await window.electronAPI.extractPageContent(activeTabId || undefined);
+                if (contentRes?.content) {
+                  pageContent = scrubbedContent(contentRes.content).substring(0, 8000);
+                  await BrowserAI.addToVectorMemory(pageContent, { type: 'page_content', url: topUrl, query: originalQuery });
+                  searchContextStore.addPageContent(topUrl, injectedResults[0].title, pageContent);
+                }
+              } catch (navErr) {
+                console.warn('[WebSearch] Auto-navigate to top result failed:', navErr);
+              }
+            }
+
+            let outputLines = [
+              `🔍 **Search results for "${originalQuery}"**:`,
+              '',
+              ...injectedResults.map((entry, index) =>
+                `${index + 1}. **${entry.title}**\n   🔗 ${entry.url}\n   📝 ${entry.snippet}`
+              ),
+            ];
+            if (topUrl) {
+              outputLines.push(
+                '',
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                `📄 **Auto-read from top result:**`,
+                `🔗 ${topUrl}`,
+                pageContent
+                  ? `\`\`\`\n${pageContent.substring(0, 4000)}${pageContent.length > 4000 ? '\n...[truncated]' : ''}\n\`\`\``
+                  : '*Could not read page content.*'
+              );
+            }
+            output = outputLines.join('\n');
           } else {
             // Fallback: wait for the search page to load slightly and try DOM / OCR extraction
             await new Promise(resolve => setTimeout(resolve, 1500));

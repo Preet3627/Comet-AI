@@ -679,7 +679,7 @@ ipcMain.handle('get-app-icon', async (event, appPath) => {
 
 const permissionStore = new PermissionStore();
 let cometAiEngine = new CometAiEngine();
-let robotService = null;
+let robotService = new RobotService(permissionStore);
 const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Initialize core modules - Architecture refactoring
@@ -789,8 +789,8 @@ const performRobotClick = async ({ x, y, button = 'left', doubleClick = false })
   await sleepMs(20);
   return { success: true, source: 'robotjs' };
 };
-let tesseractOcrService = null;
-let screenVisionService = null;
+let tesseractOcrService = new TesseractOcrService();
+let screenVisionService = new ScreenVisionService(cometAiEngine);
 let flutterBridge = null;
 let fileSystemMcp = null;
 let nativeAppMcp = null;
@@ -4813,40 +4813,36 @@ async function findAndClickTextInternal(targetText) {
     return { success: false, error: permission.error };
   }
 
+  const automationMode = store.get('automation_mode') || 'dom';
+  const preferOcr = automationMode === 'ocr';
+
   try {
+    if (preferOcr) {
+      if (!tesseractOcrService) return { success: false, error: 'OCR service not initialized.' };
+      const result = await tesseractOcrService.ocrClick(targetText.trim(), cometAiEngine, robotService, permissionStore);
+      if (result.success) return result;
+    }
+
     const view = tabViews.get(activeTabId);
     if (view && !view.webContents.isDestroyed()) {
       try {
         const domResult = await resolveAndClickWithAi(view.webContents, targetText.trim(), cometAiEngine);
         if (domResult?.success) {
           console.log(`[Main] Find-and-click resolved "${targetText}" via ${domResult.method}`);
-          return {
-            ...domResult,
-            provider: 'browser-dom',
-          };
+          return { ...domResult, provider: 'browser-dom' };
         }
       } catch (domError) {
         console.warn('[Main] DOM find-and-click fallback to OCR:', domError.message);
       }
     }
 
-    if (!tesseractOcrService) {
-      return { success: false, error: 'OCR service not initialized.' };
+    if (!preferOcr) {
+      if (!tesseractOcrService) return { success: false, error: 'OCR service not initialized.' };
+      const result = await tesseractOcrService.ocrClick(targetText.trim(), cometAiEngine, robotService, permissionStore);
+      if (result.success) return result;
     }
 
-    const result = await tesseractOcrService.ocrClick(
-      targetText.trim(),
-      cometAiEngine,
-      robotService,
-      permissionStore
-    );
-
-    if (!result.success) {
-      return result;
-    }
-
-    console.log(`[Main] Find-and-click resolved "${targetText}" via ${result.method || 'ocr'}`);
-    return result;
+    return { success: false, error: 'Could not find and click the target element.' };
   } catch (error) {
     console.error('[Main] find-and-click-text failed:', error);
     return { success: false, error: error.message };
@@ -6146,12 +6142,11 @@ app.whenReady().then(async () => {
       let searchResults = [];
       try {
         const results = await webSearchProvider.search(query, 'duckduckgo', 6);
-        searchResults = results.map((r, index) => [
-          `[Result ${index + 1}]`,
-          `Title: ${r.title || 'Untitled result'}`,
-          `URL: ${r.url || ''}`,
-          `Snippet: ${r.snippet || ''}`,
-        ].join('\n'));
+        searchResults = results.map(r => ({
+          title: r.title || 'Untitled result',
+          url: r.url || '',
+          snippet: r.snippet || '',
+        }));
       } catch (e) {
         console.warn(`[RAG] Deep search failed for ${query}`);
       }
